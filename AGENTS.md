@@ -14,10 +14,19 @@ Lingo Mate 是一个桌面端语言学习助手 Agent。它通过对话、记忆
 
 ```text
 src/
-├── main/       # Electron 主进程
-├── preload/    # 主进程与 Renderer 之间的安全桥接层
-├── renderer/   # React 用户界面
-└── core/       # Agent Engine 核心逻辑
+├── main/           # Electron 主进程
+├── preload/        # IPC Bridge，Renderer 与 Main 之间的安全桥接层
+├── core/           # Agent Engine 核心逻辑
+│   ├── agent/      # Agent 调度、执行循环与生命周期
+│   ├── llm/        # 模型客户端、模型配置与流式响应
+│   ├── memory/     # 短期/长期记忆与检索
+│   ├── tools/      # Agent 工具定义与执行
+│   ├── prompt/     # Prompt 模板、组装与版本管理
+│   ├── learning/   # 语言学习领域逻辑
+│   └── conversation/ # 会话模型、消息流与上下文组装
+├── database/       # SQLite schema、迁移、连接与数据访问
+├── shared/         # 跨层共享的 TypeScript 类型与协议
+└── renderer/       # React 用户界面
 ```
 
 ### `src/main`
@@ -39,7 +48,7 @@ src/
 - 为暴露的 API 提供 TypeScript 类型声明
 - 将 Renderer 请求转换为 IPC 调用
 
-不要直接向 Renderer 暴露 `ipcRenderer`、Node.js 模块、文件系统或其他高权限对象。新增桥接 API 时，应同步更新 `src/preload/index.ts` 和 `src/preload/index.d.ts`。
+不要直接向 Renderer 暴露 `ipcRenderer`、Electron 原始 API、Node.js 模块、文件系统或其他高权限对象。preload 应暴露面向业务场景的窄接口，而不是通用的 `send`、`invoke` 或任意 channel 调用能力。新增桥接 API 时，应同步更新 `src/preload/index.ts` 和 `src/preload/index.d.ts`。
 
 ### `src/renderer`
 
@@ -50,21 +59,36 @@ src/
 - 展示对话、学习内容、Agent 状态与错误信息
 - 通过 `window.api` 调用 preload 提供的能力
 
-Renderer 视为浏览器环境，不得直接导入 Electron 主进程模块、Node.js API 或 `src/core`。业务规则应下沉到 Agent Engine，不要隐藏在 React 组件中。
+Renderer 必须视为纯浏览器环境，不得直接导入或调用任何 Electron API，包括但不限于 `ipcRenderer`、`shell`、`webFrame`、`remote` 以及 Electron 主进程模块；也不得直接使用 Node.js API、访问文件系统、数据库或导入 `src/core`。
+
+凡是需要 Electron、操作系统、文件系统、数据库或其他高权限能力的功能，都必须先在 Main 中实现受控处理，再通过 preload 使用 `contextBridge` 暴露为明确类型的 `window.api` 接口，由 Renderer 调用。不得通过开启 `nodeIntegration`、关闭 `contextIsolation` 或向 Renderer 暴露原始 IPC 对象来绕过该边界。
+
+业务规则应下沉到 Agent Engine，不要隐藏在 React 组件中。
 
 ### `src/core`
 
-负责与界面无关的 Agent Engine 和语言学习业务逻辑。建议按领域拆分，例如：
+负责与界面无关的 Agent Engine 和语言学习业务逻辑，按以下领域拆分：
 
 ```text
 src/core/
 ├── agent/          # Agent 调度、工具调用和执行循环
-├── conversation/   # 会话模型、消息流和上下文组装
 ├── llm/            # 模型客户端、提示词和流式响应
-└── memory/         # 短期/长期记忆、检索与持久化
+├── memory/         # 短期/长期记忆与检索
+├── tools/          # Agent 工具定义与执行
+├── prompt/         # Prompt 模板、组装与版本管理
+├── learning/       # 语言学习领域逻辑
+└── conversation/   # 会话模型、消息流和上下文组装
 ```
 
 核心逻辑应尽量通过明确接口与依赖注入连接 LLM、存储和系统能力，以便独立测试。不要从 `src/core` 导入 React 组件或 Renderer 状态。
+
+### `src/database`
+
+负责 SQLite 基础设施，包括 schema、迁移、数据库连接、事务和数据访问实现。数据库实现不得被 Renderer 直接导入或调用；应由 Main 或 Core 中定义的接口进行协调。
+
+### `src/shared`
+
+负责跨进程、跨层共享的 TypeScript 类型、IPC channel 常量和可序列化协议。该目录不得包含依赖 Electron、React、Node.js 运行时或具体业务执行逻辑的代码，避免共享类型反向引入高权限实现。
 
 ## 依赖方向
 
@@ -72,13 +96,15 @@ src/core/
 
 ```text
 React Renderer -> Preload API -> Electron Main -> Agent Engine
-                                            -> OS / storage / network
+                                            -> Database / OS / network
 ```
 
-- Renderer 只能通过 preload 暴露的 API 请求高权限能力。
+- Renderer 只能通过 preload 暴露的 `window.api` 请求 Electron 及其他高权限能力，禁止直接调用 Electron API。
 - Preload 只定义安全边界和数据传输，不实现业务逻辑。
 - Main 负责调用、生命周期和进程间编排。
 - Core 保存可复用、可测试的领域逻辑，不依赖 UI。
+- Database 提供 SQLite 基础设施和数据访问实现，不依赖 Renderer。
+- Shared 仅承载跨层类型与协议，不承载高权限实现或业务逻辑。
 - 跨边界传输的数据必须可序列化，并使用明确的 TypeScript 类型；外部输入应使用 Zod 等方式校验。
 
 ## 开发约定

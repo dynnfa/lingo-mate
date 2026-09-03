@@ -1,8 +1,7 @@
-import { ElectronAPI } from '@electron-toolkit/preload'
+import type { LingoMateApi } from '../shared/conversation'
 
 declare global {
   interface Window {
-    electron: ElectronAPI
-    api: unknown
+    api: LingoMateApi
   }
 }
