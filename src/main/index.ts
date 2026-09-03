@@ -1,7 +1,13 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { ConversationSession } from '../core/conversation/conversation-session'
+import { LocalLanguageModel } from '../core/llm/local-language-model'
+import { SqliteConversationStore } from '../database/sqlite-conversation-store'
+import { registerConversationIpc } from './conversation-ipc'
+
+let conversationStore: SqliteConversationStore | undefined
 
 function createWindow(): void {
   // Create the browser window.
@@ -13,7 +19,9 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
     }
   })
 
@@ -22,7 +30,9 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    if (isAllowedExternalUrl(details.url)) {
+      void shell.openExternal(details.url)
+    }
     return { action: 'deny' }
   })
 
@@ -49,8 +59,10 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
+  conversationStore = new SqliteConversationStore(
+    join(app.getPath('userData'), 'lingo-mate.sqlite')
+  )
+  registerConversationIpc(new ConversationSession(new LocalLanguageModel(), conversationStore))
 
   createWindow()
 
@@ -69,6 +81,19 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+
+app.on('before-quit', () => {
+  conversationStore?.close()
+  conversationStore = undefined
+})
+
+function isAllowedExternalUrl(rawUrl: string): boolean {
+  try {
+    return new URL(rawUrl).protocol === 'https:'
+  } catch {
+    return false
+  }
+}
 
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and require them here.
