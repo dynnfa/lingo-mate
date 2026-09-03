@@ -3,6 +3,10 @@ import {
   cancelMessageInputSchema,
   CONVERSATION_CHANNELS,
   conversationEventSchema,
+  createConversationResultSchema,
+  listConversationsResultSchema,
+  loadConversationInputSchema,
+  loadConversationResultSchema,
   sendMessageInputSchema,
   sendMessageResultSchema,
   type LingoMateApi
@@ -10,6 +14,19 @@ import {
 
 const api: LingoMateApi = {
   conversation: {
+    async create() {
+      const result: unknown = await ipcRenderer.invoke(CONVERSATION_CHANNELS.create)
+      return createConversationResultSchema.parse(result)
+    },
+    async list() {
+      const result: unknown = await ipcRenderer.invoke(CONVERSATION_CHANNELS.list)
+      return listConversationsResultSchema.parse(result)
+    },
+    async load(rawInput) {
+      const input = loadConversationInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(CONVERSATION_CHANNELS.load, input)
+      return loadConversationResultSchema.parse(result)
+    },
     async send(rawInput) {
       const input = sendMessageInputSchema.parse(rawInput)
       const result: unknown = await ipcRenderer.invoke(CONVERSATION_CHANNELS.send, input)

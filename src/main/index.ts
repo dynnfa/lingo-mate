@@ -2,12 +2,12 @@ import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { ConversationSession } from '../core/conversation/conversation-session'
+import { ConversationModule } from '../core/conversation/conversation-module'
 import { LocalLanguageModel } from '../core/llm/local-language-model'
-import { SqliteConversationStore } from '../database/sqlite-conversation-store'
+import { SqliteConversationRepository } from '../database/sqlite-conversation-repository'
 import { registerConversationIpc } from './conversation-ipc'
 
-let conversationStore: SqliteConversationStore | undefined
+let conversationRepository: SqliteConversationRepository | undefined
 
 function createWindow(): void {
   // Create the browser window.
@@ -59,10 +59,10 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  conversationStore = new SqliteConversationStore(
+  conversationRepository = new SqliteConversationRepository(
     join(app.getPath('userData'), 'lingo-mate.sqlite')
   )
-  registerConversationIpc(new ConversationSession(new LocalLanguageModel(), conversationStore))
+  registerConversationIpc(new ConversationModule(new LocalLanguageModel(), conversationRepository))
 
   createWindow()
 
@@ -83,8 +83,8 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
-  conversationStore?.close()
-  conversationStore = undefined
+  conversationRepository?.close()
+  conversationRepository = undefined
 })
 
 function isAllowedExternalUrl(rawUrl: string): boolean {
