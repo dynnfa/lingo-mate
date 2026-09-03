@@ -44,6 +44,38 @@ h1 {
   font-size: 14px;
 }
 
+.conversation-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.conversation-bar label {
+  display: block;
+  margin-bottom: 0;
+  color: var(--ev-c-text-2);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.conversation-bar select {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--ev-c-gray-2);
+  border-radius: 12px;
+  outline: none;
+  color: var(--color-text);
+  background: var(--color-background-soft);
+}
+
+.conversation-bar button {
+  min-width: 0;
+  white-space: nowrap;
+}
+
 .messages {
   display: flex;
   flex-direction: column;
@@ -118,7 +150,9 @@ button.secondary {
   background: var(--ev-c-gray-2);
 }
 
-button:disabled {
+button:disabled,
+select:disabled,
+input:disabled {
   cursor: not-allowed;
   opacity: 0.45;
 }
