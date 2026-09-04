@@ -9,5 +9,23 @@
     "completed": "回复完成",
     "cancelled": "已取消，可重试。",
     "protocolError": "会话协议异常，已忽略一条身份不一致的消息。"
+  },
+  "actionPicker": {
+    "listLabel": "可用行动",
+    "empty": "没有匹配的行动",
+    "actions": {
+      "translate": {
+        "name": "翻译",
+        "description": "把文本翻译成目标语言，并解释关键词汇和用法。"
+      },
+      "polish": {
+        "name": "润色",
+        "description": "改进表达、语法和自然度，保留原意。"
+      },
+      "practice": {
+        "name": "口语练习",
+        "description": "围绕一个话题展开对话，练习口头表达。"
+      }
+    }
   }
 }
