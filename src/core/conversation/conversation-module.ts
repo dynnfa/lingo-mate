@@ -4,6 +4,7 @@ import type {
   ConversationMessage,
   ConversationSummary,
   GenerationAccepted,
+  GenerationEventError,
   GenerationStarted,
   LoadedConversation,
   RetryMessageInput,
@@ -273,19 +274,17 @@ export class ConversationModule {
     }
   }
 
-  private toSafeError(error: unknown): {
-    code: 'MODEL_ERROR' | 'PERSISTENCE_ERROR' | 'UNKNOWN_ERROR'
-    message: string
-  } {
+  // Core 只返回安全错误码，不负责界面翻译；内部原因留在产生处。
+  private toSafeError(error: unknown): GenerationEventError {
     if (error instanceof ConversationPersistenceError) {
-      return { code: 'PERSISTENCE_ERROR', message: '保存会话失败，请稍后重试。' }
+      return { code: 'PERSISTENCE_ERROR' }
     }
 
     if (error instanceof Error) {
-      return { code: 'MODEL_ERROR', message: '生成回复失败，请稍后重试。' }
+      return { code: 'MODEL_ERROR' }
     }
 
-    return { code: 'UNKNOWN_ERROR', message: '发生未知错误，请稍后重试。' }
+    return { code: 'UNKNOWN_ERROR' }
   }
 }
 

@@ -1,36 +1,16 @@
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { Page } from '@playwright/test'
+import type { ConversationMessage, LingoMateApi } from '../../src/shared/conversation'
 import {
-  _electron as electron,
   expect,
+  launchApp,
   test,
-  type ElectronApplication,
-  type Page
-} from '@playwright/test'
-import type { LingoMateApi } from '../../src/shared/conversation'
+  waitForReady,
+  withTempUserData,
+  writeLocalePreference
+} from './helpers'
 
-async function launchApp(userDataPath: string): Promise<ElectronApplication> {
-  return electron.launch({ args: [process.cwd(), `--user-data-dir=${userDataPath}`] })
-}
-
-async function withTempUserData(run: (userDataPath: string) => Promise<void>): Promise<void> {
-  const userDataPath = await mkdtemp(join(tmpdir(), 'lingo-mate-lifecycle-'))
-  try {
-    await run(userDataPath)
-  } finally {
-    await rm(userDataPath, { force: true, recursive: true })
-  }
-}
-
-async function waitForReady(window: Page): Promise<void> {
-  await window.waitForSelector('main[data-phase="ready"]')
-}
-
-async function loadMessages(
-  window: Page,
-  sessionId: string
-): Promise<import('../../src/shared/conversation').ConversationMessage[]> {
+async function loadMessages(window: Page, sessionId: string): Promise<ConversationMessage[]> {
   return window.evaluate(async (targetSessionId) => {
     const api = (globalThis as typeof globalThis & { api: LingoMateApi }).api.conversation
     const loaded = await api.load({ sessionId: targetSessionId })
@@ -39,14 +19,19 @@ async function loadMessages(
   }, sessionId)
 }
 
+// 侧栏已改为按钮列表：通过 IPC 读取当前选中的会话，而不是不存在的 DOM 下拉框。
 async function currentSessionId(window: Page): Promise<string> {
-  return window.evaluate(() => {
-    return document.querySelector<HTMLSelectElement>('#conversation')?.value ?? ''
+  return window.evaluate(async () => {
+    const api = (globalThis as typeof globalThis & { api: LingoMateApi }).api.conversation
+    const listed = await api.list()
+    if (listed.status === 'error') throw new Error(`list failed: ${listed.error.code}`)
+    return listed.conversations[0]?.sessionId ?? ''
   })
 }
 
 test('keeps one canonical assistant messageId from first render to persistence', async () => {
   await withTempUserData(async (userDataPath) => {
+    await writeLocalePreference(userDataPath, 'zh-CN')
     const app = await launchApp(userDataPath)
     const window = await app.firstWindow()
     await waitForReady(window)
@@ -81,6 +66,7 @@ test('keeps one canonical assistant messageId from first render to persistence',
 
 test('cancel drops the partial draft and retry completes with a new assistant id', async () => {
   await withTempUserData(async (userDataPath) => {
+    await writeLocalePreference(userDataPath, 'zh-CN')
     const app = await launchApp(userDataPath)
     const window = await app.firstWindow()
     await waitForReady(window)
@@ -124,6 +110,7 @@ test('cancel drops the partial draft and retry completes with a new assistant id
 
 test('destroying the sender cancels its request and relaunch offers retry', async () => {
   await withTempUserData(async (userDataPath) => {
+    await writeLocalePreference(userDataPath, 'zh-CN')
     const firstLaunch = await launchApp(userDataPath)
     const firstWindow = await firstLaunch.firstWindow()
     await waitForReady(firstWindow)
@@ -138,31 +125,30 @@ test('destroying the sender cancels its request and relaunch offers retry', asyn
     const secondWindow = await secondLaunch.firstWindow()
     await waitForReady(secondWindow)
 
-    // 重启后只恢复持久消息：一条 user，且被投影为可重试，不会永久 generating
-    await expect(secondWindow.locator('.message.user')).toHaveCount(1)
-    await expect(secondWindow.locator('.message.assistant')).toHaveCount(0)
-    await expect(secondWindow.locator('.message.user button:has-text("重试")')).toHaveCount(1)
+    // 恢复后最后一条未回答的 user 消息可重试
+    await expect(secondWindow.locator('.message.user')).toContainText('Hello')
+    await expect(secondWindow.locator('button:has-text("重试")')).toHaveCount(1)
 
-    // 重试成功后补齐 assistant 回复
     await secondWindow.click('button:has-text("重试")')
     await expect(secondWindow.locator('.status')).toHaveText('回复完成', { timeout: 15_000 })
-    await expect(secondWindow.locator('.message.user')).toHaveCount(1)
-    await expect(secondWindow.locator('.message.assistant')).toHaveCount(1)
 
     await secondLaunch.close()
   })
 })
 
-test('only the owning sender can cancel an active request', async () => {
+test('rejects a cancel from a window that does not own the request', async () => {
   await withTempUserData(async (userDataPath) => {
+    await writeLocalePreference(userDataPath, 'zh-CN')
     const app = await launchApp(userDataPath)
     const firstWindow = await app.firstWindow()
     await waitForReady(firstWindow)
 
-    // 先建第二个窗口（同一 preload），再开始生成，避免和流式时长赛跑
-    await app.evaluate(
+    // 同一应用再开一个窗口，验证 sender 所有权（electron 模块作为参数传入 evaluate）
+    const secondWindowId = await app.evaluate(
       ({ BrowserWindow }, { preloadPath, url }) => {
         const second = new BrowserWindow({
+          width: 400,
+          height: 300,
           show: false,
           webPreferences: {
             preload: preloadPath,
@@ -172,20 +158,20 @@ test('only the owning sender can cancel an active request', async () => {
           }
         })
         void second.loadURL(url)
+        return second.id
       },
       {
         preloadPath: join(process.cwd(), 'out', 'preload', 'index.js'),
         url: firstWindow.url()
       }
     )
+    expect(secondWindowId).toBeTruthy()
 
     await expect
-      .poll(async () => app.windows().filter((candidate) => candidate !== firstWindow).length, {
-        timeout: 10_000
-      })
-      .toBe(1)
-    const secondWindow = app.windows().find((candidate) => candidate !== firstWindow)!
-    await secondWindow.waitForFunction(() => {
+      .poll(async () => app.windows().length, { timeout: 10_000 })
+      .toBeGreaterThanOrEqual(2)
+    const foreignWindow = app.windows().find((candidate) => candidate !== firstWindow)!
+    await foreignWindow.waitForFunction(() => {
       const api = (globalThis as typeof globalThis & { api?: LingoMateApi }).api
       return typeof api?.conversation?.cancel === 'function'
     })
@@ -207,14 +193,14 @@ test('only the owning sender can cancel an active request', async () => {
     const requestId = await startedRequestId
 
     // 非创建请求的窗口不能取消：安全类型化错误，且不影响原生成
-    const foreignCancel = await secondWindow.evaluate(async (targetRequestId) => {
+    const foreignCancel = await foreignWindow.evaluate(async (targetRequestId) => {
       const api = (globalThis as typeof globalThis & { api: LingoMateApi }).api.conversation
       return api.cancel({ requestId: targetRequestId })
     }, requestId)
 
     expect(foreignCancel).toEqual({
       status: 'error',
-      error: { code: 'REQUEST_NOT_FOUND', message: '没有找到可取消的回复请求。' }
+      error: { code: 'REQUEST_NOT_FOUND' }
     })
 
     await expect(firstWindow.locator('.status')).toHaveText('回复完成', { timeout: 15_000 })

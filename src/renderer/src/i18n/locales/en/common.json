@@ -1,0 +1,39 @@
+{
+  "app": {
+    "title": "Language Learning Companion"
+  },
+  "sidebar": {
+    "label": "Conversation sidebar",
+    "menuLabel": "Learning menu",
+    "menuRecorded": "Recorded",
+    "menuPractice": "Start practicing",
+    "sessionsHeading": "Conversations",
+    "newSession": "New conversation",
+    "listLabel": "Conversation list",
+    "loadingSessions": "Loading conversations…",
+    "noSessions": "No conversations yet",
+    "toolbarLabel": "Sidebar toolbar"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Display language",
+    "close": "Close"
+  },
+  "preferences": {
+    "startupError": "Couldn't load your language preference. Using the default language.",
+    "dismiss": "Dismiss"
+  },
+  "messages": {
+    "regionLabel": "Conversation history",
+    "emptyTitle": "Start with a sentence",
+    "emptyBody": "Practice phrasing, polish sentences, or talk about what interests you.",
+    "userRole": "You",
+    "retry": "Retry"
+  },
+  "composer": {
+    "label": "Practice text",
+    "placeholder": "e.g. Help me rewrite this sentence in English",
+    "send": "Send",
+    "cancel": "Cancel"
+  }
+}

@@ -14,8 +14,25 @@ import {
   sendMessageResultSchema,
   type LingoMateApi
 } from '../shared/conversation'
+import {
+  getLocaleResultSchema,
+  PREFERENCES_CHANNELS,
+  setLocaleInputSchema,
+  setLocaleResultSchema
+} from '../shared/preferences'
 
 const api: LingoMateApi = {
+  preferences: {
+    async getLocale() {
+      const result: unknown = await ipcRenderer.invoke(PREFERENCES_CHANNELS.getLocale)
+      return getLocaleResultSchema.parse(result)
+    },
+    async setLocale(rawInput) {
+      const input = setLocaleInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(PREFERENCES_CHANNELS.setLocale, input)
+      return setLocaleResultSchema.parse(result)
+    }
+  },
   conversation: {
     async create() {
       const result: unknown = await ipcRenderer.invoke(CONVERSATION_CHANNELS.create)

@@ -1,0 +1,13 @@
+{
+  "listItemLabel": "Conversation · {{dateTime}}",
+  "status": {
+    "restoring": "Restoring your conversation…",
+    "switching": "Switching conversations…",
+    "creating": "Creating a conversation…",
+    "ready": "Ready",
+    "generating": "Generating…",
+    "completed": "Reply complete",
+    "cancelled": "Cancelled. You can retry.",
+    "protocolError": "Conversation protocol error: ignored a message with mismatched identity."
+  }
+}

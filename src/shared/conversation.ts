@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { PreferencesApi } from './preferences'
 
 export const CONVERSATION_CHANNELS = {
   create: 'conversation:create',
@@ -52,18 +53,17 @@ export const cancelMessageInputSchema = z.object({
   requestId: identifierSchema
 })
 
-export const conversationRequestErrorSchema = z.object({
-  code: z.enum([
-    'NOT_FOUND',
-    'CONVERSATION_BUSY',
-    'REQUEST_BUSY',
-    'RETRY_NOT_ALLOWED',
-    'REQUEST_NOT_FOUND',
-    'PERSISTENCE_ERROR',
-    'UNKNOWN_ERROR'
-  ]),
-  message: z.string()
-})
+// 协议只表达安全错误语义；展示文案由 Renderer 按界面语言翻译，
+// 内部原因不跨越进程边界。NOT_FOUND 用 resource 区分对象。
+export const conversationRequestErrorSchema = z.discriminatedUnion('code', [
+  z.object({ code: z.literal('NOT_FOUND'), resource: z.enum(['conversation', 'message']) }),
+  z.object({ code: z.literal('CONVERSATION_BUSY') }),
+  z.object({ code: z.literal('REQUEST_BUSY') }),
+  z.object({ code: z.literal('RETRY_NOT_ALLOWED') }),
+  z.object({ code: z.literal('REQUEST_NOT_FOUND') }),
+  z.object({ code: z.literal('PERSISTENCE_ERROR') }),
+  z.object({ code: z.literal('UNKNOWN_ERROR') })
+])
 
 export const createConversationResultSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('ok'), conversation: conversationSummarySchema }),
@@ -106,8 +106,7 @@ export const cancelMessageResultSchema = z.discriminatedUnion('status', [
 ])
 
 const generationEventErrorSchema = z.object({
-  code: z.enum(['MODEL_ERROR', 'PERSISTENCE_ERROR', 'UNKNOWN_ERROR']),
-  message: z.string()
+  code: z.enum(['MODEL_ERROR', 'PERSISTENCE_ERROR', 'UNKNOWN_ERROR'])
 })
 
 const eventBaseSchema = z.object({
@@ -181,4 +180,5 @@ export interface ConversationApi {
 
 export interface LingoMateApi {
   conversation: ConversationApi
+  preferences: PreferencesApi
 }

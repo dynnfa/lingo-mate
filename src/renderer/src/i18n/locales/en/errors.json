@@ -1,0 +1,29 @@
+{
+  "notFound": {
+    "conversation": "This conversation doesn't exist or has been deleted.",
+    "message": "This message doesn't exist or has been deleted."
+  },
+  "conversationBusy": "This conversation is already generating a reply. Please wait.",
+  "requestBusy": "This reply request is already being processed.",
+  "retryNotAllowed": "This message can't be retried right now.",
+  "requestNotFound": "No active reply request was found.",
+  "persistence": "Couldn't access local conversation data. Please try again later.",
+  "unknown": "Something went wrong. Please try again later.",
+  "generation": {
+    "model": "Couldn't generate a reply. Please try again later.",
+    "persistence": "Couldn't save the conversation. Please try again later.",
+    "unknown": "Something went wrong. Please try again later."
+  },
+  "ipc": {
+    "load": "Couldn't load the conversation. Please try again later.",
+    "list": "Couldn't refresh the conversation list. Please try again later.",
+    "create": "Couldn't create a conversation. Please try again later.",
+    "send": "Couldn't send your message. Please try again later.",
+    "cancel": "Couldn't cancel the reply. Please try again later.",
+    "retry": "Couldn't retry. Please try again later."
+  },
+  "preferences": {
+    "readFailed": "Couldn't read your language settings.",
+    "writeFailed": "Couldn't save your language preference. Please try again."
+  }
+}

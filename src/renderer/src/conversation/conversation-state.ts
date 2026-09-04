@@ -1,7 +1,9 @@
 import type {
   ConversationEvent,
   ConversationMessage,
+  ConversationRequestError,
   ConversationSummary,
+  GenerationEventError,
   GenerationStarted
 } from '../../../shared/conversation'
 
@@ -24,6 +26,26 @@ interface ActiveGeneration {
 
 export type ConversationPhase = 'loading' | 'ready' | 'failed'
 
+// 触发一次交互的位置；IPC 拒绝时用它选择本地语义的失败提示。
+export type StatusOperation = 'load' | 'list' | 'create' | 'send' | 'cancel' | 'retry'
+
+// 状态只保留语义与安全错误信息，不保存翻译后的文案；
+// 组件在每次 render 时按当前界面语言翻译，切换语言即可更新既有提示。
+export type ConversationStatus =
+  | { kind: 'restoring' }
+  | { kind: 'switching' }
+  | { kind: 'creating' }
+  | { kind: 'ready' }
+  | { kind: 'generating' }
+  | { kind: 'completed' }
+  | { kind: 'cancelled' }
+  | { kind: 'protocolError' }
+  | { kind: 'generationError'; error: GenerationEventError }
+  | { kind: 'requestError'; operation: StatusOperation; error: ConversationRequestError }
+  | { kind: 'ipcError'; operation: StatusOperation }
+
+export type FailureStatus = Extract<ConversationStatus, { kind: 'requestError' | 'ipcError' }>
+
 export interface ConversationState {
   phase: ConversationPhase
   sessionId: string | undefined
@@ -33,23 +55,24 @@ export interface ConversationState {
   // 已终态的请求：迟到的事件（chunk、重复 started）不得再触碰消息集合。
   finishedRequests: Record<string, boolean>
   commandPending: boolean
-  statusMessage: string
+  status: ConversationStatus
 }
 
 export type ConversationAction =
-  | { type: 'recoverStarted'; statusMessage: string }
-  | { type: 'recoverFailed'; message: string }
-  | { type: 'transitionFailed'; message: string }
+  | {
+      type: 'loadPhaseStarted'
+      status: Extract<ConversationStatus, { kind: 'restoring' | 'switching' | 'creating' }>
+    }
+  | { type: 'recoverFailed'; status: FailureStatus }
+  | { type: 'transitionFailed'; status: FailureStatus }
   | { type: 'conversationsListed'; conversations: ConversationSummary[] }
   | { type: 'conversationLoaded'; sessionId: string; messages: ConversationMessage[] }
   | { type: 'generationStarted'; generation: GenerationStarted }
   | { type: 'generationEvent'; event: ConversationEvent }
   | { type: 'commandStarted' }
   | { type: 'commandSettled' }
-  | { type: 'commandFailed'; message: string }
-  | { type: 'statusMessage'; message: string }
-
-const PROTOCOL_MISMATCH_MESSAGE = '会话协议异常，已忽略一条身份不一致的消息。'
+  | { type: 'commandFailed'; status: FailureStatus }
+  | { type: 'statusChanged'; status: ConversationStatus }
 
 export const initialConversationState: ConversationState = {
   phase: 'loading',
@@ -59,7 +82,7 @@ export const initialConversationState: ConversationState = {
   activeRequests: {},
   finishedRequests: {},
   commandPending: false,
-  statusMessage: '正在恢复会话…'
+  status: { kind: 'restoring' }
 }
 
 export function reduceConversation(
@@ -67,12 +90,12 @@ export function reduceConversation(
   action: ConversationAction
 ): ConversationState {
   switch (action.type) {
-    case 'recoverStarted':
-      return { ...state, phase: 'loading', statusMessage: action.statusMessage }
+    case 'loadPhaseStarted':
+      return { ...state, phase: 'loading', status: action.status }
     case 'recoverFailed':
-      return { ...state, phase: 'failed', statusMessage: action.message }
+      return { ...state, phase: 'failed', status: action.status }
     case 'transitionFailed':
-      return { ...state, phase: 'ready', statusMessage: action.message }
+      return { ...state, phase: 'ready', status: action.status }
     case 'conversationsListed':
       return { ...state, conversations: action.conversations }
     case 'conversationLoaded':
@@ -83,7 +106,7 @@ export function reduceConversation(
         messages: toDisplayMessages(action.messages),
         activeRequests: {},
         finishedRequests: {},
-        statusMessage: '准备就绪'
+        status: { kind: 'ready' }
       }
     case 'generationStarted':
       return applyGenerationStarted(state, action.generation)
@@ -94,9 +117,9 @@ export function reduceConversation(
     case 'commandSettled':
       return { ...state, commandPending: false }
     case 'commandFailed':
-      return { ...state, commandPending: false, statusMessage: action.message }
-    case 'statusMessage':
-      return { ...state, statusMessage: action.message }
+      return { ...state, commandPending: false, status: action.status }
+    case 'statusChanged':
+      return { ...state, status: action.status }
   }
 }
 
@@ -157,7 +180,7 @@ function applyGenerationStarted(
         assistantMessageId: generation.assistantMessageId
       }
     },
-    statusMessage: '正在生成…'
+    status: { kind: 'generating' }
   }
 }
 
@@ -174,7 +197,7 @@ function applyEvent(state: ConversationState, event: ConversationEvent): Convers
       const active = state.activeRequests[event.requestId]
       if (!active) return state
       if (event.messageId !== active.assistantMessageId) {
-        return { ...state, statusMessage: PROTOCOL_MISMATCH_MESSAGE }
+        return { ...state, status: { kind: 'protocolError' } }
       }
 
       const messages = state.messages.map((message) =>
@@ -204,7 +227,7 @@ function applyEvent(state: ConversationState, event: ConversationEvent): Convers
         retryable: false
       }
       const messages = upsertMessage(retired.messages, completed)
-      return { ...retired, messages, statusMessage: '回复完成' }
+      return { ...retired, messages, status: { kind: 'completed' } }
     }
 
     case 'cancelled': {
@@ -220,7 +243,7 @@ function applyEvent(state: ConversationState, event: ConversationEvent): Convers
       return {
         ...retired,
         messages: dropAssistantDraft(retired.messages, active),
-        statusMessage: '已取消，可重试。'
+        status: { kind: 'cancelled' }
       }
     }
 
@@ -237,7 +260,7 @@ function applyEvent(state: ConversationState, event: ConversationEvent): Convers
       return {
         ...retired,
         messages: dropAssistantDraft(retired.messages, active),
-        statusMessage: event.error.message
+        status: { kind: 'generationError', error: event.error }
       }
     }
   }
@@ -252,7 +275,7 @@ function retireInvalidTerminal(
   return {
     ...retired,
     messages: dropAssistantDraft(retired.messages, active),
-    statusMessage: PROTOCOL_MISMATCH_MESSAGE
+    status: { kind: 'protocolError' }
   }
 }
 

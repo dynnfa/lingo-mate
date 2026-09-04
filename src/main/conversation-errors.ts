@@ -9,35 +9,36 @@ import {
 } from '../core/conversation/conversation-repository'
 import type { ConversationRequestError } from '../shared/conversation'
 
-// 在进程边界把 Core 错误转换为对用户安全的结构，不保留内部原因。
+// 在进程边界把 Core 错误转换为对用户安全的结构：只保留错误码与受约束的
+// 判别字段，不携带内部原因和展示文案；文案由 Renderer 翻译。
 export function toSafeRequestError(error: unknown): ConversationRequestError {
   if (error instanceof ConversationNotFoundError) {
-    return { code: 'NOT_FOUND', message: '会话不存在或已被删除。' }
+    return { code: 'NOT_FOUND', resource: 'conversation' }
   }
 
   if (error instanceof MessageNotFoundError) {
-    return { code: 'NOT_FOUND', message: '消息不存在或已被删除。' }
+    return { code: 'NOT_FOUND', resource: 'message' }
   }
 
   if (error instanceof ConversationBusyError) {
-    return { code: 'CONVERSATION_BUSY', message: '该会话正在生成回复，请稍候。' }
+    return { code: 'CONVERSATION_BUSY' }
   }
 
   if (error instanceof RetryNotAllowedError) {
-    return { code: 'RETRY_NOT_ALLOWED', message: '这条消息当前无法重试。' }
+    return { code: 'RETRY_NOT_ALLOWED' }
   }
 
   if (error instanceof RequestBusyError) {
-    return { code: 'REQUEST_BUSY', message: '该回复请求已在处理中。' }
+    return { code: 'REQUEST_BUSY' }
   }
 
   if (error instanceof RequestNotFoundError) {
-    return { code: 'REQUEST_NOT_FOUND', message: '没有找到进行中的回复请求。' }
+    return { code: 'REQUEST_NOT_FOUND' }
   }
 
   if (error instanceof ConversationPersistenceError) {
-    return { code: 'PERSISTENCE_ERROR', message: '访问本地会话数据失败，请稍后重试。' }
+    return { code: 'PERSISTENCE_ERROR' }
   }
 
-  return { code: 'UNKNOWN_ERROR', message: '发生未知错误，请稍后重试。' }
+  return { code: 'UNKNOWN_ERROR' }
 }

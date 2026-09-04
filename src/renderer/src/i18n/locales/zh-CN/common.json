@@ -1,0 +1,39 @@
+{
+  "app": {
+    "title": "语言学习助手"
+  },
+  "sidebar": {
+    "label": "会话侧栏",
+    "menuLabel": "学习菜单",
+    "menuRecorded": "已记录",
+    "menuPractice": "开始练习",
+    "sessionsHeading": "会话",
+    "newSession": "新会话",
+    "listLabel": "会话列表",
+    "loadingSessions": "正在加载会话…",
+    "noSessions": "暂无会话",
+    "toolbarLabel": "侧栏工具栏"
+  },
+  "settings": {
+    "title": "设置",
+    "language": "界面语言",
+    "close": "关闭"
+  },
+  "preferences": {
+    "startupError": "无法读取语言偏好，已使用默认语言。",
+    "dismiss": "知道了"
+  },
+  "messages": {
+    "regionLabel": "对话记录",
+    "emptyTitle": "从一句话开始",
+    "emptyBody": "练习表达、修改句子，或聊聊你感兴趣的话题。",
+    "userRole": "你",
+    "retry": "重试"
+  },
+  "composer": {
+    "label": "练习内容",
+    "placeholder": "例如：帮我用英语改写这句话",
+    "send": "发送",
+    "cancel": "取消"
+  }
+}

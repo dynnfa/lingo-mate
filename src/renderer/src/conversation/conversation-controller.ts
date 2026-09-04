@@ -4,18 +4,13 @@ import {
   isGenerating,
   reduceConversation,
   type ConversationAction,
-  type ConversationState
+  type ConversationState,
+  type FailureStatus
 } from './conversation-state'
-
-const GENERIC_LOAD_ERROR = '无法加载会话，请稍后重试。'
-const GENERIC_LIST_ERROR = '无法刷新会话列表，请稍后重试。'
-const GENERIC_SEND_ERROR = '无法发送消息，请稍后重试。'
-const GENERIC_CANCEL_ERROR = '无法取消回复，请稍后重试。'
-const GENERIC_RETRY_ERROR = '无法重试，请稍后重试。'
 
 // Conversation Projection 的控制器：持有唯一的投影状态，
 // 封装 window.api 调用、事件订阅、会话切换过渡和命令失败处理。
-// React 视图只读取状态并提交 send/cancel/retry 意图。
+// 状态只保存语义描述；React 视图读取状态、按界面语言翻译并提交 send/cancel/retry 意图。
 export class ConversationController {
   private state: ConversationState = initialConversationState
   private readonly listeners = new Set<() => void>()
@@ -51,14 +46,17 @@ export class ConversationController {
   // 启动恢复策略：list → 打开最近会话；空库时 create → load。
   async initialize(): Promise<void> {
     const transitionId = ++this.transitionId
-    this.dispatch({ type: 'recoverStarted', statusMessage: '正在恢复会话…' })
+    this.dispatch({ type: 'loadPhaseStarted', status: { kind: 'restoring' } })
 
     try {
       const listed = await this.api.list()
       if (!this.isCurrentTransition(transitionId)) return
 
       if (listed.status === 'error') {
-        this.dispatch({ type: 'recoverFailed', message: listed.error.message })
+        this.dispatch({
+          type: 'recoverFailed',
+          status: { kind: 'requestError', operation: 'list', error: listed.error }
+        })
         return
       }
 
@@ -73,7 +71,10 @@ export class ConversationController {
       if (!this.isCurrentTransition(transitionId)) return
 
       if (created.status === 'error') {
-        this.dispatch({ type: 'recoverFailed', message: created.error.message })
+        this.dispatch({
+          type: 'recoverFailed',
+          status: { kind: 'requestError', operation: 'create', error: created.error }
+        })
         return
       }
 
@@ -81,7 +82,8 @@ export class ConversationController {
       await this.openSession(created.conversation.sessionId, transitionId)
     } catch {
       if (this.isCurrentTransition(transitionId)) {
-        this.dispatch({ type: 'recoverFailed', message: GENERIC_LOAD_ERROR })
+        // 启动恢复中的任何 IPC 拒绝都归入加载失败语义；刷新语义只用于完成后的列表更新。
+        this.dispatch({ type: 'recoverFailed', status: { kind: 'ipcError', operation: 'load' } })
       }
     }
   }
@@ -89,19 +91,19 @@ export class ConversationController {
   async switchSession(sessionId: string): Promise<void> {
     if (sessionId === this.state.sessionId || this.state.commandPending) return
     const transitionId = ++this.transitionId
-    this.dispatch({ type: 'recoverStarted', statusMessage: '正在切换会话…' })
+    this.dispatch({ type: 'loadPhaseStarted', status: { kind: 'switching' } })
     await this.openSession(sessionId, transitionId)
   }
 
   async startNewConversation(): Promise<void> {
     if (this.state.commandPending) return
     const transitionId = ++this.transitionId
-    this.dispatch({ type: 'recoverStarted', statusMessage: '正在创建会话…' })
+    this.dispatch({ type: 'loadPhaseStarted', status: { kind: 'creating' } })
 
-    const cancelError = await this.stopActiveGenerations()
+    const cancelFailure = await this.stopActiveGenerations()
     if (!this.isCurrentTransition(transitionId)) return
-    if (cancelError) {
-      this.dispatch({ type: 'transitionFailed', message: cancelError })
+    if (cancelFailure) {
+      this.dispatch({ type: 'transitionFailed', status: cancelFailure })
       return
     }
 
@@ -110,7 +112,10 @@ export class ConversationController {
       if (!this.isCurrentTransition(transitionId)) return
 
       if (created.status === 'error') {
-        this.dispatch({ type: 'recoverFailed', message: created.error.message })
+        this.dispatch({
+          type: 'recoverFailed',
+          status: { kind: 'requestError', operation: 'create', error: created.error }
+        })
         return
       }
 
@@ -121,7 +126,7 @@ export class ConversationController {
       await this.openSession(created.conversation.sessionId, transitionId, false)
     } catch {
       if (this.isCurrentTransition(transitionId)) {
-        this.dispatch({ type: 'recoverFailed', message: GENERIC_LOAD_ERROR })
+        this.dispatch({ type: 'recoverFailed', status: { kind: 'ipcError', operation: 'create' } })
       }
     }
   }
@@ -137,12 +142,15 @@ export class ConversationController {
     try {
       const result = await this.api.send({ requestId, sessionId, text: trimmed })
       if (result.status === 'error') {
-        this.dispatch({ type: 'commandFailed', message: result.error.message })
+        this.dispatch({
+          type: 'commandFailed',
+          status: { kind: 'requestError', operation: 'send', error: result.error }
+        })
         return
       }
       this.dispatch({ type: 'generationStarted', generation: result.generation })
     } catch {
-      this.dispatch({ type: 'commandFailed', message: GENERIC_SEND_ERROR })
+      this.dispatch({ type: 'commandFailed', status: { kind: 'ipcError', operation: 'send' } })
       return
     }
     this.dispatch({ type: 'commandSettled' })
@@ -155,10 +163,13 @@ export class ConversationController {
     try {
       const result = await this.api.cancel({ requestId: active.requestId })
       if (result.status === 'error') {
-        this.dispatch({ type: 'statusMessage', message: result.error.message })
+        this.dispatch({
+          type: 'statusChanged',
+          status: { kind: 'requestError', operation: 'cancel', error: result.error }
+        })
       }
     } catch {
-      this.dispatch({ type: 'statusMessage', message: GENERIC_CANCEL_ERROR })
+      this.dispatch({ type: 'statusChanged', status: { kind: 'ipcError', operation: 'cancel' } })
     }
   }
 
@@ -174,12 +185,15 @@ export class ConversationController {
     try {
       const result = await this.api.retry({ requestId, sessionId, userMessageId })
       if (result.status === 'error') {
-        this.dispatch({ type: 'commandFailed', message: result.error.message })
+        this.dispatch({
+          type: 'commandFailed',
+          status: { kind: 'requestError', operation: 'retry', error: result.error }
+        })
         return
       }
       this.dispatch({ type: 'generationStarted', generation: result.generation })
     } catch {
-      this.dispatch({ type: 'commandFailed', message: GENERIC_RETRY_ERROR })
+      this.dispatch({ type: 'commandFailed', status: { kind: 'ipcError', operation: 'retry' } })
       return
     }
     this.dispatch({ type: 'commandSettled' })
@@ -199,10 +213,10 @@ export class ConversationController {
     transitionId: number,
     cancelActive = true
   ): Promise<void> {
-    const cancelError = cancelActive ? await this.stopActiveGenerations() : undefined
+    const cancelFailure = cancelActive ? await this.stopActiveGenerations() : undefined
     if (!this.isCurrentTransition(transitionId)) return
-    if (cancelError) {
-      this.dispatch({ type: 'transitionFailed', message: cancelError })
+    if (cancelFailure) {
+      this.dispatch({ type: 'transitionFailed', status: cancelFailure })
       return
     }
 
@@ -211,25 +225,30 @@ export class ConversationController {
       if (!this.isCurrentTransition(transitionId)) return
 
       if (loaded.status === 'error') {
-        this.dispatch({ type: 'recoverFailed', message: loaded.error.message })
+        this.dispatch({
+          type: 'recoverFailed',
+          status: { kind: 'requestError', operation: 'load', error: loaded.error }
+        })
         return
       }
 
       this.dispatch({ type: 'conversationLoaded', sessionId, messages: loaded.messages })
     } catch {
       if (this.isCurrentTransition(transitionId)) {
-        this.dispatch({ type: 'recoverFailed', message: GENERIC_LOAD_ERROR })
+        this.dispatch({ type: 'recoverFailed', status: { kind: 'ipcError', operation: 'load' } })
       }
     }
   }
 
-  private async stopActiveGenerations(): Promise<string | undefined> {
+  private async stopActiveGenerations(): Promise<FailureStatus | undefined> {
     for (const active of Object.values(this.state.activeRequests)) {
       try {
         const result = await this.api.cancel({ requestId: active.requestId })
-        if (result.status === 'error') return result.error.message
+        if (result.status === 'error') {
+          return { kind: 'requestError', operation: 'cancel', error: result.error }
+        }
       } catch {
-        return GENERIC_CANCEL_ERROR
+        return { kind: 'ipcError', operation: 'cancel' }
       }
     }
     return undefined
@@ -239,12 +258,15 @@ export class ConversationController {
     try {
       const listed = await this.api.list()
       if (listed.status === 'error') {
-        this.dispatch({ type: 'statusMessage', message: listed.error.message })
+        this.dispatch({
+          type: 'statusChanged',
+          status: { kind: 'requestError', operation: 'list', error: listed.error }
+        })
         return
       }
       this.dispatch({ type: 'conversationsListed', conversations: listed.conversations })
     } catch {
-      this.dispatch({ type: 'statusMessage', message: GENERIC_LIST_ERROR })
+      this.dispatch({ type: 'statusChanged', status: { kind: 'ipcError', operation: 'list' } })
     }
   }
 

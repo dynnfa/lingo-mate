@@ -1,0 +1,29 @@
+{
+  "notFound": {
+    "conversation": "会话不存在或已被删除。",
+    "message": "消息不存在或已被删除。"
+  },
+  "conversationBusy": "该会话正在生成回复，请稍候。",
+  "requestBusy": "该回复请求已在处理中。",
+  "retryNotAllowed": "这条消息当前无法重试。",
+  "requestNotFound": "没有找到进行中的回复请求。",
+  "persistence": "访问本地会话数据失败，请稍后重试。",
+  "unknown": "发生未知错误，请稍后重试。",
+  "generation": {
+    "model": "生成回复失败，请稍后重试。",
+    "persistence": "保存会话失败，请稍后重试。",
+    "unknown": "发生未知错误，请稍后重试。"
+  },
+  "ipc": {
+    "load": "无法加载会话，请稍后重试。",
+    "list": "无法刷新会话列表，请稍后重试。",
+    "create": "无法创建会话，请稍后重试。",
+    "send": "无法发送消息，请稍后重试。",
+    "cancel": "无法取消回复，请稍后重试。",
+    "retry": "无法重试，请稍后重试。"
+  },
+  "preferences": {
+    "readFailed": "无法读取语言设置。",
+    "writeFailed": "保存语言设置失败，请重试。"
+  }
+}
