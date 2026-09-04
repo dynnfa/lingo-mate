@@ -1,6 +1,11 @@
 import {
+  ConversationBusyError,
   ConversationNotFoundError,
-  ConversationPersistenceError
+  ConversationPersistenceError,
+  MessageNotFoundError,
+  RequestBusyError,
+  RequestNotFoundError,
+  RetryNotAllowedError
 } from '../core/conversation/conversation-repository'
 import type { ConversationRequestError } from '../shared/conversation'
 
@@ -10,13 +15,29 @@ export function toSafeRequestError(error: unknown): ConversationRequestError {
     return { code: 'NOT_FOUND', message: '会话不存在或已被删除。' }
   }
 
+  if (error instanceof MessageNotFoundError) {
+    return { code: 'NOT_FOUND', message: '消息不存在或已被删除。' }
+  }
+
+  if (error instanceof ConversationBusyError) {
+    return { code: 'CONVERSATION_BUSY', message: '该会话正在生成回复，请稍候。' }
+  }
+
+  if (error instanceof RetryNotAllowedError) {
+    return { code: 'RETRY_NOT_ALLOWED', message: '这条消息当前无法重试。' }
+  }
+
+  if (error instanceof RequestBusyError) {
+    return { code: 'REQUEST_BUSY', message: '该回复请求已在处理中。' }
+  }
+
+  if (error instanceof RequestNotFoundError) {
+    return { code: 'REQUEST_NOT_FOUND', message: '没有找到进行中的回复请求。' }
+  }
+
   if (error instanceof ConversationPersistenceError) {
     return { code: 'PERSISTENCE_ERROR', message: '访问本地会话数据失败，请稍后重试。' }
   }
 
   return { code: 'UNKNOWN_ERROR', message: '发生未知错误，请稍后重试。' }
-}
-
-export function toSafeIpcError(error: unknown): Error {
-  return new Error(toSafeRequestError(error).message)
 }

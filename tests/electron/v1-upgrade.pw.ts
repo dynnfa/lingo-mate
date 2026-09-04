@@ -94,13 +94,15 @@ test('upgrades a v1 database and keeps history readable', async () => {
     if (upgraded.loadedA.status === 'ok') {
       expect(upgraded.loadedA.messages).toEqual([
         {
-          id: '11111111-1111-4111-8111-111111111111',
+          messageId: '11111111-1111-4111-8111-111111111111',
+          sessionId: SESSION_A,
           role: 'user',
           content: 'Hello',
           createdAt: '2026-09-01T10:00:00.000Z'
         },
         {
-          id: '22222222-2222-4222-8222-222222222222',
+          messageId: '22222222-2222-4222-8222-222222222222',
+          sessionId: SESSION_A,
           role: 'assistant',
           content: 'Hi',
           createdAt: '2026-09-01T10:00:01.000Z'
