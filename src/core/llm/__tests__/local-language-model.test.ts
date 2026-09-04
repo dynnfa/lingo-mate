@@ -1,6 +1,6 @@
 import { getEventListeners } from 'node:events'
 import { describe, expect, it } from 'vitest'
-import { LocalLanguageModel } from './local-language-model'
+import { LocalLanguageModel } from '../local-language-model'
 
 describe('LocalLanguageModel', () => {
   it('removes abort listeners after a streamed reply completes', async () => {

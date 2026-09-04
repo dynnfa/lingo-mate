@@ -3,9 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import { I18nextProvider } from 'react-i18next'
-import type { PreferencesApi, SetLocaleResult } from '../../../shared/preferences'
-import { createI18n } from '../i18n'
-import { LanguageSettings } from './LanguageSettings'
+import type { PreferencesApi, SetLocaleResult } from '../../../../shared/preferences'
+import { createI18n } from '../../i18n'
+import { LanguageSettings } from '../LanguageSettings'
 
 function preferencesStub(
   overrides: Partial<{

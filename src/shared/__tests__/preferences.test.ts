@@ -5,7 +5,7 @@ import {
   localeSettingsSchema,
   setLocaleInputSchema,
   setLocaleResultSchema
-} from './preferences'
+} from '../preferences'
 
 describe('preferences protocol schemas', () => {
   it('accepts system and the supported locales as preferences', () => {

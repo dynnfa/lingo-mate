@@ -12,7 +12,7 @@ import {
   loadConversationResultSchema,
   retryMessageInputSchema,
   sendMessageResultSchema
-} from './conversation'
+} from '../conversation'
 
 const SESSION_ID = 'f9364f0f-f3f4-4ea6-a31d-b55754aa2477'
 const REQUEST_ID = '0d4b2f7e-52c8-4a61-9ac1-30b1e6de9d02'

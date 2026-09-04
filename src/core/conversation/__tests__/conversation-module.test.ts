@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { ConversationEvent } from '../../shared/conversation'
-import type { LanguageModel, StreamReplyInput } from '../llm/language-model'
-import { ConversationModule } from './conversation-module'
+import type { ConversationEvent } from '../../../shared/conversation'
+import type { LanguageModel, StreamReplyInput } from '../../llm/language-model'
+import { ConversationModule } from '../conversation-module'
 import {
   ConversationBusyError,
   ConversationNotFoundError,
@@ -13,7 +13,7 @@ import {
   type ConversationRepository,
   type StoredConversation,
   type StoredMessage
-} from './conversation-repository'
+} from '../conversation-repository'
 
 const REQUEST_ID = '3f70b8ae-7ad9-4eab-aaf4-1cae54a99708'
 const OTHER_REQUEST_ID = '0d4b2f7e-52c8-4a61-9ac1-30b1e6de9d02'
