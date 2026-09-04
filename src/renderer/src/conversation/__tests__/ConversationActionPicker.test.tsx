@@ -3,9 +3,9 @@ import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import { I18nextProvider } from 'react-i18next'
-import { createI18n } from '../i18n'
-import { ConversationActionPicker } from './ConversationActionPicker'
-import { CONVERSATION_ACTIONS, type ConversationActionMeta } from './conversation-actions'
+import { createI18n } from '../../i18n'
+import { ConversationActionPicker } from '../ConversationActionPicker'
+import { CONVERSATION_ACTIONS, type ConversationActionMeta } from '../conversation-actions'
 
 // 测试语言显式固定为 zh-CN，断言使用真实资源渲染的文本与可访问名称。
 const i18n = createI18n('zh-CN')

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { ConversationEvent, ConversationMessage } from '../../../shared/conversation'
+import type { ConversationEvent, ConversationMessage } from '../../../../shared/conversation'
 import {
   initialConversationState,
   isGenerating,
   reduceConversation,
   type ConversationState,
   type DisplayMessage
-} from './conversation-state'
+} from '../conversation-state'
 
 const SESSION_A = 'f9364f0f-f3f4-4ea6-a31d-b55754aa2477'
 const SESSION_B = '0d4b2f7e-52c8-4a61-9ac1-30b1e6de9d02'

@@ -4,9 +4,9 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import '@testing-library/jest-dom/vitest'
 import { I18nextProvider } from 'react-i18next'
 import type { ReactElement } from 'react'
-import { createI18n } from '../i18n'
-import { ConversationPanel } from './ConversationPanel'
-import type { ConversationStatus, DisplayMessage } from './conversation-state'
+import { createI18n } from '../../i18n'
+import { ConversationPanel } from '../ConversationPanel'
+import type { ConversationStatus, DisplayMessage } from '../conversation-state'
 
 // 测试语言显式固定为 zh-CN，断言使用真实资源渲染的文本与可访问名称。
 const i18n = createI18n('zh-CN')
