@@ -189,9 +189,9 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
         </section>
 
         <form className="composer" onSubmit={sendMessage}>
-          <label htmlFor="message">{t('common:composer.label')}</label>
           <div>
             <input
+              aria-label={t('common:composer.label')}
               disabled={composerLocked}
               id="message"
               maxLength={4000}
