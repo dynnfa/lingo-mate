@@ -413,6 +413,7 @@ h1 {
 }
 
 .composer > div {
+  position: relative;
   display: flex;
   gap: 12px;
   padding: 8px;
@@ -454,6 +455,71 @@ button.secondary {
 
 .composer button:hover {
   background: var(--color-primary-hover);
+}
+
+/* `/` 行动选择弹层：锚定输入行、向上展开并覆盖消息区域，不参与 flex 布局。 */
+.action-picker {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  overflow: hidden;
+  border: 1px solid var(--color-border-message);
+  border-radius: 16px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-composer);
+}
+
+.action-picker-list {
+  max-height: min(320px, 50vh);
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  list-style: none;
+}
+
+.action-picker-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.action-picker-option.highlighted {
+  background: var(--color-surface-hover);
+}
+
+.action-picker-option-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.action-picker-option-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.action-picker-option-command {
+  color: var(--color-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.action-picker-option-description {
+  color: var(--color-text-faint);
+  font-size: 12px;
+}
+
+.action-picker-empty {
+  padding: 14px 16px;
+  color: var(--color-text-faint);
+  font-size: 13px;
 }
 
 button.secondary {

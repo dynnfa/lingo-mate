@@ -1,6 +1,13 @@
-import { useState, type SyntheticEvent } from 'react'
+import { useRef, useState, type KeyboardEvent, type SyntheticEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { translateConversationStatus } from './status-messages'
+import { ACTION_PICKER_ID, ConversationActionPicker } from './ConversationActionPicker'
+import {
+  CONVERSATION_ACTIONS,
+  filterConversationActions,
+  parseSlashTrigger,
+  type ConversationActionMeta
+} from './conversation-actions'
 import type { ConversationStatus, DisplayMessage } from './conversation-state'
 
 interface ConversationPanelProps {
@@ -12,6 +19,10 @@ interface ConversationPanelProps {
   onCancel: () => void
   onRetry: (messageId: string) => void
 }
+
+// 关闭抑制：显式关闭（Escape/Tab）后同一草稿不因普通重渲染重开，
+// 用户编辑或重新聚焦可重开；选择行动后的草稿需先失去 `/` 前缀才能重开。
+type PickerDismissal = 'none' | 'soft' | 'latched'
 
 // 右侧对话区：消息与状态全部来自 props，未发送草稿归本组件所有；
 // 回调只表达交互意图，异步结果经 Controller 的状态投影反馈回来。
@@ -26,11 +37,95 @@ export function ConversationPanel({
 }: ConversationPanelProps): React.JSX.Element {
   const { t } = useTranslation(['common', 'conversation', 'errors'])
   const [draft, setDraft] = useState('')
+  const [composing, setComposing] = useState(false)
+  // 组合开始时的查询词：组合期间冻结候选，结束后再按最新草稿过滤。
+  const [compositionQuery, setCompositionQuery] = useState<string | undefined>(undefined)
+  const [inputFocused, setInputFocused] = useState(false)
+  const [dismissal, setDismissal] = useState<PickerDismissal>('none')
+  const [highlightedActionId, setHighlightedActionId] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const triggerQuery = parseSlashTrigger(draft)
+  const filterQuery = composing ? compositionQuery : triggerQuery
+
+  const pickerOpen =
+    triggerQuery !== undefined && inputFocused && !composerLocked && dismissal === 'none'
+
+  const filteredActions =
+    pickerOpen && filterQuery !== undefined
+      ? filterConversationActions(CONVERSATION_ACTIONS, filterQuery, (action) => t(action.nameKey))
+      : []
+
+  // 高亮身份存用户操作结果；派生时对当前候选兜底到第一项，避免过滤后越界。
+  const highlightedId =
+    highlightedActionId && filteredActions.some((action) => action.id === highlightedActionId)
+      ? highlightedActionId
+      : (filteredActions[0]?.id ?? null)
+
+  const closePicker = (nextDismissal: 'soft' | 'latched'): void => {
+    setDismissal(nextDismissal)
+    setHighlightedActionId(null)
+  }
+
+  // 首版行动契约：选择仅填入命令模板进入待输入状态，不发送；
+  // 替换后的草稿仍以 `/` 开头，用锁定抑制避免完成后立即弹回。
+  const selectAction = (action: ConversationActionMeta): void => {
+    setDraft(`/${action.command} `)
+    closePicker('latched')
+    inputRef.current?.focus()
+  }
+
+  const updateDraft = (nextDraft: string): void => {
+    setDraft(nextDraft)
+    // 草稿变化时重置高亮（查询变化后重新高亮第一项）。
+    setHighlightedActionId(null)
+    if (!nextDraft.startsWith('/')) {
+      setDismissal('none')
+    } else if (dismissal === 'soft') {
+      setDismissal('none')
+    }
+  }
+
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
+    // 输入法组合期间不拦截按键：确认键属于组合输入，不选择候选也不发送。
+    if (composing || event.nativeEvent.isComposing) return
+    if (!pickerOpen) return
+
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      const count = filteredActions.length
+      if (count === 0) return
+      const currentIndex = filteredActions.findIndex((action) => action.id === highlightedId)
+      const nextIndex =
+        event.key === 'ArrowDown'
+          ? currentIndex === -1
+            ? 0
+            : (currentIndex + 1) % count
+          : currentIndex === -1
+            ? count - 1
+            : (currentIndex - 1 + count) % count
+      setHighlightedActionId(filteredActions[nextIndex].id)
+    } else if (event.key === 'Enter') {
+      // 窗口打开时 Enter 只用于选择候选，必须阻止本次表单提交；
+      // 无匹配项时同样吞掉，查询不能被误发为普通消息。
+      event.preventDefault()
+      const highlighted = filteredActions.find((action) => action.id === highlightedId)
+      if (highlighted) selectAction(highlighted)
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      closePicker('soft')
+    } else if (event.key === 'Tab') {
+      // 不选择候选，让默认焦点顺序离开；随后输入框失焦自然关闭。
+      closePicker('soft')
+    }
+  }
 
   const sendMessage = (formEvent: SyntheticEvent): void => {
     formEvent.preventDefault()
+    // 弹层打开或输入法组合期间不发送；不能只依赖按钮禁用或键盘事件。
+    if (pickerOpen || composing) return
     if (composerLocked || !draft.trim()) return
-    setDraft('')
+    updateDraft('')
     // 传原始草稿，trim 由 Controller 完成。
     onSend(draft)
   }
@@ -81,13 +176,44 @@ export function ConversationPanel({
 
       <form className="composer" onSubmit={sendMessage}>
         <div>
+          {pickerOpen ? (
+            <ConversationActionPicker
+              actions={filteredActions}
+              highlightedActionId={highlightedId}
+              onHighlight={setHighlightedActionId}
+              onSelect={selectAction}
+            />
+          ) : null}
           <input
+            aria-activedescendant={
+              pickerOpen && highlightedId
+                ? `conversation-action-option-${highlightedId}`
+                : undefined
+            }
+            aria-autocomplete="list"
+            aria-controls={pickerOpen ? ACTION_PICKER_ID : undefined}
+            aria-expanded={pickerOpen}
+            aria-haspopup="listbox"
             aria-label={t('common:composer.label')}
             disabled={composerLocked}
             id="message"
             maxLength={4000}
-            onChange={(event) => setDraft(event.target.value)}
+            onBlur={() => setInputFocused(false)}
+            onChange={(event) => updateDraft(event.target.value)}
+            onCompositionEnd={() => setComposing(false)}
+            onCompositionStart={() => {
+              setComposing(true)
+              setCompositionQuery(parseSlashTrigger(draft))
+            }}
+            onFocus={() => {
+              setInputFocused(true)
+              // Escape/Tab 关闭后的重新聚焦允许重开；选择行动的锁定抑制不因此解除。
+              if (dismissal === 'soft') setDismissal('none')
+            }}
+            onKeyDown={handleInputKeyDown}
             placeholder={t('common:composer.placeholder')}
+            ref={inputRef}
+            role="combobox"
             value={draft}
           />
           {generating ? (
@@ -95,7 +221,7 @@ export function ConversationPanel({
               {t('common:composer.cancel')}
             </button>
           ) : (
-            <button disabled={!draft.trim() || composerLocked} type="submit">
+            <button disabled={!draft.trim() || composerLocked || pickerOpen} type="submit">
               {t('common:composer.send')}
             </button>
           )}

@@ -191,3 +191,373 @@ describe('ConversationPanel retry', () => {
     expect(screen.queryByRole('button', { name: '重试' })).not.toBeInTheDocument()
   })
 })
+
+// ---------- `/` 行动选择器 ----------
+
+// jsdom 中用户输入不会自动带焦点，聚焦后模拟真实键鼠路径。
+function focusComposer(): HTMLInputElement {
+  const input = screen.getByLabelText('练习内容')
+  if (!(input instanceof HTMLInputElement)) throw new Error('Composer input not found')
+  fireEvent.focus(input)
+  return input
+}
+
+function typeDraft(value: string): HTMLInputElement {
+  const input = focusComposer()
+  fireEvent.change(input, { target: { value } })
+  return input
+}
+
+function pickerOptions(): HTMLElement[] {
+  return screen.getAllByRole('option')
+}
+
+describe('ConversationPanel slash trigger and filtering', () => {
+  it('opens the picker above the composer when the draft starts with a half-width slash', () => {
+    renderPanel()
+    const input = typeDraft('/')
+
+    expect(input).toHaveAttribute('aria-expanded', 'true')
+    expect(input).toHaveAttribute('role', 'combobox')
+    expect(input).toHaveAttribute('aria-autocomplete', 'list')
+    expect(input).toHaveAttribute('aria-controls', 'conversation-action-picker')
+    expect(document.getElementById('conversation-action-picker')).toBeInTheDocument()
+
+    const listbox = screen.getByRole('listbox', { name: '可用行动' })
+    expect(listbox).toBeInTheDocument()
+    expect(pickerOptions()).toHaveLength(3)
+    // 首次打开默认高亮第一项
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-translate')
+  })
+
+  it('does not open for non-leading slash, leading space or full-width slash', () => {
+    renderPanel()
+    for (const value of ['hello /', ' /', '／', '／tr', 'practice /now']) {
+      const input = typeDraft(value)
+      expect(screen.queryByRole('listbox'), `draft: ${value}`).not.toBeInTheDocument()
+      expect(input).toHaveAttribute('aria-expanded', 'false')
+    }
+  })
+
+  it('filters by command name and localized name case-insensitively', () => {
+    renderPanel()
+    typeDraft('/润')
+    expect(pickerOptions()).toHaveLength(1)
+    expect(pickerOptions()[0]).toHaveTextContent('润色')
+
+    typeDraft('/TRA')
+    expect(pickerOptions()).toHaveLength(1)
+    expect(pickerOptions()[0]).toHaveTextContent('翻译')
+
+    typeDraft('/t')
+    expect(pickerOptions()).toHaveLength(2)
+    // 过滤后高亮重置为第一项
+    expect(screen.getByLabelText('练习内容')).toHaveAttribute(
+      'aria-activedescendant',
+      'conversation-action-option-translate'
+    )
+  })
+
+  it('keeps the picker open with an empty state when nothing matches', () => {
+    renderPanel()
+    const input = typeDraft('/zzz')
+
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(screen.getByText('没有匹配的行动')).toBeInTheDocument()
+    expect(input).toHaveAttribute('aria-expanded', 'true')
+    expect(input).not.toHaveAttribute('aria-activedescendant')
+  })
+
+  it('does not open while the input is not focused', () => {
+    renderPanel()
+    const input = screen.getByLabelText('练习内容')
+    fireEvent.change(input, { target: { value: '/' } })
+
+    expect(input).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+
+    // 重新聚焦且草稿符合条件时可以重开
+    fireEvent.focus(input)
+    expect(input).toHaveAttribute('aria-expanded', 'true')
+  })
+})
+
+describe('ConversationPanel picker keyboard selection', () => {
+  it('moves the highlight with Arrow keys and wraps at both ends', () => {
+    renderPanel()
+    const input = typeDraft('/')
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-polish')
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-practice')
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-translate')
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-practice')
+  })
+
+  it('selects the highlighted action with Enter without sending and keeps focus in the input', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/')
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(input).toHaveValue('/polish ')
+    expect(input).toHaveFocus()
+    expect(input).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('does not select or send on Enter when nothing matches', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/zzz')
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(input).toHaveValue('/zzz')
+    expect(input).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('selects with a mouse click through the same entry as the keyboard', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/')
+
+    const option = screen.getByRole('option', { name: /口语练习/ })
+    fireEvent.mouseDown(option)
+    fireEvent.click(option)
+
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(input).toHaveValue('/practice ')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('highlights the hovered option', () => {
+    renderPanel()
+    const input = typeDraft('/')
+
+    fireEvent.mouseEnter(screen.getByRole('option', { name: /润色/ }))
+
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-polish')
+  })
+})
+
+describe('ConversationPanel picker closing and reopen suppression', () => {
+  it('closes on Escape, keeps the draft, and allows sending the literal slash text', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/tr')
+
+    fireEvent.keyDown(input, { key: 'Escape' })
+
+    expect(input).toHaveAttribute('aria-expanded', 'false')
+    expect(input).not.toHaveAttribute('aria-activedescendant')
+    expect(input).toHaveValue('/tr')
+    expect(screen.getByRole('button', { name: '发送' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+    expect(callbacks.onSend).toHaveBeenCalledTimes(1)
+    expect(callbacks.onSend).toHaveBeenCalledWith('/tr')
+  })
+
+  it('does not reopen on plain rerenders after Escape but reopens on the next edit or refocus', () => {
+    const { view } = renderPanel()
+    const input = typeDraft('/tr')
+    fireEvent.keyDown(input, { key: 'Escape' })
+
+    // 同一草稿的普通重渲染不重开
+    view.rerender(panelElement({ messages: [message({ messageId: 'm-1' })] }))
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+
+    // 下一次符合条件的人工编辑可以重开
+    fireEvent.change(input, { target: { value: '/tra' } })
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+
+    // Escape 后失焦再聚焦同样可以重开
+    fireEvent.keyDown(input, { key: 'Escape' })
+    fireEvent.blur(input)
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    fireEvent.focus(input)
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+  })
+
+  it('closes on blur and reopens on refocus when the close was implicit', () => {
+    renderPanel()
+    const input = typeDraft('/')
+
+    fireEvent.blur(input)
+    expect(input).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.focus(input)
+    expect(input).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('closes on Tab without selecting and lets focus leave in DOM order', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/')
+
+    fireEvent.keyDown(input, { key: 'Tab' })
+
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(input).toHaveValue('/')
+    expect(input).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('does not reopen the suppressed draft after an action selection', () => {
+    renderPanel()
+    const input = typeDraft('/tra')
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(input).toHaveValue('/translate ')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+
+    // 继续补充参数不弹回
+    fireEvent.change(input, { target: { value: '/translate Good morning' } })
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+
+    // 失焦后重新聚焦同样保持关闭
+    fireEvent.blur(input)
+    fireEvent.focus(input)
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+
+    // 草稿失去 `/` 前缀后，新的 `/` 前缀输入可以重新触发
+    fireEvent.change(input, { target: { value: 'Good morning' } })
+    fireEvent.change(input, { target: { value: '/p' } })
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+  })
+
+  it('opens the picker for a new slash draft after sending a selected action', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/')
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.change(input, { target: { value: '/polish Hello' } })
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    expect(callbacks.onSend).toHaveBeenCalledExactlyOnceWith('/polish Hello')
+    expect(input).toHaveValue('')
+    expect(input).not.toHaveAttribute('aria-activedescendant')
+
+    fireEvent.change(input, { target: { value: '/' } })
+    expect(input).toHaveAttribute('aria-expanded', 'true')
+    expect(pickerOptions()).toHaveLength(3)
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-translate')
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(input).toHaveValue('/translate ')
+    expect(callbacks.onSend).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes and preserves the draft while the composer is locked', () => {
+    const { view } = renderPanel()
+    const input = typeDraft('/tr')
+
+    view.rerender(panelElement({ composerLocked: true }))
+    expect(input).toBeDisabled()
+    expect(input).toHaveValue('/tr')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+
+    // 真实窗口中禁用会使输入框失焦；失焦后解除锁定不主动重开
+    fireEvent.blur(input)
+    view.rerender(panelElement({ composerLocked: false }))
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(input).toHaveValue('/tr')
+  })
+})
+
+describe('ConversationPanel picker submit protection', () => {
+  it('disables the send button and blocks form submit while the picker is open', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/polish 你好')
+
+    expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+  })
+})
+
+describe('ConversationPanel picker input method composition', () => {
+  it.each(['ordinary draft', 'dismissed picker', 'selected action'])(
+    'blocks submit during composition with %s and allows it after composition ends',
+    (scenario) => {
+      const { callbacks } = renderPanel()
+      const input = typeDraft(scenario === 'ordinary draft' ? '你好' : '/tr')
+      if (scenario === 'dismissed picker') {
+        fireEvent.keyDown(input, { key: 'Escape' })
+      } else if (scenario === 'selected action') {
+        fireEvent.keyDown(input, { key: 'Enter' })
+        fireEvent.change(input, { target: { value: '/translate 你好' } })
+      }
+      const draft = input.value
+      const form = input.closest('form') as HTMLFormElement
+      expect(input).toHaveAttribute('aria-expanded', 'false')
+
+      fireEvent.compositionStart(input)
+      fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+      fireEvent.submit(form)
+
+      expect(callbacks.onSend).not.toHaveBeenCalled()
+      expect(input).toHaveValue(draft)
+
+      fireEvent.compositionEnd(input)
+      fireEvent.submit(form)
+      expect(callbacks.onSend).toHaveBeenCalledExactlyOnceWith(draft)
+      expect(input).toHaveValue('')
+    }
+  )
+
+  it('freezes candidates during composition and applies the query after it ends', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/')
+
+    fireEvent.compositionStart(input)
+    fireEvent.change(input, { target: { value: '/翻' } })
+
+    // 组合期间不刷新候选
+    expect(pickerOptions()).toHaveLength(3)
+
+    // 组合确认键不选择候选、不发送
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(input).toHaveValue('/翻')
+
+    fireEvent.compositionEnd(input)
+    expect(pickerOptions()).toHaveLength(1)
+    expect(pickerOptions()[0]).toHaveTextContent('翻译')
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-translate')
+  })
+})
+
+describe('ConversationPanel picker language switch', () => {
+  it('retranslates candidates and keeps the draft and highlight without reopening state', () => {
+    const { view } = renderPanel()
+    // /po 命中命令名 polish，两种界面语言下都有效
+    const input = typeDraft('/po')
+
+    expect(pickerOptions()).toHaveLength(1)
+
+    view.rerender(
+      <I18nextProvider i18n={createI18n('en')}>
+        <ConversationPanel
+          messages={[]}
+          status={{ kind: 'ready' }}
+          generating={false}
+          composerLocked={false}
+          onSend={() => {}}
+          onCancel={() => {}}
+          onRetry={() => {}}
+        />
+      </I18nextProvider>
+    )
+
+    const translated = screen.getByRole('listbox', { name: 'Available actions' })
+    expect(translated).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /Polish/ })).toHaveTextContent('/polish')
+    expect(input).toHaveValue('/po')
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-polish')
+  })
+})

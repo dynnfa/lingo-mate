@@ -9,5 +9,23 @@
     "completed": "Reply complete",
     "cancelled": "Cancelled. You can retry.",
     "protocolError": "Conversation protocol error: ignored a message with mismatched identity."
+  },
+  "actionPicker": {
+    "listLabel": "Available actions",
+    "empty": "No matching actions",
+    "actions": {
+      "translate": {
+        "name": "Translate",
+        "description": "Translate text into your target language and explain key words and usage."
+      },
+      "polish": {
+        "name": "Polish",
+        "description": "Improve phrasing, grammar, and naturalness while keeping the meaning."
+      },
+      "practice": {
+        "name": "Speaking practice",
+        "description": "Have a conversation around a topic to practice speaking."
+      }
+    }
   }
 }
