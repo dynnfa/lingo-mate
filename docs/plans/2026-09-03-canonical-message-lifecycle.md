@@ -2,7 +2,7 @@
 
 ## 状态
 
-- 状态：Proposed
+- 状态：Implemented（2026-09-03）
 - 优先级：P0
 - 前置依赖：[持久会话与历史恢复实施计划](./2026-09-03-persistent-conversation-module.md)
 - 主要交付：每条消息从首次出现起使用 canonical `messageId`；生成、完成、失败、取消和重试由 Conversation Module 统一维护。
@@ -172,7 +172,7 @@ Conversation Module 同时维护：
 - `requestId → execution`
 - `sessionId → requestId`
 
-同一会话的第二次发送返回类型化 `CONVERSATION_BUSY`。不同会话可以并行。该规则属于 Core；Renderer 可以根据投影禁用输入，但不能成为唯一防线。
+同一会话的第二次发送返回类型化 `CONVERSATION_BUSY`；复用仍在活动中的 `requestId` 返回类型化 `REQUEST_BUSY`。不同会话可以并行。该规则属于 Core；Renderer 可以根据投影禁用输入，但不能成为唯一防线。
 
 ### 8. retry 只处理最后一条未回答 user 消息
 
@@ -234,50 +234,50 @@ Projection Interface 保持窄：React 读取状态并提交 `send/cancel/retry`
 
 ### Slice 1：用 reducer 测试锁定当前缺陷
 
-- [ ] 提取最小纯 reducer，以现有事件协议重现 `requestId` 占位。
-- [ ] 增加 completed 时原子 re-key 为 `messageId` 的失败测试并修复。
-- [ ] 断言 re-key 后不存在旧 `requestId` key，React key 使用 `messageId`。
-- [ ] 覆盖重复 completed、未知 requestId、session 不匹配和迟到终态。
+- [x] 提取最小纯 reducer，以现有事件协议重现 `requestId` 占位。
+- [x] 增加 completed 时原子 re-key 为 `messageId` 的失败测试并修复。
+- [x] 断言 re-key 后不存在旧 `requestId` key，React key 使用 `messageId`。
+- [x] 覆盖重复 completed、未知 requestId、session 不匹配和迟到终态。
 
 ### Slice 2：Core canonical identity 与状态机
 
-- [ ] 在 Conversation Module 内预分配 user/assistant canonical IDs。
-- [ ] 将 started 移到 user 持久化成功之后。
-- [ ] 建立 request/session 活动索引和每会话单生成规则。
-- [ ] 所有 chunk 和终态使用预分配的 assistant ID。
-- [ ] 保证 assistant 持久化成功后才发 completed。
-- [ ] 统一 completed/cancelled/failed 的一次性终态和 `finally` 清理。
+- [x] 在 Conversation Module 内预分配 user/assistant canonical IDs。
+- [x] 将 started 移到 user 持久化成功之后。
+- [x] 建立 request/session 活动索引和每会话单生成规则。
+- [x] 所有 chunk 和终态使用预分配的 assistant ID。
+- [x] 保证 assistant 持久化成功后才发 completed。
+- [x] 统一 completed/cancelled/failed 的一次性终态和 `finally` 清理。
 
 ### Slice 3：Shared、Main 与 Preload 协议升级
 
-- [ ] 更新 Zod schema，使 started/send result 自包含 canonical IDs。
-- [ ] 更新 chunk/completed/cancelled/failed 的 message identity。
-- [ ] 为 `CONVERSATION_BUSY`、retry 拒绝和 cancel 失败定义安全错误。
-- [ ] Main Adapter 增加 sender 所有权和 WebContents 销毁清理。
-- [ ] preload 对所有新输入、结果和事件执行运行时解析。
+- [x] 更新 Zod schema，使 started/send result 自包含 canonical IDs。
+- [x] 更新 chunk/completed/cancelled/failed 的 message identity。
+- [x] 为 `CONVERSATION_BUSY`、`REQUEST_BUSY`、retry 拒绝和 cancel 失败定义安全错误。
+- [x] Main Adapter 增加 sender 所有权和 WebContents 销毁清理。
+- [x] preload 对所有新输入、结果和事件执行运行时解析。
 
 ### Slice 4：Renderer Projection 与 React
 
-- [ ] 新建 reducer/controller，替换 `App.tsx` 内的事件分支。
-- [ ] `DisplayMessage` 改为显式 `messageId`，移除模糊的 `id` 字段。
-- [ ] send result/started 均按 canonical ID 幂等 upsert。
-- [ ] chunk 只能更新映射到同一 request 的 assistant draft。
-- [ ] completed 用持久化消息完成对账；failed/cancelled 删除对应 draft。
-- [ ] 终态只清理自己的 `requestId`，不能误清理新会话或新请求。
-- [ ] send/cancel/retry Promise 失败进入安全状态，不产生未处理 rejection。
+- [x] 新建 reducer/controller，替换 `App.tsx` 内的事件分支。
+- [x] `DisplayMessage` 改为显式 `messageId`，移除模糊的 `id` 字段。
+- [x] send result/started 均按 canonical ID 幂等 upsert。
+- [x] chunk 只能更新映射到同一 request 的 assistant draft。
+- [x] completed 用持久化消息完成对账；failed/cancelled 删除对应 draft。
+- [x] 终态只清理自己的 `requestId`，不能误清理新会话或新请求。
+- [x] send/cancel/retry Promise 失败进入安全状态，不产生未处理 rejection。
 
 ### Slice 5：Retry
 
-- [ ] 新增 retry input/result schema、IPC handler 和 preload 方法。
-- [ ] Core 校验“最后一条未回答 user”不变量。
-- [ ] retry 不重复写入 user，为 assistant 创建新的 canonical ID。
-- [ ] load 后若最后一条是 user，Projection 将其标记为 retryable。
+- [x] 新增 retry input/result schema、IPC handler 和 preload 方法。
+- [x] Core 校验“最后一条未回答 user”不变量。
+- [x] retry 不重复写入 user，为 assistant 创建新的 canonical ID。
+- [x] load 后若最后一条是 user，Projection 将其标记为 retryable。
 
 ### Slice 6：运行期纵切验证
 
-- [ ] Electron 测试覆盖发送、chunk、完成、失败、取消和 retry。
-- [ ] 断言 UI 第一次渲染消息就使用 canonical `messageId`。
-- [ ] 验证窗口销毁会取消其请求，并且重启后只恢复持久消息。
+- [x] Electron 测试覆盖发送、chunk、完成、失败、取消和 retry。
+- [x] 断言 UI 第一次渲染消息就使用 canonical `messageId`。
+- [x] 验证窗口销毁会取消其请求，并且重启后只恢复持久消息。
 
 ## 测试矩阵
 
@@ -301,21 +301,22 @@ Projection Interface 保持窄：React 读取状态并提交 `send/cancel/retry`
 - 重复 started/chunk/terminal 不产生重复消息。
 - completed messageId 与活动映射不一致时拒绝合并。
 - 同 session 第二次发送被拒，不同 session 可并行。
+- 跨 session 复用活动 `requestId` 被拒，不能覆盖活动索引或 sender 所有权。
 - 取消只能由原 sender 发起，sender 销毁触发清理。
 
 ## 验收标准
 
-- [ ] Renderer 消息类型和 React key 不再使用 `requestId`。
-- [ ] 任意 assistant 消息从第一次出现在 UI 和事件中，到最终写入 SQLite，都使用同一个 `messageId`。
-- [ ] completed 返回 canonical message 后，集合中不存在旧 `requestId` 占位或重复 assistant 消息。
-- [ ] 完成、失败和取消都只影响其自身请求，并且恰好产生一个终态。
-- [ ] 部分输出后失败/取消不会留下看似已保存的 assistant 消息。
-- [ ] retry 不复制 user 消息，并使用新的 assistant `messageId`。
-- [ ] 应用重启后，最后一条未回答 user 可以再次重试，不会永久显示 generating。
-- [ ] React views 不包含事件顺序、ID 对账、并发或重试资格规则。
-- [ ] Core 状态机和 Renderer Projection 都可通过各自 Interface 独立测试。
-- [ ] `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build` 全部通过。
-- [ ] Electron 完整纵切测试在本机环境通过。
+- [x] Renderer 消息类型和 React key 不再使用 `requestId`。
+- [x] 任意 assistant 消息从第一次出现在 UI 和事件中，到最终写入 SQLite，都使用同一个 `messageId`。
+- [x] completed 返回 canonical message 后，集合中不存在旧 `requestId` 占位或重复 assistant 消息。
+- [x] 完成、失败和取消都只影响其自身请求，并且恰好产生一个终态。
+- [x] 部分输出后失败/取消不会留下看似已保存的 assistant 消息。
+- [x] retry 不复制 user 消息，并使用新的 assistant `messageId`。
+- [x] 应用重启后，最后一条未回答 user 可以再次重试，不会永久显示 generating。
+- [x] React views 不包含事件顺序、ID 对账、并发或重试资格规则。
+- [x] Core 状态机和 Renderer Projection 都可通过各自 Interface 独立测试。
+- [x] `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build` 全部通过。
+- [x] Electron 完整纵切测试在本机环境通过。
 
 ## 风险与控制
 
@@ -324,4 +325,3 @@ Projection Interface 保持窄：React 读取状态并提交 `send/cancel/retry`
 - **失败 partial 丢失引起困惑**：第一版明确删除未持久化 draft；如果产品要求保留失败尝试，再单独设计持久状态，而不是偷偷混入成功历史。
 - **重试形成分叉**：只允许最后一条未回答 user，拒绝已有成功回复的重试。
 - **多窗口串扰**：Main 维护 sender 所有权，Core 维护 session 并发，两处职责不同且均有测试。
-

@@ -30,3 +30,40 @@ export class ConversationNotFoundError extends Error {
     this.name = 'ConversationNotFoundError'
   }
 }
+
+// 同一会话同时只允许一个活动生成；由 Core 而不是 Renderer 保证。
+export class ConversationBusyError extends Error {
+  constructor(readonly sessionId: string) {
+    super(`Conversation already has an active generation: ${sessionId}`)
+    this.name = 'ConversationBusyError'
+  }
+}
+
+export class MessageNotFoundError extends Error {
+  constructor(readonly messageId: string) {
+    super(`Message not found: ${messageId}`)
+    this.name = 'MessageNotFoundError'
+  }
+}
+
+// 重试目标不再是"最后一条未回答的 user 消息"，继续执行会造成对话分叉。
+export class RetryNotAllowedError extends Error {
+  constructor(readonly reason: string) {
+    super(`Retry not allowed: ${reason}`)
+    this.name = 'RetryNotAllowedError'
+  }
+}
+
+export class RequestNotFoundError extends Error {
+  constructor(readonly requestId: string) {
+    super(`Active request not found: ${requestId}`)
+    this.name = 'RequestNotFoundError'
+  }
+}
+
+export class RequestBusyError extends Error {
+  constructor(readonly requestId: string) {
+    super(`Request already has an active generation: ${requestId}`)
+    this.name = 'RequestBusyError'
+  }
+}

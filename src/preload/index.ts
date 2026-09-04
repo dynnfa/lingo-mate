@@ -1,12 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import {
   cancelMessageInputSchema,
+  cancelMessageResultSchema,
   CONVERSATION_CHANNELS,
   conversationEventSchema,
   createConversationResultSchema,
   listConversationsResultSchema,
   loadConversationInputSchema,
   loadConversationResultSchema,
+  retryMessageInputSchema,
+  retryMessageResultSchema,
   sendMessageInputSchema,
   sendMessageResultSchema,
   type LingoMateApi
@@ -32,9 +35,15 @@ const api: LingoMateApi = {
       const result: unknown = await ipcRenderer.invoke(CONVERSATION_CHANNELS.send, input)
       return sendMessageResultSchema.parse(result)
     },
+    async retry(rawInput) {
+      const input = retryMessageInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(CONVERSATION_CHANNELS.retry, input)
+      return retryMessageResultSchema.parse(result)
+    },
     async cancel(rawInput) {
       const input = cancelMessageInputSchema.parse(rawInput)
-      await ipcRenderer.invoke(CONVERSATION_CHANNELS.cancel, input)
+      const result: unknown = await ipcRenderer.invoke(CONVERSATION_CHANNELS.cancel, input)
+      return cancelMessageResultSchema.parse(result)
     },
     onEvent(listener) {
       const handler = (_event: Electron.IpcRendererEvent, rawEvent: unknown): void => {

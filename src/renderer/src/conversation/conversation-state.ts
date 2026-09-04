@@ -1,0 +1,287 @@
+import type {
+  ConversationEvent,
+  ConversationMessage,
+  ConversationSummary,
+  GenerationStarted
+} from '../../../shared/conversation'
+
+// Renderer 侧投影的消息：以 canonical messageId 为唯一身份与 React key，
+// requestId 只存在于 activeRequests 索引，不允许进入消息实体。
+export interface DisplayMessage {
+  messageId: string
+  role: 'user' | 'assistant'
+  content: string
+  streaming: boolean
+  retryable: boolean
+}
+
+interface ActiveGeneration {
+  requestId: string
+  sessionId: string
+  userMessageId: string
+  assistantMessageId: string
+}
+
+export type ConversationPhase = 'loading' | 'ready' | 'failed'
+
+export interface ConversationState {
+  phase: ConversationPhase
+  sessionId: string | undefined
+  conversations: ConversationSummary[]
+  messages: DisplayMessage[]
+  activeRequests: Record<string, ActiveGeneration>
+  // 已终态的请求：迟到的事件（chunk、重复 started）不得再触碰消息集合。
+  finishedRequests: Record<string, boolean>
+  commandPending: boolean
+  statusMessage: string
+}
+
+export type ConversationAction =
+  | { type: 'recoverStarted'; statusMessage: string }
+  | { type: 'recoverFailed'; message: string }
+  | { type: 'transitionFailed'; message: string }
+  | { type: 'conversationsListed'; conversations: ConversationSummary[] }
+  | { type: 'conversationLoaded'; sessionId: string; messages: ConversationMessage[] }
+  | { type: 'generationStarted'; generation: GenerationStarted }
+  | { type: 'generationEvent'; event: ConversationEvent }
+  | { type: 'commandStarted' }
+  | { type: 'commandSettled' }
+  | { type: 'commandFailed'; message: string }
+  | { type: 'statusMessage'; message: string }
+
+const PROTOCOL_MISMATCH_MESSAGE = '会话协议异常，已忽略一条身份不一致的消息。'
+
+export const initialConversationState: ConversationState = {
+  phase: 'loading',
+  sessionId: undefined,
+  conversations: [],
+  messages: [],
+  activeRequests: {},
+  finishedRequests: {},
+  commandPending: false,
+  statusMessage: '正在恢复会话…'
+}
+
+export function reduceConversation(
+  state: ConversationState,
+  action: ConversationAction
+): ConversationState {
+  switch (action.type) {
+    case 'recoverStarted':
+      return { ...state, phase: 'loading', statusMessage: action.statusMessage }
+    case 'recoverFailed':
+      return { ...state, phase: 'failed', statusMessage: action.message }
+    case 'transitionFailed':
+      return { ...state, phase: 'ready', statusMessage: action.message }
+    case 'conversationsListed':
+      return { ...state, conversations: action.conversations }
+    case 'conversationLoaded':
+      return {
+        ...state,
+        phase: 'ready',
+        sessionId: action.sessionId,
+        messages: toDisplayMessages(action.messages),
+        activeRequests: {},
+        finishedRequests: {},
+        statusMessage: '准备就绪'
+      }
+    case 'generationStarted':
+      return applyGenerationStarted(state, action.generation)
+    case 'generationEvent':
+      return applyEvent(state, action.event)
+    case 'commandStarted':
+      return { ...state, commandPending: true }
+    case 'commandSettled':
+      return { ...state, commandPending: false }
+    case 'commandFailed':
+      return { ...state, commandPending: false, statusMessage: action.message }
+    case 'statusMessage':
+      return { ...state, statusMessage: action.message }
+  }
+}
+
+export function isGenerating(state: ConversationState): boolean {
+  return Object.keys(state.activeRequests).length > 0
+}
+
+// 加载历史时，最后一条没有 assistant 回复的 user 消息投影为可重试，
+// 应用异常退出后不会出现永久 generating。
+function toDisplayMessages(messages: ConversationMessage[]): DisplayMessage[] {
+  const display = messages.map((message) => ({
+    messageId: message.messageId,
+    role: message.role,
+    content: message.content,
+    streaming: false,
+    retryable: false
+  }))
+  const last = display.at(-1)
+  if (last?.role === 'user') {
+    last.retryable = true
+  }
+  return display
+}
+
+// send 结果与 started 事件共享同一 canonical 载荷，按 ID 幂等归并，不依赖到达顺序。
+function applyGenerationStarted(
+  state: ConversationState,
+  generation: GenerationStarted
+): ConversationState {
+  if (generation.sessionId !== state.sessionId) return state
+  if (state.finishedRequests[generation.requestId]) return state
+  if (state.activeRequests[generation.requestId]) return state
+
+  let messages = upsertMessage(state.messages, {
+    messageId: generation.userMessage.messageId,
+    role: 'user',
+    content: generation.userMessage.content,
+    streaming: false,
+    retryable: false
+  })
+  messages = upsertMessage(messages, {
+    messageId: generation.assistantMessageId,
+    role: 'assistant',
+    content: '',
+    streaming: true,
+    retryable: false
+  })
+
+  return {
+    ...state,
+    messages,
+    activeRequests: {
+      ...state.activeRequests,
+      [generation.requestId]: {
+        requestId: generation.requestId,
+        sessionId: generation.sessionId,
+        userMessageId: generation.userMessage.messageId,
+        assistantMessageId: generation.assistantMessageId
+      }
+    },
+    statusMessage: '正在生成…'
+  }
+}
+
+function applyEvent(state: ConversationState, event: ConversationEvent): ConversationState {
+  // 只接受与当前会话一致的事件，避免切换后旧事件写入新视图。
+  if (event.sessionId !== state.sessionId) return state
+  if (state.finishedRequests[event.requestId]) return state
+
+  switch (event.type) {
+    case 'started':
+      return applyGenerationStarted(state, event)
+
+    case 'chunk': {
+      const active = state.activeRequests[event.requestId]
+      if (!active) return state
+      if (event.messageId !== active.assistantMessageId) {
+        return { ...state, statusMessage: PROTOCOL_MISMATCH_MESSAGE }
+      }
+
+      const messages = state.messages.map((message) =>
+        message.messageId === event.messageId && message.streaming
+          ? { ...message, content: message.content + event.delta }
+          : message
+      )
+      return { ...state, messages }
+    }
+
+    case 'completed': {
+      const active = state.activeRequests[event.requestId]
+      if (!active) return state
+
+      if (event.message.messageId !== active.assistantMessageId) {
+        return retireInvalidTerminal(state, event.requestId, active)
+      }
+
+      const retired = retireRequest(state, event.requestId)
+
+      // 用持久化消息原位对账 draft，canonical key 不变，不产生重复消息。
+      const completed: DisplayMessage = {
+        messageId: event.message.messageId,
+        role: 'assistant',
+        content: event.message.content,
+        streaming: false,
+        retryable: false
+      }
+      const messages = upsertMessage(retired.messages, completed)
+      return { ...retired, messages, statusMessage: '回复完成' }
+    }
+
+    case 'cancelled': {
+      const active = state.activeRequests[event.requestId]
+      if (!active) return state
+
+      if (event.messageId !== active.assistantMessageId) {
+        return retireInvalidTerminal(state, event.requestId, active)
+      }
+
+      const retired = retireRequest(state, event.requestId)
+
+      return {
+        ...retired,
+        messages: dropAssistantDraft(retired.messages, active),
+        statusMessage: '已取消，可重试。'
+      }
+    }
+
+    case 'failed': {
+      const active = state.activeRequests[event.requestId]
+      if (!active) return state
+
+      if (event.messageId && event.messageId !== active.assistantMessageId) {
+        return retireInvalidTerminal(state, event.requestId, active)
+      }
+
+      const retired = retireRequest(state, event.requestId)
+
+      return {
+        ...retired,
+        messages: dropAssistantDraft(retired.messages, active),
+        statusMessage: event.error.message
+      }
+    }
+  }
+}
+
+function retireInvalidTerminal(
+  state: ConversationState,
+  requestId: string,
+  active: ActiveGeneration
+): ConversationState {
+  const retired = retireRequest(state, requestId)
+  return {
+    ...retired,
+    messages: dropAssistantDraft(retired.messages, active),
+    statusMessage: PROTOCOL_MISMATCH_MESSAGE
+  }
+}
+
+function retireRequest(state: ConversationState, requestId: string): ConversationState {
+  const activeRequests = { ...state.activeRequests }
+  delete activeRequests[requestId]
+  return {
+    ...state,
+    activeRequests,
+    finishedRequests: { ...state.finishedRequests, [requestId]: true }
+  }
+}
+
+// failed/cancelled 删除未持久化的 assistant draft，保留 user 并标记可重试。
+function dropAssistantDraft(
+  messages: DisplayMessage[],
+  active: ActiveGeneration
+): DisplayMessage[] {
+  return messages
+    .filter((message) => message.messageId !== active.assistantMessageId)
+    .map((message) =>
+      message.messageId === active.userMessageId ? { ...message, retryable: true } : message
+    )
+}
+
+function upsertMessage(messages: DisplayMessage[], next: DisplayMessage): DisplayMessage[] {
+  const index = messages.findIndex((message) => message.messageId === next.messageId)
+  if (index === -1) return [...messages, next]
+  const copy = [...messages]
+  copy[index] = next
+  return copy
+}
