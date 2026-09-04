@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
-  testDir: 'tests/electron',
-  testMatch: '**/*.pw.ts',
+  testDir: 'tests/e2e',
+  testMatch: '**/*.test.{ts,tsx}',
   workers: 1
 })

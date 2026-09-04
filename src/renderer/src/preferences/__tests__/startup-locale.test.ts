@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
-import type { PreferencesApi } from '../../../shared/preferences'
-import { loadStartupLocale } from './startup-locale'
+import type { PreferencesApi } from '../../../../shared/preferences'
+import { loadStartupLocale } from '../startup-locale'
 
 function stubPreferences(api: PreferencesApi): void {
   vi.stubGlobal('api', { preferences: api })

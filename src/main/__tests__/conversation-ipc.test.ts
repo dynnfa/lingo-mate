@@ -3,15 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   ConversationEventListener,
   ConversationModule
-} from '../core/conversation/conversation-module'
-import { RequestNotFoundError } from '../core/conversation/conversation-repository'
+} from '../../core/conversation/conversation-module'
+import { RequestNotFoundError } from '../../core/conversation/conversation-repository'
 import {
   CONVERSATION_CHANNELS,
   type GenerationAccepted,
   type GenerationStarted,
   type SendMessageInput
-} from '../shared/conversation'
-import { registerConversationIpc } from './conversation-ipc'
+} from '../../shared/conversation'
+import { registerConversationIpc } from '../conversation-ipc'
 
 const electronMocks = vi.hoisted(() => ({ handle: vi.fn() }))
 

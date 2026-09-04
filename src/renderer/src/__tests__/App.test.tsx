@@ -14,10 +14,10 @@ import type {
   LingoMateApi,
   RetryMessageInput,
   SendMessageInput
-} from '../../shared/conversation'
-import type { PreferencesApi, SetLocaleInput, SetLocaleResult } from '../../shared/preferences'
-import App from './App'
-import { createI18n } from './i18n'
+} from '../../../shared/conversation'
+import type { PreferencesApi, SetLocaleInput, SetLocaleResult } from '../../../shared/preferences'
+import App from '../App'
+import { createI18n } from '../i18n'
 
 const SESSION_A = 'f9364f0f-f3f4-4ea6-a31d-b55754aa2477'
 const SESSION_B = '0d4b2f7e-52c8-4a61-9ac1-30b1e6de9d02'

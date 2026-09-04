@@ -7,8 +7,8 @@ import {
   ConversationPersistenceError,
   type StoredConversation,
   type StoredMessage
-} from '../core/conversation/conversation-repository'
-import { SqliteConversationRepository } from './sqlite-conversation-repository'
+} from '../../core/conversation/conversation-repository'
+import { SqliteConversationRepository } from '../sqlite-conversation-repository'
 
 const V1_SCHEMA = `
   CREATE TABLE conversation_messages (

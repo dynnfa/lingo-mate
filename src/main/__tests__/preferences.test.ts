@@ -6,7 +6,7 @@ import {
   PreferencesWriteError,
   resolveSystemLocale,
   type PreferenceStore
-} from './preferences'
+} from '../preferences'
 
 function memoryStore(initial: unknown = undefined): PreferenceStore & { value: unknown } {
   const holder = { value: initial }

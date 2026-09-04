@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { GetLocaleResult, SetLocaleResult } from '../shared/preferences'
-import { PREFERENCES_CHANNELS } from '../shared/preferences'
-import { PreferencesReadError, PreferencesService } from './preferences'
-import { registerPreferencesIpc } from './preferences-ipc'
+import type { GetLocaleResult, SetLocaleResult } from '../../shared/preferences'
+import { PREFERENCES_CHANNELS } from '../../shared/preferences'
+import { PreferencesReadError, PreferencesService } from '../preferences'
+import { registerPreferencesIpc } from '../preferences-ipc'
 
 const electronMocks = vi.hoisted(() => ({ handle: vi.fn() }))
 

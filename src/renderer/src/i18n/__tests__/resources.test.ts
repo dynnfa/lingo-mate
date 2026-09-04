@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { SUPPORTED_LOCALES } from '../../../shared/preferences'
-import { createI18n, I18N_NAMESPACES } from './index'
-import commonEn from './locales/en/common.json'
-import conversationEn from './locales/en/conversation.json'
-import errorsEn from './locales/en/errors.json'
-import commonZhCN from './locales/zh-CN/common.json'
-import conversationZhCN from './locales/zh-CN/conversation.json'
-import errorsZhCN from './locales/zh-CN/errors.json'
+import { SUPPORTED_LOCALES } from '../../../../shared/preferences'
+import { createI18n, I18N_NAMESPACES } from '../index'
+import commonEn from '../locales/en/common.json'
+import conversationEn from '../locales/en/conversation.json'
+import errorsEn from '../locales/en/errors.json'
+import commonZhCN from '../locales/zh-CN/common.json'
+import conversationZhCN from '../locales/zh-CN/conversation.json'
+import errorsZhCN from '../locales/zh-CN/errors.json'
 
 const NAMESPACED_RESOURCES = {
   'zh-CN': { common: commonZhCN, conversation: conversationZhCN, errors: errorsZhCN },

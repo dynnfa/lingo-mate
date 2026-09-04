@@ -7,8 +7,8 @@ import {
   RequestBusyError,
   RequestNotFoundError,
   RetryNotAllowedError
-} from '../core/conversation/conversation-repository'
-import { toSafeRequestError } from './conversation-errors'
+} from '../../core/conversation/conversation-repository'
+import { toSafeRequestError } from '../conversation-errors'
 
 describe('conversation error boundary mapping', () => {
   it('maps typed core errors to safe request errors without display text', () => {
