@@ -1,25 +1,12 @@
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { _electron as electron, expect, test, type ElectronApplication } from '@playwright/test'
+import type { ElectronApplication } from '@playwright/test'
 import type { LingoMateApi } from '../../src/shared/conversation'
-
-async function launchApp(userDataPath: string): Promise<ElectronApplication> {
-  return electron.launch({ args: [process.cwd(), `--user-data-dir=${userDataPath}`] })
-}
-
-async function withTempUserData(run: (userDataPath: string) => Promise<void>): Promise<void> {
-  const userDataPath = await mkdtemp(join(tmpdir(), 'lingo-mate-recovery-'))
-  try {
-    await run(userDataPath)
-  } finally {
-    await rm(userDataPath, { force: true, recursive: true })
-  }
-}
+import { expect, launchApp, test, withTempUserData, writeLocalePreference } from './helpers'
 
 test('restores the same conversation and history after relaunch', async () => {
   await withTempUserData(async (userDataPath) => {
-    const firstLaunch = await launchApp(userDataPath)
+    // 固定测试语言为中文，不依赖开发机系统语言
+    await writeLocalePreference(userDataPath, 'zh-CN')
+    const firstLaunch: ElectronApplication = await launchApp(userDataPath)
     const firstWindow = await firstLaunch.firstWindow()
 
     // 等待 Renderer 完成启动恢复（空库自动创建会话）
@@ -75,6 +62,7 @@ test('restores the same conversation and history after relaunch', async () => {
 
 test('returns safe structured errors for malformed and unknown sessions', async () => {
   await withTempUserData(async (userDataPath) => {
+    await writeLocalePreference(userDataPath, 'zh-CN')
     const app = await launchApp(userDataPath)
     const window = await app.firstWindow()
 
@@ -100,10 +88,10 @@ test('returns safe structured errors for malformed and unknown sessions', async 
       return api.load({ sessionId: '00000000-0000-4000-8000-000000000000' })
     })
 
-    // 不存在的会话返回类型化 NOT_FOUND，不携带内部细节
+    // 不存在的会话返回类型化 NOT_FOUND（带资源判别），不携带内部细节与展示文案
     expect(missing).toEqual({
       status: 'error',
-      error: { code: 'NOT_FOUND', message: '会话不存在或已被删除。' }
+      error: { code: 'NOT_FOUND', resource: 'conversation' }
     })
 
     await app.close()

@@ -327,7 +327,7 @@ describe('ConversationModule', () => {
           type: 'failed',
           requestId: REQUEST_ID,
           sessionId,
-          error: { code: 'PERSISTENCE_ERROR', message: '保存会话失败，请稍后重试。' }
+          error: { code: 'PERSISTENCE_ERROR' }
         }
       ])
       expect(repository.messages).toHaveLength(0)
@@ -402,7 +402,7 @@ describe('ConversationModule', () => {
       }
       expect(events.map((event) => event.type)).toEqual(['started', 'failed'])
       expect(failed.messageId).toBe(started.assistantMessageId)
-      expect(failed.error).toEqual({ code: 'MODEL_ERROR', message: '生成回复失败，请稍后重试。' })
+      expect(failed.error).toEqual({ code: 'MODEL_ERROR' })
       expect(repository.messages.map(({ role }) => role)).toEqual(['user'])
     })
 

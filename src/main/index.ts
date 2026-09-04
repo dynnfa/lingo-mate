@@ -6,6 +6,9 @@ import { ConversationModule } from '../core/conversation/conversation-module'
 import { LocalLanguageModel } from '../core/llm/local-language-model'
 import { SqliteConversationRepository } from '../database/sqlite-conversation-repository'
 import { registerConversationIpc } from './conversation-ipc'
+import { PreferencesService } from './preferences'
+import { registerPreferencesIpc } from './preferences-ipc'
+import { createElectronPreferenceStore } from './preferences-store'
 
 let conversationRepository: SqliteConversationRepository | undefined
 
@@ -63,6 +66,18 @@ app.whenReady().then(() => {
     join(app.getPath('userData'), 'lingo-mate.sqlite')
   )
   registerConversationIpc(new ConversationModule(new LocalLanguageModel(), conversationRepository))
+
+  // 界面语言来源统一由 Main 解析：跟随系统时按系统偏好顺序匹配支持语言。
+  // 偏好存储初始化失败只损失语言记忆（Renderer 回退默认语言），不阻断应用启动。
+  try {
+    registerPreferencesIpc(
+      new PreferencesService(createElectronPreferenceStore(), () =>
+        app.getPreferredSystemLanguages()
+      )
+    )
+  } catch (error) {
+    console.error('Failed to initialize locale preferences', error)
+  }
 
   createWindow()
 

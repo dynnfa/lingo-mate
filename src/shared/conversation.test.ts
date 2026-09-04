@@ -103,13 +103,46 @@ describe('conversation protocol schemas', () => {
     expect(
       cancelMessageResultSchema.parse({
         status: 'error',
-        error: { code: 'REQUEST_NOT_FOUND', message: '没有找到可取消的回复请求。' }
+        error: { code: 'REQUEST_NOT_FOUND' }
       })
     ).toBeTruthy()
     expect(
       cancelMessageResultSchema.safeParse({
         status: 'error',
         error: { code: 'SQLITE_ERROR', message: 'raw' }
+      }).success
+    ).toBe(false)
+  })
+
+  it('keeps request errors free of display text and discriminates NOT_FOUND resources', () => {
+    // 多余的 message 字段在进程边界被剥离，不进入协议
+    const stripped = createConversationResultSchema.parse({
+      status: 'error',
+      error: { code: 'NOT_FOUND', resource: 'conversation', message: '内部文案' }
+    })
+    expect(stripped).toEqual({
+      status: 'error',
+      error: { code: 'NOT_FOUND', resource: 'conversation' }
+    })
+
+    expect(
+      createConversationResultSchema.safeParse({
+        status: 'error',
+        error: { code: 'NOT_FOUND', resource: 'message' }
+      }).success
+    ).toBe(true)
+
+    expect(
+      createConversationResultSchema.safeParse({
+        status: 'error',
+        error: { code: 'NOT_FOUND', resource: 'session' }
+      }).success
+    ).toBe(false)
+
+    expect(
+      createConversationResultSchema.safeParse({
+        status: 'error',
+        error: { code: 'NOT_FOUND' }
       }).success
     ).toBe(false)
   })
@@ -129,7 +162,7 @@ describe('conversation protocol schemas', () => {
     expect(
       listConversationsResultSchema.parse({
         status: 'error',
-        error: { code: 'REQUEST_BUSY', message: '该回复请求已在处理中。' }
+        error: { code: 'REQUEST_BUSY' }
       }).status
     ).toBe('error')
 
@@ -209,7 +242,7 @@ describe('conversation protocol schemas', () => {
         type: 'failed',
         requestId: REQUEST_ID,
         sessionId: SESSION_ID,
-        error: { code: 'PERSISTENCE_ERROR', message: '保存会话失败，请稍后重试。' }
+        error: { code: 'PERSISTENCE_ERROR' }
       })
     ).toBeTruthy()
 
@@ -219,9 +252,22 @@ describe('conversation protocol schemas', () => {
         requestId: REQUEST_ID,
         sessionId: SESSION_ID,
         messageId: ASSISTANT_MESSAGE_ID,
-        error: { code: 'MODEL_ERROR', message: '生成回复失败，请稍后重试。' }
+        error: { code: 'MODEL_ERROR' }
       })
     ).toBeTruthy()
+
+    // 生成错误同样不携带展示文案：多余 message 在进程边界被剥离
+    const failedEvent = conversationEventSchema.parse({
+      type: 'failed',
+      requestId: REQUEST_ID,
+      sessionId: SESSION_ID,
+      messageId: ASSISTANT_MESSAGE_ID,
+      error: { code: 'MODEL_ERROR', message: '内部文案' }
+    })
+    expect(failedEvent).toMatchObject({
+      type: 'failed',
+      error: { code: 'MODEL_ERROR' }
+    })
   })
 
   it('rejects legacy events that lack canonical message identity', () => {

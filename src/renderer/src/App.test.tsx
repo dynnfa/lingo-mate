@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
+import { I18nextProvider } from 'react-i18next'
 import type {
   CancelMessageResult,
   ConversationEvent,
@@ -14,12 +15,26 @@ import type {
   RetryMessageInput,
   SendMessageInput
 } from '../../shared/conversation'
+import type { PreferencesApi, SetLocaleInput, SetLocaleResult } from '../../shared/preferences'
 import App from './App'
+import { createI18n } from './i18n'
 
 const SESSION_A = 'f9364f0f-f3f4-4ea6-a31d-b55754aa2477'
 const SESSION_B = '0d4b2f7e-52c8-4a61-9ac1-30b1e6de9d02'
 const SESSION_C = '44316d8e-c6fb-4d09-bcb8-56936a14932d'
 const NOW = '2026-09-02T10:00:00.000Z'
+
+// 测试语言显式固定为 zh-CN，不依赖开发机系统语言；
+// 组件断言使用真实资源渲染的文本与可访问名称，不 mock t(key) => key。
+const i18n = createI18n('zh-CN')
+
+function renderApp(props: { initialPreferenceError?: boolean } = {}): void {
+  render(
+    <I18nextProvider i18n={i18n}>
+      <App initialPreferenceError={props.initialPreferenceError} />
+    </I18nextProvider>
+  )
+}
 
 function sessionButton(sessionId: string): HTMLButtonElement {
   const button = within(screen.getByRole('navigation', { name: '会话列表' }))
@@ -49,39 +64,68 @@ interface ApiMock {
     send: SendMessageInput[]
     retry: RetryMessageInput[]
     cancel: string[]
+    setLocale: SetLocaleInput[]
   }
   generations: GenerationStarted[]
   emit(event: ConversationEvent): void
+  failNextSetLocale(): void
 }
 
-function installApiMock(setup: {
-  list?:
-    | ListConversationsResult
-    | Promise<ListConversationsResult>
-    | (() => ListConversationsResult | Promise<ListConversationsResult>)
-  create?: CreateConversationResult | Promise<CreateConversationResult>
-  load?: (sessionId: string) => LoadConversationResult | Promise<LoadConversationResult>
-  send?: (
-    generation: GenerationStarted
-  ) => Promise<{ status: 'ok'; accepted: true; generation: GenerationStarted }>
-  cancel?: (requestId: string) => CancelMessageResult | Promise<CancelMessageResult>
-}): ApiMock {
+interface ApiMockOptions {
+  setLocale?: (input: SetLocaleInput) => SetLocaleResult
+}
+
+function installApiMock(
+  setup: {
+    list?:
+      | ListConversationsResult
+      | Promise<ListConversationsResult>
+      | (() => ListConversationsResult | Promise<ListConversationsResult>)
+    create?: CreateConversationResult | Promise<CreateConversationResult>
+    load?: (sessionId: string) => LoadConversationResult | Promise<LoadConversationResult>
+    send?: (
+      generation: GenerationStarted
+    ) => Promise<{ status: 'ok'; accepted: true; generation: GenerationStarted }>
+    cancel?: (requestId: string) => CancelMessageResult | Promise<CancelMessageResult>
+  } & ApiMockOptions
+): ApiMock {
   const listeners = new Set<(event: ConversationEvent) => void>()
   const generations: GenerationStarted[] = []
   const userContent = new Map<string, string>()
   const mock: ApiMock = {
-    calls: { create: 0, list: 0, load: [], send: [], retry: [], cancel: [] },
+    calls: { create: 0, list: 0, load: [], send: [], retry: [], cancel: [], setLocale: [] },
     generations,
     emit(event) {
       for (const listener of listeners) listener(event)
+    },
+    failNextSetLocale(): void {
+      failNextSetLocale = true
+    }
+  }
+  let failNextSetLocale = false
+
+  const preferences: PreferencesApi = {
+    async getLocale() {
+      return { status: 'ok', settings: { preference: 'system', resolvedLocale: 'zh-CN' } }
+    },
+    async setLocale(input) {
+      mock.calls.setLocale.push(input)
+      if (failNextSetLocale) {
+        failNextSetLocale = false
+        return { status: 'error', error: { code: 'PREFERENCES_WRITE_FAILED' } }
+      }
+      if (setup.setLocale) return setup.setLocale(input)
+      const resolvedLocale = input.preference === 'system' ? 'zh-CN' : input.preference
+      return { status: 'ok', settings: { preference: input.preference, resolvedLocale } }
     }
   }
 
   const api: LingoMateApi = {
+    preferences,
     conversation: {
       async create() {
         mock.calls.create += 1
-        return setup.create ?? { status: 'error', error: { code: 'UNKNOWN_ERROR', message: 'x' } }
+        return setup.create ?? { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
       },
       async list() {
         mock.calls.list += 1
@@ -94,7 +138,7 @@ function installApiMock(setup: {
         return (
           setup.load?.(input.sessionId) ?? {
             status: 'error',
-            error: { code: 'NOT_FOUND', message: 'x' }
+            error: { code: 'NOT_FOUND', resource: 'conversation' }
           }
         )
       },
@@ -150,7 +194,7 @@ function installApiMock(setup: {
 }
 
 async function renderReady(mock: ApiMock): Promise<void> {
-  render(<App />)
+  renderApp()
   await waitFor(() => {
     expect(document.querySelector('main')?.getAttribute('data-phase')).toBe('ready')
   })
@@ -160,6 +204,7 @@ async function renderReady(mock: ApiMock): Promise<void> {
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  void i18n.changeLanguage('zh-CN')
 })
 
 describe('App conversation recovery', () => {
@@ -194,10 +239,10 @@ describe('App conversation recovery', () => {
                 }
               ]
             }
-          : { status: 'error', error: { code: 'NOT_FOUND', message: 'x' } }
+          : { status: 'error', error: { code: 'NOT_FOUND', resource: 'conversation' } }
     })
 
-    render(<App />)
+    renderApp()
 
     await waitFor(() => {
       expect(document.querySelector('main')?.getAttribute('data-phase')).toBe('ready')
@@ -226,7 +271,7 @@ describe('App conversation recovery', () => {
       })
     })
 
-    render(<App />)
+    renderApp()
 
     expect(await screen.findByText('从一句话开始')).toBeInTheDocument()
     expect(mock.calls.create).toBe(1)
@@ -234,10 +279,29 @@ describe('App conversation recovery', () => {
     expect(screen.getByLabelText('练习内容')).toBeEnabled()
   })
 
+  it('labels conversation entries with a locale-formatted date', async () => {
+    installApiMock({
+      list: { status: 'ok', conversations: [summary(SESSION_A, '2026-09-02T10:00:00.000Z')] },
+      load: (sessionId) => ({
+        status: 'ok',
+        conversation: summary(sessionId, NOW),
+        messages: []
+      })
+    })
+
+    renderApp()
+    await waitFor(() => {
+      expect(document.querySelector('main')?.getAttribute('data-phase')).toBe('ready')
+    })
+
+    expect(sessionButton(SESSION_A).textContent).toMatch(/^会话 · /)
+    expect(sessionButton(SESSION_A).textContent).toContain('2026')
+  })
+
   it('blocks sending while startup recovery has not finished', async () => {
     installApiMock({ list: new Promise(() => undefined) })
 
-    render(<App />)
+    renderApp()
 
     expect(document.querySelector('main')?.getAttribute('data-phase')).toBe('loading')
     expect(screen.getByLabelText('练习内容')).toBeDisabled()
@@ -246,13 +310,10 @@ describe('App conversation recovery', () => {
 
   it('shows a failed state and keeps the composer locked when recovery fails', async () => {
     installApiMock({
-      list: {
-        status: 'error',
-        error: { code: 'PERSISTENCE_ERROR', message: '访问本地会话数据失败，请稍后重试。' }
-      }
+      list: { status: 'error', error: { code: 'PERSISTENCE_ERROR' } }
     })
 
-    render(<App />)
+    renderApp()
 
     expect(await screen.findByText('访问本地会话数据失败，请稍后重试。')).toBeInTheDocument()
     expect(document.querySelector('main')?.getAttribute('data-phase')).toBe('failed')
@@ -263,7 +324,7 @@ describe('App conversation recovery', () => {
   it('handles a rejected recovery call without leaving the UI loading', async () => {
     installApiMock({ list: Promise.reject(new Error('ipc unavailable')) })
 
-    render(<App />)
+    renderApp()
 
     expect(await screen.findByText('无法加载会话，请稍后重试。')).toBeInTheDocument()
     expect(document.querySelector('main')?.getAttribute('data-phase')).toBe('failed')
@@ -460,7 +521,7 @@ describe('App message lifecycle', () => {
       requestId: generation.requestId,
       sessionId: SESSION_A,
       messageId: generation.assistantMessageId,
-      error: { code: 'MODEL_ERROR', message: '生成回复失败，请稍后重试。' }
+      error: { code: 'MODEL_ERROR' }
     })
 
     expect(await screen.findByText('生成回复失败，请稍后重试。')).toBeInTheDocument()
@@ -488,7 +549,7 @@ describe('App message lifecycle', () => {
       })
     })
 
-    render(<App />)
+    renderApp()
     await waitFor(() => {
       expect(document.querySelector('main')?.getAttribute('data-phase')).toBe('ready')
     })
@@ -543,7 +604,7 @@ describe('App conversation switching', () => {
       }),
       cancel: () => ({
         status: 'error',
-        error: { code: 'REQUEST_NOT_FOUND', message: '无法取消当前回复。' }
+        error: { code: 'REQUEST_NOT_FOUND' }
       })
     })
     await renderReady(mock)
@@ -555,7 +616,7 @@ describe('App conversation switching', () => {
 
     fireEvent.click(sessionButton(SESSION_B))
 
-    expect(await screen.findByText('无法取消当前回复。')).toBeInTheDocument()
+    expect(await screen.findByText('没有找到进行中的回复请求。')).toBeInTheDocument()
     expect(sessionButton(SESSION_A)).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: '取消' })).toBeInTheDocument()
     expect(mock.calls.cancel).toEqual([generation.requestId])
@@ -589,7 +650,7 @@ describe('App conversation switching', () => {
       })
     })
 
-    render(<App />)
+    renderApp()
     await waitFor(() => {
       expect(document.querySelector('main')?.getAttribute('data-phase')).toBe('ready')
     })
@@ -706,7 +767,7 @@ describe('App conversation switching', () => {
       })
     })
 
-    render(<App />)
+    renderApp()
     await waitFor(() => {
       expect(document.querySelector('main')?.getAttribute('data-phase')).toBe('ready')
     })
@@ -756,9 +817,9 @@ describe('App conversation switching', () => {
       failure: () =>
         ({
           status: 'error',
-          error: { code: 'PERSISTENCE_ERROR', message: '刷新会话列表失败。' }
+          error: { code: 'PERSISTENCE_ERROR' }
         }) satisfies ListConversationsResult,
-      expected: '刷新会话列表失败。'
+      expected: '访问本地会话数据失败，请稍后重试。'
     },
     {
       name: 'rejected call',
@@ -784,7 +845,7 @@ describe('App conversation switching', () => {
       })
     })
 
-    render(<App />)
+    renderApp()
     await waitFor(() => {
       expect(document.querySelector('main')?.getAttribute('data-phase')).toBe('ready')
     })
@@ -809,5 +870,107 @@ describe('App conversation switching', () => {
     expect(await screen.findByText(expected)).toBeInTheDocument()
     expect(document.querySelector('main')?.getAttribute('data-phase')).toBe('ready')
     expect(sessionButton(SESSION_A)).toHaveAttribute('aria-pressed', 'true')
+  })
+})
+
+describe('App language settings', () => {
+  it('switches the interface language at runtime without losing drafts or remounting state', async () => {
+    const mock = installApiMock({
+      list: { status: 'ok', conversations: [summary(SESSION_A, NOW)] },
+      load: () => ({
+        status: 'ok',
+        conversation: summary(SESSION_A, NOW),
+        messages: []
+      })
+    })
+    await renderReady(mock)
+
+    fireEvent.change(screen.getByLabelText('练习内容'), { target: { value: 'kept draft' } })
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+
+    const dialog = screen.getByRole('dialog', { name: '设置' })
+    expect(within(dialog).getByRole('radio', { name: '跟随系统 / System' })).toBeChecked()
+
+    fireEvent.click(within(dialog).getByRole('radio', { name: 'English' }))
+
+    // 保存成功后按返回的 resolvedLocale 切换界面语言
+    await waitFor(() => {
+      expect(mock.calls.setLocale).toEqual([{ preference: 'en' }])
+    })
+    expect(await screen.findByRole('button', { name: 'Send' })).toBeInTheDocument()
+
+    // 草稿保留、会话与数据不受影响；已有终态提示立即换语言
+    expect(screen.getByLabelText('Practice text')).toHaveValue('kept draft')
+    expect(screen.getByText('Ready')).toBeInTheDocument()
+    const englishSessionTitle = document.querySelector(`[data-session-id="${SESSION_A}"]`)
+    expect(englishSessionTitle?.textContent).toMatch(/^Conversation · /)
+    expect(document.querySelectorAll('.message')).toHaveLength(0)
+
+    // 关闭面板后焦点返回设置按钮
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: 'Settings' })).getByRole('button', {
+        name: 'Close'
+      })
+    )
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Settings' })).toHaveFocus()
+  })
+
+  it('closes the settings dialog with Escape and restores focus', async () => {
+    const mock = installApiMock({
+      list: { status: 'ok', conversations: [summary(SESSION_A, NOW)] },
+      load: () => ({
+        status: 'ok',
+        conversation: summary(SESSION_A, NOW),
+        messages: []
+      })
+    })
+    await renderReady(mock)
+
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    const dialog = screen.getByRole('dialog', { name: '设置' })
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '设置' })).toHaveFocus()
+  })
+
+  it('keeps the previous language and reports a failure when saving fails', async () => {
+    const mock = installApiMock({
+      list: { status: 'ok', conversations: [summary(SESSION_A, NOW)] },
+      load: () => ({
+        status: 'ok',
+        conversation: summary(SESSION_A, NOW),
+        messages: []
+      })
+    })
+    mock.failNextSetLocale()
+    await renderReady(mock)
+
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'English' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('保存语言设置失败，请重试。')
+    // 保存失败保留原语言与原选择
+    expect(screen.getByRole('button', { name: '发送' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: '跟随系统 / System' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'English' })).not.toBeChecked()
+  })
+
+  it('shows a dismissible notice when the startup preference could not be loaded', async () => {
+    installApiMock({
+      list: { status: 'ok', conversations: [summary(SESSION_A, NOW)] },
+      load: () => ({
+        status: 'ok',
+        conversation: summary(SESSION_A, NOW),
+        messages: []
+      })
+    })
+
+    renderApp({ initialPreferenceError: true })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('无法读取语言偏好，已使用默认语言。')
+    fireEvent.click(screen.getByRole('button', { name: '知道了' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

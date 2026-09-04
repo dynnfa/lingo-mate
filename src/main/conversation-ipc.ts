@@ -83,10 +83,7 @@ export function registerConversationIpc(module: ConversationModule): void {
   ipcMain.handle(CONVERSATION_CHANNELS.cancel, (event, rawInput: unknown): CancelMessageResult => {
     const input = cancelMessageInputSchema.parse(rawInput)
     if (requestOwners.get(input.requestId)?.senderId !== event.sender.id) {
-      return {
-        status: 'error',
-        error: { code: 'REQUEST_NOT_FOUND', message: '没有找到可取消的回复请求。' }
-      }
+      return { status: 'error', error: { code: 'REQUEST_NOT_FOUND' } }
     }
 
     try {
@@ -106,10 +103,7 @@ async function runGeneration(
   run: (emit: ConversationEventListener) => Promise<GenerationAccepted>
 ): Promise<SendMessageResult | RetryMessageResult> {
   if (requestOwners.has(requestId)) {
-    return {
-      status: 'error',
-      error: { code: 'REQUEST_BUSY', message: '该回复请求已在处理中。' }
-    }
+    return { status: 'error', error: { code: 'REQUEST_BUSY' } }
   }
 
   const ownership: RequestOwnership = { senderId: sender.id, senderDestroyed: false }

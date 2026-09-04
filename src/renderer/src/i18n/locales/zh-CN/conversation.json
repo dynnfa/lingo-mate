@@ -1,0 +1,13 @@
+{
+  "listItemLabel": "会话 · {{dateTime}}",
+  "status": {
+    "restoring": "正在恢复会话…",
+    "switching": "正在切换会话…",
+    "creating": "正在创建会话…",
+    "ready": "准备就绪",
+    "generating": "正在生成…",
+    "completed": "回复完成",
+    "cancelled": "已取消，可重试。",
+    "protocolError": "会话协议异常，已忽略一条身份不一致的消息。"
+  }
+}

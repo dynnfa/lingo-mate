@@ -17,6 +17,133 @@ body {
   background: var(--color-background);
 }
 
+.preference-notice {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 10px 12px 10px 16px;
+  border: 1px solid var(--color-border-message);
+  border-radius: 12px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-composer);
+  transform: translateX(-50%);
+}
+
+.preference-notice p {
+  color: var(--color-text-status);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.preference-notice button {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-secondary);
+  font-size: 12px;
+}
+
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(0 0 0 / 40%);
+}
+
+.settings-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(420px, 100%);
+  padding: 20px 24px 24px;
+  border: 1px solid var(--color-border-message);
+  border-radius: 16px;
+  background: var(--color-background);
+  box-shadow: var(--shadow-composer);
+}
+
+.settings-dialog h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.language-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.language-fieldset legend {
+  margin-bottom: 8px;
+  color: var(--color-text-label);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.language-fieldset:disabled .language-option {
+  opacity: 0.45;
+}
+
+.language-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.language-option:hover {
+  background: var(--color-surface-hover);
+}
+
+.language-option input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+}
+
+.language-option input:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 3px;
+}
+
+.settings-error {
+  color: var(--color-text-status);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.settings-actions button {
+  padding: 8px 18px;
+  color: white;
+  background: var(--color-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-actions button:hover {
+  background: var(--color-primary-hover);
+}
+
 .session-sidebar {
   display: flex;
   flex-direction: column;
@@ -161,6 +288,7 @@ button.new-session {
   display: block;
   font-size: 14px;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .session-placeholder {

@@ -62,7 +62,7 @@ describe('conversation projection reducer', () => {
         streaming: true
       })
       expect(isGenerating(state)).toBe(true)
-      expect(state.statusMessage).toBe('正在生成…')
+      expect(state.status).toEqual({ kind: 'generating' })
     })
 
     it('merges send result and started event idempotently in either order', () => {
@@ -91,6 +91,27 @@ describe('conversation projection reducer', () => {
 
       expect(state.messages).toHaveLength(0)
       expect(isGenerating(state)).toBe(false)
+    })
+
+    it('tracks the load phase with a semantic status', () => {
+      const restoring = reduceConversation(loadedState(), {
+        type: 'loadPhaseStarted',
+        status: { kind: 'restoring' }
+      })
+      expect(restoring.phase).toBe('loading')
+      expect(restoring.status).toEqual({ kind: 'restoring' })
+
+      const switching = reduceConversation(loadedState(), {
+        type: 'loadPhaseStarted',
+        status: { kind: 'switching' }
+      })
+      expect(switching.status).toEqual({ kind: 'switching' })
+
+      const creating = reduceConversation(loadedState(), {
+        type: 'loadPhaseStarted',
+        status: { kind: 'creating' }
+      })
+      expect(creating.status).toEqual({ kind: 'creating' })
     })
   })
 
@@ -162,7 +183,7 @@ describe('conversation projection reducer', () => {
         }
       })
 
-      expect(state.statusMessage).toContain('协议异常')
+      expect(state.status).toEqual({ kind: 'protocolError' })
       expect(findMessage(state, ASSISTANT_MESSAGE_ID)?.content).toBe('')
       expect(findMessage(state, '7b097553-e4fb-48c9-be81-e25cfa55358e')).toBeUndefined()
     })
@@ -213,7 +234,7 @@ describe('conversation projection reducer', () => {
         retryable: false
       })
       expect(isGenerating(state)).toBe(false)
-      expect(state.statusMessage).toBe('回复完成')
+      expect(state.status).toEqual({ kind: 'completed' })
     })
 
     it('ignores duplicate completed and chunks after the terminal event', () => {
@@ -246,7 +267,7 @@ describe('conversation projection reducer', () => {
         }
       })
 
-      expect(state.statusMessage).toContain('协议异常')
+      expect(state.status).toEqual({ kind: 'protocolError' })
       // 非法终态仍进入安全状态：不保留未持久化 draft，user 可以重试。
       expect(messageIds(state)).toEqual([USER_MESSAGE_ID])
       expect(findMessage(state, USER_MESSAGE_ID)).toMatchObject({ retryable: true })
@@ -286,10 +307,10 @@ describe('conversation projection reducer', () => {
       expect(messageIds(state)).toEqual([USER_MESSAGE_ID])
       expect(findMessage(state, USER_MESSAGE_ID)).toMatchObject({ retryable: true })
       expect(isGenerating(state)).toBe(false)
-      expect(state.statusMessage).toBe('已取消，可重试。')
+      expect(state.status).toEqual({ kind: 'cancelled' })
     })
 
-    it('failed removes the partial draft and surfaces the safe error', () => {
+    it('failed removes the partial draft and keeps the typed error semantics', () => {
       const state = reduceConversation(startedWithPartial(), {
         type: 'generationEvent',
         event: {
@@ -297,13 +318,13 @@ describe('conversation projection reducer', () => {
           requestId: REQUEST_ID,
           sessionId: SESSION_A,
           messageId: ASSISTANT_MESSAGE_ID,
-          error: { code: 'MODEL_ERROR', message: '生成回复失败，请稍后重试。' }
+          error: { code: 'MODEL_ERROR' }
         }
       })
 
       expect(messageIds(state)).toEqual([USER_MESSAGE_ID])
       expect(findMessage(state, USER_MESSAGE_ID)).toMatchObject({ retryable: true })
-      expect(state.statusMessage).toBe('生成回复失败，请稍后重试。')
+      expect(state.status).toEqual({ kind: 'generationError', error: { code: 'MODEL_ERROR' } })
     })
 
     it.each(['cancelled', 'failed'] as const)(
@@ -322,7 +343,7 @@ describe('conversation projection reducer', () => {
                 requestId: REQUEST_ID,
                 sessionId: SESSION_A,
                 messageId: '7b097553-e4fb-48c9-be81-e25cfa55358e',
-                error: { code: 'MODEL_ERROR' as const, message: 'failed' }
+                error: { code: 'MODEL_ERROR' as const }
               }
         const state = reduceConversation(startedWithPartial(), {
           type: 'generationEvent',
@@ -331,7 +352,7 @@ describe('conversation projection reducer', () => {
 
         expect(messageIds(state)).toEqual([USER_MESSAGE_ID])
         expect(findMessage(state, USER_MESSAGE_ID)).toMatchObject({ retryable: true })
-        expect(state.statusMessage).toContain('协议异常')
+        expect(state.status).toEqual({ kind: 'protocolError' })
         expect(isGenerating(state)).toBe(false)
       }
     )
@@ -343,12 +364,12 @@ describe('conversation projection reducer', () => {
           type: 'failed',
           requestId: REQUEST_ID,
           sessionId: SESSION_A,
-          error: { code: 'PERSISTENCE_ERROR', message: '保存会话失败，请稍后重试。' }
+          error: { code: 'PERSISTENCE_ERROR' }
         }
       })
 
       expect(state.messages).toHaveLength(0)
-      expect(state.statusMessage).toBe('准备就绪')
+      expect(state.status).toEqual({ kind: 'ready' })
     })
 
     it('a terminal only clears its own request and leaves other active generations intact', () => {
@@ -440,7 +461,7 @@ describe('conversation projection reducer', () => {
       })
 
       expect(state.messages).toHaveLength(0)
-      expect(state.statusMessage).toBe('准备就绪')
+      expect(state.status).toEqual({ kind: 'ready' })
     })
 
     it('ignores a late started after the request reached a terminal state', () => {
@@ -467,22 +488,45 @@ describe('conversation projection reducer', () => {
     })
   })
 
-  describe('command bookkeeping', () => {
+  describe('command bookkeeping and failure statuses', () => {
     it('tracks a pending command and settles it without polluting messages', () => {
       let state = reduceConversation(loadedState(), { type: 'commandStarted' })
       expect(state.commandPending).toBe(true)
 
       state = reduceConversation(state, {
         type: 'commandFailed',
-        message: '无法发送消息，请稍后重试。'
+        status: { kind: 'ipcError', operation: 'send' }
       })
       expect(state.commandPending).toBe(false)
-      expect(state.statusMessage).toBe('无法发送消息，请稍后重试。')
+      expect(state.status).toEqual({ kind: 'ipcError', operation: 'send' })
       expect(state.messages).toHaveLength(0)
 
       state = reduceConversation(state, { type: 'commandStarted' })
       state = reduceConversation(state, { type: 'commandSettled' })
       expect(state.commandPending).toBe(false)
+    })
+
+    it('keeps operation context and typed protocol errors in failure statuses', () => {
+      const state = reduceConversation(loadedState(), {
+        type: 'recoverFailed',
+        status: {
+          kind: 'requestError',
+          operation: 'load',
+          error: { code: 'NOT_FOUND', resource: 'conversation' }
+        }
+      })
+
+      expect(state.phase).toBe('failed')
+      expect(state.status).toEqual({
+        kind: 'requestError',
+        operation: 'load',
+        error: { code: 'NOT_FOUND', resource: 'conversation' }
+      })
+    })
+
+    it('starts with a semantic restoring status', () => {
+      expect(initialConversationState.status).toEqual({ kind: 'restoring' })
+      expect(initialConversationState.phase).toBe('loading')
     })
   })
 })
