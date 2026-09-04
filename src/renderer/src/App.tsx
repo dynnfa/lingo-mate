@@ -78,12 +78,14 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
         <div className="session-heading">
           <h2>{t('common:sidebar.sessionsHeading')}</h2>
           <button
+            aria-label={t('common:sidebar.newSession')}
             className="new-session"
             disabled={state.phase !== 'ready' || state.commandPending}
             onClick={() => void controller.startNewConversation()}
+            title={t('common:sidebar.newSession')}
             type="button"
           >
-            <span aria-hidden="true">＋</span> {t('common:sidebar.newSession')}
+            <span aria-hidden="true">＋</span>
           </button>
         </div>
         <nav className="session-list" aria-label={t('common:sidebar.listLabel')}>
