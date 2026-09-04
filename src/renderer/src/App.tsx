@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type SyntheticEvent } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { ConversationController } from './conversation/conversation-controller'
 import { isGenerating } from './conversation/conversation-state'
-import { translateConversationStatus } from './conversation/status-messages'
+import { ConversationPanel } from './conversation/ConversationPanel'
 import { formatDateTime } from './i18n/formatters'
 import { normalizeI18nLocale } from './i18n'
 import { LanguageSettings } from './preferences/LanguageSettings'
@@ -32,7 +32,6 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
   // 语言切换只触发重渲染，控制器与订阅不在此时重建。
   const [controller] = useState(() => new ConversationController(window.api.conversation))
   const state = useSyncExternalStore(controller.subscribe, controller.getState)
-  const [draft, setDraft] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [preferenceNoticeVisible, setPreferenceNoticeVisible] = useState(initialPreferenceError)
   const settingsButtonRef = useRef<HTMLButtonElement>(null)
@@ -45,13 +44,6 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
 
   const generating = isGenerating(state)
   const composerLocked = state.phase !== 'ready' || generating || state.commandPending
-
-  const sendMessage = (formEvent: SyntheticEvent): void => {
-    formEvent.preventDefault()
-    if (composerLocked || !draft.trim()) return
-    setDraft('')
-    void controller.send(draft)
-  }
 
   const closeSettings = (): void => {
     setSettingsOpen(false)
@@ -143,74 +135,15 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
         </div>
       </aside>
 
-      <div className="conversation-panel">
-        <header className="chat-header">
-          <div>
-            <p className="eyebrow">LINGO MATE</p>
-            <h1>{t('common:app.title')}</h1>
-          </div>
-          <p aria-live="polite" className="status">
-            {translateConversationStatus(t, state.status)}
-          </p>
-        </header>
-
-        <section aria-label={t('common:messages.regionLabel')} className="messages">
-          {state.messages.length === 0 ? (
-            <div className="empty-state">
-              <div aria-hidden="true" className="empty-mark">
-                Aa
-              </div>
-              <h2>{t('common:messages.emptyTitle')}</h2>
-              <p>{t('common:messages.emptyBody')}</p>
-            </div>
-          ) : (
-            state.messages.map((message) => (
-              <article
-                className={`message ${message.role}`}
-                data-message-id={message.messageId}
-                key={message.messageId}
-              >
-                <span>
-                  {message.role === 'user' ? t('common:messages.userRole') : 'Lingo Mate'}
-                </span>
-                <p>{message.content || '…'}</p>
-                {message.role === 'user' && message.retryable && !composerLocked ? (
-                  <button
-                    className="secondary retry"
-                    onClick={() => void controller.retry(message.messageId)}
-                    type="button"
-                  >
-                    {t('common:messages.retry')}
-                  </button>
-                ) : null}
-              </article>
-            ))
-          )}
-        </section>
-
-        <form className="composer" onSubmit={sendMessage}>
-          <div>
-            <input
-              aria-label={t('common:composer.label')}
-              disabled={composerLocked}
-              id="message"
-              maxLength={4000}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder={t('common:composer.placeholder')}
-              value={draft}
-            />
-            {generating ? (
-              <button className="secondary" onClick={() => void controller.cancel()} type="button">
-                {t('common:composer.cancel')}
-              </button>
-            ) : (
-              <button disabled={!draft.trim() || composerLocked} type="submit">
-                {t('common:composer.send')}
-              </button>
-            )}
-          </div>
-        </form>
-      </div>
+      <ConversationPanel
+        messages={state.messages}
+        status={state.status}
+        generating={generating}
+        composerLocked={composerLocked}
+        onSend={(text) => void controller.send(text)}
+        onCancel={() => void controller.cancel()}
+        onRetry={(messageId) => void controller.retry(messageId)}
+      />
 
       {settingsOpen ? <LanguageSettings onClose={closeSettings} /> : null}
     </main>

@@ -751,6 +751,44 @@ describe('App conversation switching', () => {
     ).toBeInTheDocument()
   })
 
+  it('keeps an unsent draft when switching to another conversation', async () => {
+    const mock = installApiMock({
+      list: { status: 'ok', conversations: [summary(SESSION_A, NOW), summary(SESSION_B, NOW)] },
+      load: (sessionId) => ({
+        status: 'ok',
+        conversation: summary(sessionId, NOW),
+        messages: []
+      })
+    })
+    await renderReady(mock)
+
+    fireEvent.change(screen.getByLabelText('练习内容'), { target: { value: 'unsent draft' } })
+    fireEvent.click(sessionButton(SESSION_B))
+    await waitFor(() => expect(sessionButton(SESSION_B)).toHaveAttribute('aria-pressed', 'true'))
+
+    // 草稿归面板所有，稳定挂载下切换会话不清空未发送内容
+    expect(screen.getByLabelText('练习内容')).toHaveValue('unsent draft')
+  })
+
+  it('keeps an unsent draft when creating a new conversation', async () => {
+    const mock = installApiMock({
+      list: { status: 'ok', conversations: [summary(SESSION_A, NOW)] },
+      create: { status: 'ok', conversation: summary(SESSION_B, NOW) },
+      load: (sessionId) => ({
+        status: 'ok',
+        conversation: summary(sessionId, NOW),
+        messages: []
+      })
+    })
+    await renderReady(mock)
+
+    fireEvent.change(screen.getByLabelText('练习内容'), { target: { value: 'unsent draft' } })
+    fireEvent.click(screen.getByRole('button', { name: '新会话' }))
+    await waitFor(() => expect(sessionButton(SESSION_B)).toHaveAttribute('aria-pressed', 'true'))
+
+    expect(screen.getByLabelText('练习内容')).toHaveValue('unsent draft')
+  })
+
   it('ignores terminal events from an invalidated request after returning to its session', async () => {
     const mock = installApiMock({
       list: {
