@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import type {
   CancelMessageResult,
@@ -20,6 +20,14 @@ const SESSION_A = 'f9364f0f-f3f4-4ea6-a31d-b55754aa2477'
 const SESSION_B = '0d4b2f7e-52c8-4a61-9ac1-30b1e6de9d02'
 const SESSION_C = '44316d8e-c6fb-4d09-bcb8-56936a14932d'
 const NOW = '2026-09-02T10:00:00.000Z'
+
+function sessionButton(sessionId: string): HTMLButtonElement {
+  const button = within(screen.getByRole('navigation', { name: '会话列表' }))
+    .getAllByRole('button')
+    .find((item) => item.dataset.sessionId === sessionId)
+  if (!(button instanceof HTMLButtonElement)) throw new Error('Session button not found')
+  return button
+}
 
 function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
   let resolve!: (value: T) => void
@@ -198,7 +206,7 @@ describe('App conversation recovery', () => {
     expect(mock.calls.load).toEqual([SESSION_A])
     expect(await screen.findByText('Hello')).toBeInTheDocument()
     expect(screen.getByText('Hi there')).toBeInTheDocument()
-    expect(screen.getByLabelText('会话')).toHaveValue(SESSION_A)
+    expect(sessionButton(SESSION_A)).toHaveAttribute('aria-pressed', 'true')
     expect(document.querySelector('.message.assistant')?.getAttribute('data-message-id')).toBe(
       '6a9ee8b8-83aa-4b52-8d5a-91f0a48e26f5'
     )
@@ -220,7 +228,7 @@ describe('App conversation recovery', () => {
 
     render(<App />)
 
-    expect(await screen.findByText('输入一句话，开始第一个本地对话切片。')).toBeInTheDocument()
+    expect(await screen.findByText('从一句话开始')).toBeInTheDocument()
     expect(mock.calls.create).toBe(1)
     expect(mock.calls.load).toEqual([SESSION_A])
     expect(screen.getByLabelText('练习内容')).toBeEnabled()
@@ -515,11 +523,11 @@ describe('App conversation switching', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送' }))
     await waitFor(() => expect(mock.calls.send).toHaveLength(1))
 
-    expect(screen.getByLabelText('会话')).toBeDisabled()
+    expect(sessionButton(SESSION_B)).toBeDisabled()
     expect(screen.getByRole('button', { name: '新会话' })).toBeDisabled()
 
     pendingSend.resolve({ status: 'ok', accepted: true, generation: mock.generations[0] })
-    await waitFor(() => expect(screen.getByLabelText('会话')).toBeEnabled())
+    await waitFor(() => expect(sessionButton(SESSION_B)).toBeEnabled())
   })
 
   it('keeps the current session and request tracking when transition cancellation fails', async () => {
@@ -545,10 +553,10 @@ describe('App conversation switching', () => {
     const generation = await waitFor(() => mock.generations[0])
     await waitFor(() => expect(screen.getByRole('button', { name: '取消' })).toBeInTheDocument())
 
-    fireEvent.change(screen.getByLabelText('会话'), { target: { value: SESSION_B } })
+    fireEvent.click(sessionButton(SESSION_B))
 
     expect(await screen.findByText('无法取消当前回复。')).toBeInTheDocument()
-    expect(screen.getByLabelText('会话')).toHaveValue(SESSION_A)
+    expect(sessionButton(SESSION_A)).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: '取消' })).toBeInTheDocument()
     expect(mock.calls.cancel).toEqual([generation.requestId])
     expect(mock.calls.load).not.toContain(SESSION_B)
@@ -593,7 +601,7 @@ describe('App conversation switching', () => {
     expect(mock.calls.send[0].sessionId).toBe(SESSION_A)
 
     // 生成进行中，切换到会话 B
-    fireEvent.change(screen.getByLabelText('会话'), { target: { value: SESSION_B } })
+    fireEvent.click(sessionButton(SESSION_B))
 
     await waitFor(() => {
       expect(screen.getByText('Bonjour 的历史回复')).toBeInTheDocument()
@@ -612,79 +620,74 @@ describe('App conversation switching', () => {
     expect(screen.getByText('Bonjour 的历史回复')).toBeInTheDocument()
   })
 
-  it('locks interaction during a switch and only commits the latest load', async () => {
+  it('locks sidebar and composer while loading the selected conversation', async () => {
     const loadB = deferred<LoadConversationResult>()
-    const loadC = deferred<LoadConversationResult>()
     const mock = installApiMock({
       list: {
         status: 'ok',
-        conversations: [
-          summary(SESSION_A, '2026-09-03T10:00:00.000Z'),
-          summary(SESSION_B, '2026-09-02T10:00:00.000Z'),
-          summary(SESSION_C, '2026-09-01T10:00:00.000Z')
-        ]
+        conversations: [summary(SESSION_A, NOW), summary(SESSION_B, NOW), summary(SESSION_C, NOW)]
       },
-      load: (sessionId) => {
-        if (sessionId === SESSION_B) return loadB.promise
-        if (sessionId === SESSION_C) return loadC.promise
-        return {
-          status: 'ok',
-          conversation: summary(SESSION_A, '2026-09-03T10:00:00.000Z'),
-          messages: []
-        }
-      }
+      load: (sessionId) =>
+        sessionId === SESSION_B
+          ? loadB.promise
+          : {
+              status: 'ok',
+              conversation: summary(sessionId, NOW),
+              messages: []
+            }
     })
-
-    render(<App />)
-    await waitFor(() => {
-      expect(document.querySelector('main')?.getAttribute('data-phase')).toBe('ready')
-    })
-
-    const selector = screen.getByLabelText('会话')
-    fireEvent.change(selector, { target: { value: SESSION_B } })
-
+    await renderReady(mock)
+    fireEvent.click(sessionButton(SESSION_B))
     await waitFor(() => expect(mock.calls.load).toContain(SESSION_B))
-    expect(document.querySelector('main')?.getAttribute('data-phase')).toBe('loading')
-    expect(selector).toBeDisabled()
+    expect(sessionButton(SESSION_C)).toBeDisabled()
+    expect(screen.getByRole('button', { name: '新会话' })).toBeDisabled()
     expect(screen.getByLabelText('练习内容')).toBeDisabled()
-
-    // 即使外部代码在加载期间触发第二次 change，旧加载也不能覆盖最后一次选择。
-    Object.defineProperty(selector, 'disabled', { configurable: true, value: false })
-    fireEvent.change(selector, { target: { value: SESSION_C } })
-    await waitFor(() => expect(mock.calls.load).toContain(SESSION_C))
-
-    loadC.resolve({
-      status: 'ok',
-      conversation: summary(SESSION_C, '2026-09-01T10:00:00.000Z'),
-      messages: [
-        {
-          messageId: '7b097553-e4fb-48c9-be81-e25cfa55358e',
-          sessionId: SESSION_C,
-          role: 'assistant',
-          content: '最新选择',
-          createdAt: '2026-09-01T10:00:00.000Z'
-        }
-      ]
-    })
-    expect(await screen.findByText('最新选择')).toBeInTheDocument()
+    fireEvent.click(sessionButton(SESSION_C))
+    expect(mock.calls.load).not.toContain(SESSION_C)
 
     loadB.resolve({
       status: 'ok',
-      conversation: summary(SESSION_B, '2026-09-02T10:00:00.000Z'),
+      conversation: summary(SESSION_B, NOW),
       messages: [
         {
-          messageId: 'f72cde28-b0f8-41d6-8a17-a6f2ea68262f',
+          messageId: '7b097553-e4fb-48c9-be81-e25cfa55358e',
           sessionId: SESSION_B,
           role: 'assistant',
-          content: '过期选择',
-          createdAt: '2026-09-02T10:00:00.000Z'
+          content: '选中的会话',
+          createdAt: NOW
         }
       ]
     })
-    await Promise.resolve()
+    expect(await screen.findByText('选中的会话')).toBeInTheDocument()
+    expect(sessionButton(SESSION_B)).toHaveAttribute('aria-pressed', 'true')
+    expect(sessionButton(SESSION_A)).toHaveAttribute('aria-pressed', 'false')
+    expect(sessionButton(SESSION_C)).toBeEnabled()
+    expect(screen.getByLabelText('练习内容')).toBeEnabled()
+  })
 
-    expect(screen.getByLabelText('会话')).toHaveValue(SESSION_C)
-    expect(screen.queryByText('过期选择')).not.toBeInTheDocument()
+  it('creates and selects a new conversation from the sidebar', async () => {
+    const mock = installApiMock({
+      list: { status: 'ok', conversations: [summary(SESSION_A, NOW)] },
+      create: { status: 'ok', conversation: summary(SESSION_B, NOW) },
+      load: (sessionId) => ({
+        status: 'ok',
+        conversation: summary(sessionId, NOW),
+        messages: []
+      })
+    })
+    await renderReady(mock)
+    fireEvent.click(
+      within(screen.getByRole('complementary', { name: '会话侧栏' })).getByRole('button', {
+        name: '新会话'
+      })
+    )
+    await waitFor(() => expect(sessionButton(SESSION_B)).toHaveAttribute('aria-pressed', 'true'))
+    expect(mock.calls.create).toBe(1)
+    expect(mock.calls.load).toEqual([SESSION_A, SESSION_B])
+    expect(sessionButton(SESSION_A)).toHaveAttribute('aria-pressed', 'false')
+    expect(
+      within(screen.getByRole('region', { name: '对话记录' })).getByText('从一句话开始')
+    ).toBeInTheDocument()
   })
 
   it('ignores terminal events from an invalidated request after returning to its session', async () => {
@@ -712,10 +715,10 @@ describe('App conversation switching', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送' }))
     const firstGeneration = await waitFor(() => mock.generations[0])
 
-    fireEvent.change(screen.getByLabelText('会话'), { target: { value: SESSION_B } })
-    await waitFor(() => expect(screen.getByLabelText('会话')).toHaveValue(SESSION_B))
-    fireEvent.change(screen.getByLabelText('会话'), { target: { value: SESSION_A } })
-    await waitFor(() => expect(screen.getByLabelText('会话')).toHaveValue(SESSION_A))
+    fireEvent.click(sessionButton(SESSION_B))
+    await waitFor(() => expect(sessionButton(SESSION_B)).toHaveAttribute('aria-pressed', 'true'))
+    fireEvent.click(sessionButton(SESSION_A))
+    await waitFor(() => expect(sessionButton(SESSION_A)).toHaveAttribute('aria-pressed', 'true'))
 
     fireEvent.change(screen.getByLabelText('练习内容'), { target: { value: 'second' } })
     fireEvent.click(screen.getByRole('button', { name: '发送' }))
@@ -805,6 +808,6 @@ describe('App conversation switching', () => {
 
     expect(await screen.findByText(expected)).toBeInTheDocument()
     expect(document.querySelector('main')?.getAttribute('data-phase')).toBe('ready')
-    expect(screen.getByLabelText('会话')).toHaveValue(SESSION_A)
+    expect(sessionButton(SESSION_A)).toHaveAttribute('aria-pressed', 'true')
   })
 })

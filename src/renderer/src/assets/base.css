@@ -1,34 +1,45 @@
 :root {
-  --ev-c-white: #ffffff;
-  --ev-c-white-soft: #f8f8f8;
-  --ev-c-white-mute: #f2f2f2;
+  color-scheme: light;
 
-  --ev-c-black: #1b1b1f;
-  --ev-c-black-soft: #222222;
-  --ev-c-black-mute: #282828;
+  /* 表面 */
+  --color-background: #fcfcfa;
+  --color-surface: #ffffff;
+  --color-surface-sidebar: #f1f2ee;
+  --color-surface-hover: #e7eae3;
+  --color-surface-active: #e0e6db;
+  --color-surface-secondary: #e8ece4;
+  --color-surface-user: #eaf0e4;
+  --color-surface-mark: #eef1e7;
 
-  --ev-c-gray-1: #515c67;
-  --ev-c-gray-2: #414853;
-  --ev-c-gray-3: #32363f;
+  /* 文字 */
+  --color-text: #30382e;
+  --color-text-secondary: #4c5d51;
+  --color-text-session: #646c62;
+  --color-text-active: #304f3d;
+  --color-text-muted: #777d74;
+  --color-text-label: #6b7864;
+  --color-text-status: #737a70;
+  --color-text-faint: #7c8278;
+  --color-text-eyebrow: #687f6b;
+  --color-text-mark: #526b49;
+  --color-text-placeholder: #8b9187;
 
-  --ev-c-text-1: rgba(255, 255, 245, 0.86);
-  --ev-c-text-2: rgba(235, 235, 245, 0.6);
-  --ev-c-text-3: rgba(235, 235, 245, 0.38);
+  /* 边框 */
+  --color-border-sidebar: #e5e7e2;
+  --color-border-divider: #dfe3d9;
+  --color-border-header: #eceee8;
+  --color-border-message: #e8ebe3;
+  --color-border-composer: #dce2d6;
+  --color-border-mark: #dfe5d9;
+  --color-border-focus: #8b9e81;
 
-  --ev-button-alt-border: transparent;
-  --ev-button-alt-text: var(--ev-c-text-1);
-  --ev-button-alt-bg: var(--ev-c-gray-3);
-  --ev-button-alt-hover-border: transparent;
-  --ev-button-alt-hover-text: var(--ev-c-text-1);
-  --ev-button-alt-hover-bg: var(--ev-c-gray-2);
-}
+  /* 操作与焦点 */
+  --color-primary: #4a6240;
+  --color-primary-hover: #354e2c;
+  --color-focus-ring: #507762;
 
-:root {
-  --color-background: var(--ev-c-black);
-  --color-background-soft: var(--ev-c-black-soft);
-  --color-background-mute: var(--ev-c-black-mute);
-
-  --color-text: var(--ev-c-text-1);
+  /* 阴影 */
+  --shadow-composer: 0 4px 20px #243d2310;
 }
 
 *,
