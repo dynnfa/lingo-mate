@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { TFunction } from 'i18next'
-import { createI18n } from '../i18n'
-import type { ConversationStatus } from './conversation-state'
-import { translateConversationStatus } from './status-messages'
+import { createI18n } from '../../i18n'
+import type { ConversationStatus } from '../conversation-state'
+import { translateConversationStatus } from '../status-messages'
 
 const zh = createI18n('zh-CN')
 const en = createI18n('en')

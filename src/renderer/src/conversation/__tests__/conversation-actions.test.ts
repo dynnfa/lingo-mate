@@ -4,7 +4,7 @@ import {
   filterConversationActions,
   parseSlashTrigger,
   type ConversationActionMeta
-} from './conversation-actions'
+} from '../conversation-actions'
 
 // 模拟界面语言为 zh-CN 时本地化名称的解析；组件内由 i18n t 提供。
 const zhNames: Record<string, string> = {
