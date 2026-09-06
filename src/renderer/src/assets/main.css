@@ -201,6 +201,199 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* 详情区块保持挂载、按 hidden 切换；显式声明避免被布局 display 覆盖。 */
+.settings-detail-pane[hidden] {
+  display: none;
+}
+
+.settings-section-description {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.models-loading {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.models-load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.models-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.models-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.models-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.models-field > label,
+.models-field-label {
+  color: var(--color-text-label);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.models-field input[type='text'],
+.models-field input[type='password'] {
+  padding: 7px 10px;
+  border: 1px solid var(--color-border-message);
+  border-radius: 10px;
+  background: var(--color-surface);
+  font-size: 14px;
+}
+
+.models-static-value {
+  padding: 7px 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.models-field-hint,
+.models-test-hint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.models-field-error {
+  margin: 0;
+  color: var(--color-text-status);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.models-key-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.models-key-status-label {
+  color: var(--color-text-label);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.models-key-configured,
+.models-key-missing {
+  color: var(--color-text-secondary);
+}
+
+.models-key-warning {
+  color: var(--color-text-status);
+  overflow-wrap: anywhere;
+}
+
+.models-remove-key {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.models-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.models-actions button {
+  padding: 6px 14px;
+  border-radius: 10px;
+  background: var(--color-surface-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.models-actions button:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.models-status {
+  min-height: 18px;
+  margin: 0;
+  color: var(--color-text-status);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.models-status p {
+  margin: 0;
+}
+
+.settings-confirm {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(420px, calc(100vw - 48px));
+  padding: 18px;
+  border: 1px solid var(--color-border-message);
+  border-radius: 14px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-composer);
+  transform: translate(-50%, -50%);
+}
+
+.settings-confirm h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-confirm p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.settings-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings-confirm-actions button {
+  padding: 6px 14px;
+  border-radius: 10px;
+  background: var(--color-surface-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-confirm-actions button:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
 .session-sidebar {
   display: flex;
   flex-direction: column;

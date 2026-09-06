@@ -1,16 +1,30 @@
 import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
+import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { ConversationModule } from '../core/conversation/conversation-module'
+import type { SupportedLocale } from '../shared/preferences'
+import { ConfiguredLanguageModel } from '../core/llm/configured-language-model'
 import { LocalLanguageModel } from '../core/llm/local-language-model'
+import { ModelConnectionTester } from '../core/llm/model-connection-tester'
+import { ModelConfigService } from '../core/llm/model-config'
+import type { LanguageModel } from '../core/llm/language-model'
 import { SqliteConversationRepository } from '../database/sqlite-conversation-repository'
 import { registerConversationIpc } from './conversation-ipc'
+import { registerModelsIpc } from './models-ipc'
+import { createFileModelsConfigStore, createSafeStorageCredentialVault } from './models-store'
 import { PreferencesService } from './preferences'
 import { registerPreferencesIpc } from './preferences-ipc'
 import { createElectronPreferenceStore } from './preferences-store'
 
 let conversationRepository: SqliteConversationRepository | undefined
+
+// 加载目标与 IPC 来源白名单使用同一地址，开发模式也只信任指定文档。
+const rendererUrl =
+  is.dev && process.env['ELECTRON_RENDERER_URL']
+    ? new URL(process.env['ELECTRON_RENDERER_URL']).href
+    : pathToFileURL(join(__dirname, '../renderer/index.html')).href
 
 function createWindow(): void {
   // Create the browser window.
@@ -39,13 +53,7 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-  }
+  void mainWindow.loadURL(rendererUrl)
 }
 
 // This method will be called when Electron has finished
@@ -65,19 +73,44 @@ app.whenReady().then(() => {
   conversationRepository = new SqliteConversationRepository(
     join(app.getPath('userData'), 'lingo-mate.sqlite')
   )
-  registerConversationIpc(new ConversationModule(new LocalLanguageModel(), conversationRepository))
+
+  // 模型配置服务：持久化记录 + 系统安全存储加密密钥；IPC 与对话模型入口共用。
+  const modelsService = new ModelConfigService(
+    createFileModelsConfigStore(join(app.getPath('userData'), 'models.json')),
+    createSafeStorageCredentialVault()
+  )
+  registerModelsIpc(modelsService, new ModelConnectionTester(), rendererUrl)
+
+  // 生产对话按请求解析已保存配置快照；LocalLanguageModel 仅作为显式开发/测试
+  // 模式（LINGO_MATE_MODEL=local），远程请求失败后不自动回退。
+  const conversationModel: LanguageModel =
+    process.env['LINGO_MATE_MODEL'] === 'local'
+      ? new LocalLanguageModel()
+      : new ConfiguredLanguageModel(modelsService)
 
   // 界面语言来源统一由 Main 解析：跟随系统时按系统偏好顺序匹配支持语言。
   // 偏好存储初始化失败只损失语言记忆（Renderer 回退默认语言），不阻断应用启动。
+  let preferencesService: PreferencesService | undefined
   try {
-    registerPreferencesIpc(
-      new PreferencesService(createElectronPreferenceStore(), () =>
-        app.getPreferredSystemLanguages()
-      )
+    preferencesService = new PreferencesService(createElectronPreferenceStore(), () =>
+      app.getPreferredSystemLanguages()
     )
+    registerPreferencesIpc(preferencesService)
   } catch (error) {
     console.error('Failed to initialize locale preferences', error)
   }
+
+  // 对话解释使用 Main 解析的当前界面语言，并在每次请求开始时显式传给模型。
+  const resolveOutputLanguage = (): SupportedLocale => {
+    try {
+      return preferencesService?.getLocale().resolvedLocale ?? 'zh-CN'
+    } catch {
+      return 'zh-CN'
+    }
+  }
+  registerConversationIpc(
+    new ConversationModule(conversationModel, conversationRepository, resolveOutputLanguage)
+  )
 
   createWindow()
 

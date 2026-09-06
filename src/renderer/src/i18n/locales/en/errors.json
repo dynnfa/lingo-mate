@@ -11,6 +11,7 @@
   "unknown": "Something went wrong. Please try again later.",
   "generation": {
     "model": "Couldn't generate a reply. Please try again later.",
+    "modelNotConfigured": "No model is configured yet. Set one up in Settings > Models first.",
     "persistence": "Couldn't save the conversation. Please try again later.",
     "unknown": "Something went wrong. Please try again later."
   },
@@ -25,5 +26,25 @@
   "preferences": {
     "readFailed": "Couldn't read your language settings.",
     "writeFailed": "Couldn't save your language preference. Please try again."
+  },
+  "models": {
+    "readFailed": "Couldn't read the model configuration.",
+    "writeFailed": "Couldn't save the model configuration. Please try again.",
+    "clearFailed": "Couldn't clear the model configuration. Please try again.",
+    "invalidBaseUrl": "Invalid Base URL: enter the full API root address, use HTTPS for remote hosts (HTTP is fine for loopback), without a username, password, query string, or fragment.",
+    "invalidModelId": "Model ID can't be empty.",
+    "invalidApiKey": "API key can't be empty.",
+    "crossOriginCredential": "The Base URL origin changed; the old key can't be reused. Re-enter or remove the API key.",
+    "credentialStorageUnavailable": "System secure storage is unavailable, so the API key can't be saved. You can save the configuration without a key first.",
+    "credentialDecryptFailed": "The saved API key can't be read. Please re-enter or remove it.",
+    "testInProgress": "A connection test is already running.",
+    "testCancelled": "The connection test was cancelled.",
+    "testTimeout": "The connection test timed out.",
+    "testAuthFailed": "Authentication failed. Please check the API key.",
+    "testModelUnavailable": "The model is unavailable. Please check the Model ID.",
+    "testNetworkError": "Network error. Please check the Base URL and your connection.",
+    "testUnsupportedResponse": "The service returned an unsupported response format.",
+    "unknown": "Something went wrong. Please try again later.",
+    "untrustedSource": "Model settings are only available from the application window."
   }
 }

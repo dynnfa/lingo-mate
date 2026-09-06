@@ -10,6 +10,8 @@ describe('LocalLanguageModel', () => {
 
     for await (const delta of model.streamReply({
       messages: [{ role: 'user', content: 'Hello' }],
+      outputLanguage: 'zh-CN',
+      targetLanguage: 'en',
       signal: controller.signal
     })) {
       chunks.push(delta)
@@ -24,6 +26,8 @@ describe('LocalLanguageModel', () => {
     const stream = new LocalLanguageModel()
       .streamReply({
         messages: [{ role: 'user', content: 'Hello' }],
+        outputLanguage: 'zh-CN',
+        targetLanguage: 'en',
         signal: controller.signal
       })
       [Symbol.asyncIterator]()

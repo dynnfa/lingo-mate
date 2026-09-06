@@ -11,6 +11,7 @@
   "unknown": "发生未知错误，请稍后重试。",
   "generation": {
     "model": "生成回复失败，请稍后重试。",
+    "modelNotConfigured": "尚未配置模型，请先在设置 > 模型中完成配置。",
     "persistence": "保存会话失败，请稍后重试。",
     "unknown": "发生未知错误，请稍后重试。"
   },
@@ -25,5 +26,25 @@
   "preferences": {
     "readFailed": "无法读取语言设置。",
     "writeFailed": "保存语言设置失败，请重试。"
+  },
+  "models": {
+    "readFailed": "无法读取模型配置。",
+    "writeFailed": "保存模型配置失败，请重试。",
+    "clearFailed": "清除模型配置失败，请重试。",
+    "invalidBaseUrl": "Base URL 无效：请填写完整的 API 根地址，远程地址使用 HTTPS（本机回环地址可用 HTTP），且不包含用户名、密码、查询参数或片段。",
+    "invalidModelId": "Model ID 不能为空。",
+    "invalidApiKey": "API Key 不能为空。",
+    "crossOriginCredential": "Base URL 的源已变化，不允许沿用旧密钥；请重新输入或移除 API Key。",
+    "credentialStorageUnavailable": "系统安全存储不可用，无法保存 API Key；可先保存不带密钥的配置。",
+    "credentialDecryptFailed": "已保存的 API Key 无法读取，请重新输入或移除。",
+    "testInProgress": "已有连接测试正在进行。",
+    "testCancelled": "连接测试已取消。",
+    "testTimeout": "连接测试超时。",
+    "testAuthFailed": "鉴权失败，请检查 API Key。",
+    "testModelUnavailable": "模型不可用，请检查 Model ID。",
+    "testNetworkError": "网络错误，请检查 Base URL 和网络连接。",
+    "testUnsupportedResponse": "服务返回了不支持的响应格式。",
+    "unknown": "发生未知错误，请稍后重试。",
+    "untrustedSource": "只能从应用窗口访问模型设置。"
   }
 }
