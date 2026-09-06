@@ -2,9 +2,8 @@
 
 ## 状态与目标
 
-- 状态：部分基础界面已完成，Models 配置尚未实施。
+- 状态：已实施；2026-09-07 完成 Review 修复。单元/组件 302 项、集成 8 项通过，`pnpm lint`、`pnpm build`（含 typecheck）通过。Electron e2e 首跑 14/15 通过，动作菜单键盘用例单独重跑通过；未执行真实付费模型请求。
 - 原始日期：2026-09-05；按当前设置页修订：2026-09-06。
-- 本次交付仅更新计划文档，不修改业务代码。
 - 当前基线：点击会话侧栏底部的设置图标后，应用切换到占满窗口的 Settings 页面；左侧为设置菜单，右侧为当前菜单项的详情。
 - 目标：沿用现有 Settings 页面，在左侧新增“模型 / Models”菜单项，并在右侧详情区完成 LLM 配置、持久化、连接测试及真实对话接入。
 - 关联文档：[Renderer 视图渲染模式](../architecture.md)、[国际化](./2026-09-04-i18n-internationalization.md)、[Vocabulary 多单词解析](./2026-09-05-vocabulary-batch-import.md)。
@@ -25,7 +24,7 @@
 1. 复用现有 `SettingsPage`，不恢复弹窗、不创建独立窗口、不引入 React Router，也不把菜单状态写入 URL。
 2. 在 `SETTINGS_SECTIONS` 中把“模型 / Models”注册为“语言 / Language”之后的第二项。每次从设置图标进入时仍默认显示语言页；点击 Models 后仅替换右侧详情。
 3. 设置页保持当前视觉层级、间距和响应式布局。Models 表单位于右侧现有 480px 内容列内；左侧继续使用当前选中态，不复制会话侧栏样式或加入额外顶栏。
-4. 首版维护一套应用级 LLM 配置，协议采用 OpenAI 兼容接口，手动填写 Base URL 和 Model ID。具体兼容范围在适配器实现时确认，不承诺任意兼容服务均可工作。
+4. 首版维护一套应用级 LLM 配置，协议采用 OpenAI Chat Completions 文本接口，手动填写 API 根地址 Base URL 和 Model ID。真实对话要求 SSE、`choices[].delta.content` 文本分片及 `finish_reason: stop` 正常结束；允许角色分片和 usage 等扩展字段。仅收到 `[DONE]`、连接提前结束、空回复或达到输出上限都不视为正常完成。不包含 Responses、其他厂商原生协议、工具调用或多模态，不承诺任意兼容服务均可工作。
 5. 包含读取、编辑、保存、测试连接和清除配置。首版不做多提供方列表、多个模型档案、自动拉取模型目录、按任务分配模型或高级采样参数。
 6. 完整交付必须让已保存配置用于真实对话，避免只保存表单却仍使用模拟模型。后续词汇分析复用同一配置来源，词汇业务本身按关联计划实施。
 
@@ -107,7 +106,7 @@ Settings 页面与 Models 区块需要明确分工，避免模型表单破坏现
 4. 未配置时返回明确的 `MODEL_NOT_CONFIGURED` 并提示前往 Settings > Models。保留历史会话读取能力；模拟模型仅作为显式开发模式或测试依赖，不在远程请求失败后自动回退。
 5. 适配器保持既有流式完成、失败和取消语义，传递 `AbortSignal`，设置有限请求时限并忽略终态后的迟到结果；不因修改设置重建会话控制器或丢失消息状态。
 6. 测试服务与真实调用共用配置校验和客户端构建逻辑。每窗口最多一个连接测试，默认 15 秒截止；结束、取消、窗口销毁时清理请求及计时器。测试成功只证明当次最小请求可用，不保证词汇结构化输出等其他能力。
-7. 在实际发送的 Prompt 中显式指定输出语言：对话解释使用 Main 解析的当前界面语言，学习任务另行指定目标语言。当前 `StreamReplyInput` 未携带语言，需要补齐明确语言上下文，不能只依赖现有中文模拟回复。
+7. 在实际发送的 Prompt 中分别指定语言：对话解释使用 Main 解析的当前界面语言，练习对话、例句和纠错句使用独立的 `targetLanguage`。当前尚无学习语言设置，首版会话显式传入英语 `en`，不随界面语言切换；本次不新增语言选择 UI。`src/core/prompt/conversation-prompt.ts` 负责语言指令，远程适配器负责协议转换。
 8. 错误在产生处保留内部原因，进程边界仅传安全错误码；同步扩展会话错误映射及国际化提示，日志不得包含凭据、完整请求、会话或学习数据。
 
 ## 文件与职责
@@ -134,12 +133,12 @@ Settings 页面与 Models 区块需要明确分工，避免模型表单破坏现
 
 ## 实施步骤
 
-- [ ] 定义配置 DTO、凭据更新语义、稳定错误码和存储接口，明确首版支持的接口协议。
-- [ ] 实现配置读取、校验、原子保存与凭据保护，覆盖失败保留旧配置及跨 origin 凭据规则。
-- [ ] 实现真实模型适配器、连接测试及取消，完成配置快照和输出语言传递。
-- [ ] 接通 Main、Shared 与 preload；替换生产对话的固定模拟模型，补齐未配置与调用失败提示。
-- [ ] 在现有 `SettingsPage` 注册 Models 区块，实现右侧配置表单、草稿跨菜单保留、返回确认、测试取消、双语及无障碍交互。
-- [ ] 补齐必要测试，执行验证并回填实施结果。
+- [x] 定义配置 DTO、凭据更新语义、稳定错误码和存储接口，明确首版支持的接口协议。（`src/shared/models.ts`：`MODELS_CHANNELS`、判别联合摘要、`credential` keep/replace/remove、`normalizeModelsBaseUrl`）
+- [x] 实现配置读取、校验、原子保存与凭据保护，覆盖失败保留旧配置及跨 origin 凭据规则。（`src/core/llm/model-config.ts` + `src/main/models-store.ts`：临时文件 + rename 原子替换、safeStorage 加解密、损坏记录按读取失败处理）
+- [x] 实现真实模型适配器、连接测试及取消，完成配置快照和输出语言传递。（`src/core/llm/remote-language-model.ts`、`model-connection-tester.ts`、`configured-language-model.ts`；`StreamReplyInput` 增加 `outputLanguage`）
+- [x] 接通 Main、Shared 与 preload；替换生产对话的固定模拟模型，补齐未配置与调用失败提示。（`src/main/models-ipc.ts`、`window.api.models`；`LINGO_MATE_MODEL=local` 为显式开发/测试模式，未配置返回 `MODEL_NOT_CONFIGURED`）
+- [x] 在现有 `SettingsPage` 注册 Models 区块，实现右侧配置表单、草稿跨菜单保留、返回确认、测试取消、双语及无障碍交互。（`useModelsSettings` 由 SettingsPage 持有；区块保持挂载用 `hidden` 切换）
+- [x] 补齐必要测试，执行验证并回填实施结果。（shared/core/main 单元测试、`tests/integration/models-config.test.ts` 假服务集成、`tests/e2e/models-settings.test.ts` 全链路）
 
 ## 验证与验收
 
@@ -163,3 +162,14 @@ pnpm test:electron
 ```
 
 验收结果应满足：设置图标进入现有独立 Settings 页面；左侧在 Language 之后显示 Models；右侧可配置、测试、保存和清除 LLM；配置重启可恢复并对下一次请求生效；返回或 Escape 不会静默丢弃模型草稿；原语言设置、会话历史及生成生命周期正常；凭据与高权限能力不越过既定安全边界。
+
+
+## Review 修复记录（2026-09-07）
+
+- 远程生成使用覆盖请求和 SSE 消费全过程的截止时间；用户取消和超时分别处理，终态清理计时器及监听器。
+- 校验 SSE 响应类型、消费的 chunk 字段、非空文本和正常结束标记；异常或截断回复不再作为成功消息保存。
+- 所有 Models IPC 在访问配置或发送请求之前验证应用窗口、主 frame 和精确文档 URL；拒绝非可信来源。
+- 已存密钥解密失败时阻止真实请求，保留内部原因并向界面传递安全错误码；支持直接移除无法解密的密钥。
+- Prompt 分离解释语言与学习目标语言，实际发送的请求同时携带明确的两类语言指令。
+- 保存成功后用 Main 返回的规范化摘要重置草稿；保存状态与连接测试结果分别显示。
+- 新增回归测试覆盖以上失败路径；假服务补齐标准的 stop 分片，继续覆盖配置快照、取消和重启恢复。

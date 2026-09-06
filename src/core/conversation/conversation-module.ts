@@ -11,6 +11,7 @@ import type {
   SendMessageInput
 } from '../../shared/conversation'
 import type { LanguageModel, ModelMessage } from '../llm/language-model'
+import { ModelConfigValidationError, ModelNotConfiguredError } from '../llm/model-config'
 import {
   ConversationBusyError,
   ConversationNotFoundError,
@@ -41,7 +42,9 @@ export class ConversationModule {
 
   constructor(
     private readonly model: LanguageModel,
-    private readonly repository: ConversationRepository
+    private readonly repository: ConversationRepository,
+    // 每次生成开始时解析当前界面语言并显式传给模型，语言切换不重建本模块。
+    private readonly resolveOutputLanguage: () => string = () => 'zh-CN'
   ) {}
 
   async createConversation(): Promise<ConversationSummary> {
@@ -212,6 +215,9 @@ export class ConversationModule {
 
       for await (const delta of this.model.streamReply({
         messages: modelMessages,
+        outputLanguage: this.resolveOutputLanguage(),
+        // 首版默认英语练习；学习语言不随界面语言切换。
+        targetLanguage: 'en',
         signal: execution.controller.signal
       })) {
         if (execution.controller.signal.aborted) break
@@ -278,6 +284,14 @@ export class ConversationModule {
   private toSafeError(error: unknown): GenerationEventError {
     if (error instanceof ConversationPersistenceError) {
       return { code: 'PERSISTENCE_ERROR' }
+    }
+
+    if (error instanceof ModelConfigValidationError && error.code === 'CREDENTIAL_DECRYPT_FAILED') {
+      return { code: 'CREDENTIAL_DECRYPT_FAILED' }
+    }
+
+    if (error instanceof ModelNotConfiguredError) {
+      return { code: 'MODEL_NOT_CONFIGURED' }
     }
 
     if (error instanceof Error) {

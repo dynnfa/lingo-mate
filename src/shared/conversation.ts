@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { ModelsApi } from './models'
 import type { PreferencesApi } from './preferences'
 
 export const CONVERSATION_CHANNELS = {
@@ -106,7 +107,13 @@ export const cancelMessageResultSchema = z.discriminatedUnion('status', [
 ])
 
 const generationEventErrorSchema = z.object({
-  code: z.enum(['MODEL_ERROR', 'PERSISTENCE_ERROR', 'UNKNOWN_ERROR'])
+  code: z.enum([
+    'MODEL_ERROR',
+    'MODEL_NOT_CONFIGURED',
+    'CREDENTIAL_DECRYPT_FAILED',
+    'PERSISTENCE_ERROR',
+    'UNKNOWN_ERROR'
+  ])
 })
 
 const eventBaseSchema = z.object({
@@ -181,4 +188,5 @@ export interface ConversationApi {
 export interface LingoMateApi {
   conversation: ConversationApi
   preferences: PreferencesApi
+  models: ModelsApi
 }

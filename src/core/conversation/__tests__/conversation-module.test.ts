@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { ConversationEvent } from '../../../shared/conversation'
 import type { LanguageModel, StreamReplyInput } from '../../llm/language-model'
+import { ConfiguredLanguageModel } from '../../llm/configured-language-model'
+import { ModelConfigService } from '../../llm/model-config'
 import { ConversationModule } from '../conversation-module'
 import {
   ConversationBusyError,
@@ -378,6 +380,41 @@ describe('ConversationModule', () => {
       expect(cancelled.messageId).toBe(started.assistantMessageId)
       expect(gatedRepository.messages).toHaveLength(1)
       expect(gatedRepository.messages[0].role).toBe('user')
+    })
+
+    it('fails before network access with a safe credential error when decryption breaks', async () => {
+      const repository = new MemoryConversationRepository()
+      const cause = new Error('private vault failure')
+      const config = new ModelConfigService(
+        {
+          read: () => ({
+            schemaVersion: 1,
+            protocol: 'openai-compatible',
+            baseUrl: 'https://model.invalid/v1',
+            modelId: 'test',
+            credential: 'encrypted'
+          }),
+          write: () => {}
+        },
+        {
+          isAvailable: () => true,
+          encrypt: () => 'encrypted',
+          decrypt: () => {
+            throw cause
+          }
+        }
+      )
+      const module = new ConversationModule(new ConfiguredLanguageModel(config), repository)
+      const { sessionId } = await module.createConversation()
+      const events: ConversationEvent[] = []
+      await module.sendMessage({ requestId: REQUEST_ID, sessionId, text: 'Hello' }, (event) =>
+        events.push(event)
+      )
+      await untilTerminal(events)
+      expect(events.map((event) => event.type)).toEqual(['started', 'failed'])
+      expect(events.at(-1)).toMatchObject({ error: { code: 'CREDENTIAL_DECRYPT_FAILED' } })
+      expect(JSON.stringify(events)).not.toContain(cause.message)
+      expect(repository.messages.map((message) => message.role)).toEqual(['user'])
     })
 
     it('fails with the assistant messageId and keeps only the user when the model fails before chunks', async () => {

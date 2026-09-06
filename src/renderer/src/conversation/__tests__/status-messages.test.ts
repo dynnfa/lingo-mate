@@ -18,6 +18,8 @@ function cases(): ConversationStatus[] {
     { kind: 'cancelled' },
     { kind: 'protocolError' },
     { kind: 'generationError', error: { code: 'MODEL_ERROR' } },
+    { kind: 'generationError', error: { code: 'MODEL_NOT_CONFIGURED' } },
+    { kind: 'generationError', error: { code: 'CREDENTIAL_DECRYPT_FAILED' } },
     { kind: 'generationError', error: { code: 'PERSISTENCE_ERROR' } },
     { kind: 'generationError', error: { code: 'UNKNOWN_ERROR' } },
     {

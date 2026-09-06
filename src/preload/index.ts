@@ -15,6 +15,17 @@ import {
   type LingoMateApi
 } from '../shared/conversation'
 import {
+  cancelModelsTestInputSchema,
+  cancelModelsTestResultSchema,
+  clearModelsSettingsResultSchema,
+  getModelsSettingsResultSchema,
+  MODELS_CHANNELS,
+  saveModelsSettingsInputSchema,
+  saveModelsSettingsResultSchema,
+  testModelsConnectionInputSchema,
+  testModelsConnectionResultSchema
+} from '../shared/models'
+import {
   getLocaleResultSchema,
   PREFERENCES_CHANNELS,
   setLocaleInputSchema,
@@ -31,6 +42,31 @@ const api: LingoMateApi = {
       const input = setLocaleInputSchema.parse(rawInput)
       const result: unknown = await ipcRenderer.invoke(PREFERENCES_CHANNELS.setLocale, input)
       return setLocaleResultSchema.parse(result)
+    }
+  },
+  models: {
+    async getSettings() {
+      const result: unknown = await ipcRenderer.invoke(MODELS_CHANNELS.getSettings)
+      return getModelsSettingsResultSchema.parse(result)
+    },
+    async saveSettings(rawInput) {
+      const input = saveModelsSettingsInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(MODELS_CHANNELS.saveSettings, input)
+      return saveModelsSettingsResultSchema.parse(result)
+    },
+    async testConnection(rawInput) {
+      const input = testModelsConnectionInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(MODELS_CHANNELS.testConnection, input)
+      return testModelsConnectionResultSchema.parse(result)
+    },
+    async cancelTest(rawInput) {
+      const input = cancelModelsTestInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(MODELS_CHANNELS.cancelTest, input)
+      return cancelModelsTestResultSchema.parse(result)
+    },
+    async clearSettings() {
+      const result: unknown = await ipcRenderer.invoke(MODELS_CHANNELS.clearSettings)
+      return clearModelsSettingsResultSchema.parse(result)
     }
   },
   conversation: {

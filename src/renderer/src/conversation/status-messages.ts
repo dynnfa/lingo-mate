@@ -77,6 +77,10 @@ function translateGenerationError(t: StatusTFunction, error: GenerationEventErro
   switch (error.code) {
     case 'MODEL_ERROR':
       return t('errors:generation.model')
+    case 'CREDENTIAL_DECRYPT_FAILED':
+      return t('errors:models.credentialDecryptFailed')
+    case 'MODEL_NOT_CONFIGURED':
+      return t('errors:generation.modelNotConfigured')
     case 'PERSISTENCE_ERROR':
       return t('errors:generation.persistence')
     case 'UNKNOWN_ERROR':

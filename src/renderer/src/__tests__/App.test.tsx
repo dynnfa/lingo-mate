@@ -16,6 +16,7 @@ import type {
   SendMessageInput
 } from '../../../shared/conversation'
 import type { PreferencesApi, SetLocaleInput, SetLocaleResult } from '../../../shared/preferences'
+import type { ModelsApi } from '../../../shared/models'
 import App from '../App'
 import { createI18n } from '../i18n'
 
@@ -50,6 +51,26 @@ function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
     resolve = resolvePromise
   })
   return { promise, resolve }
+}
+
+function modelsApiStub(): ModelsApi {
+  return {
+    async getSettings() {
+      return { status: 'ok', summary: { configured: false } }
+    },
+    async saveSettings() {
+      return { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
+    },
+    async testConnection() {
+      return { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
+    },
+    async cancelTest() {
+      return { status: 'ok' }
+    },
+    async clearSettings() {
+      return { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
+    }
+  }
 }
 
 function summary(sessionId: string, updatedAt: string): ConversationSummary {
@@ -122,6 +143,8 @@ function installApiMock(
 
   const api: LingoMateApi = {
     preferences,
+    // App 测试不关注模型设置；提供未配置的稳定桩供 Settings 页读取。
+    models: modelsApiStub(),
     conversation: {
       async create() {
         mock.calls.create += 1
