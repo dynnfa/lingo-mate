@@ -40,22 +40,22 @@ export async function waitForReady(window: Page): Promise<void> {
   await window.waitForSelector('main[data-phase="ready"]')
 }
 
-// 通过面板切换语言：面板内语言名称固定，不依赖当前界面语言；
-// 等待 document.lang 更新后再关闭面板，确保保存已完成。
+// 通过设置页切换语言：页面内语言名称固定，不依赖当前界面语言；
+// 等待 document.lang 更新后再返回，确保保存已完成。
 export async function switchLanguage(
   window: Page,
   label: string,
   expectedLang: 'zh-CN' | 'en'
 ): Promise<void> {
   await window.click('.settings-button')
-  const dialog = window.getByRole('dialog')
-  await expect(dialog).toBeVisible()
+  const settingsPage = window.locator('main.settings-page')
+  await expect(settingsPage).toBeVisible()
   await window.getByRole('radio', { name: label }).check()
   await window.waitForFunction((lang) => document.documentElement.lang === lang, expectedLang, {
     timeout: 10_000
   })
-  await window.click('.settings-actions button')
-  await expect(dialog).toBeHidden()
+  await window.click('.settings-back-button')
+  await expect(settingsPage).toBeHidden()
 }
 
 export { expect, test } from '@playwright/test'

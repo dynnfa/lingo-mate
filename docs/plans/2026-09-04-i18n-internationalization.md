@@ -76,7 +76,7 @@ interface LocaleSettings {
 }
 ```
 
-选择项显示为“跟随系统 / System”“简体中文”“English”；语言自身名称保持固定，便于用户从陌生界面切回。未保存偏好等同于 `system`。
+选择项显示为“跟随系统 / System”“中文”“English”；语言名称使用各自的本地语言自称并保持固定，便于用户从陌生界面切回。未保存偏好等同于 `system`。
 
 解析顺序：
 
@@ -223,5 +223,5 @@ pnpm test:electron  # 11 个用例全部通过（含 3 个语言切换新用例�
 - **electron-store CJS 互操作**：v11 为纯 ESM 包，主进程 CJS 产物经打包器 `_interopNamespaceDefault` 包装后构造函数位于 `ns.default.default`，而 ESM 直载时位于 `ns.default`；`src/main/preferences-store.ts` 的 `resolveStoreConstructor` 显式兼容两种形态。偏好文件为 userData 下的 `preferences.json`（仅 `localePreference` 一个键）。
 - **偏好初始化不阻断启动**：`src/main/index.ts` 中偏好注册包在 try/catch 内，存储初始化失败只损失语言记忆，Renderer 按启动流程回退 `zh-CN` 并展示可关闭的提示，与验收标准一致。
 - **遗留修复**：`message-lifecycle.pw.ts` 原先断言不存在的 `#conversation` DOM 元素（基线即失败），改为通过 `window.api.conversation.list()` IPC 读取当前会话。
-- **语言名称固定不翻译**：设置面板内 `跟随系统 / System`、`简体中文`、`English` 为刻意保留的固定字面量，不进入翻译资源；除此之外 Renderer/Main 源码无硬编码产品文案（中文命中检查已完成，其余命中均为注释、日志与测试数据）。
+- **语言名称固定不翻译**：设置面板内 `跟随系统 / System`、`中文`、`English` 使用各自的本地语言自称，是刻意保留的固定字面量，不进入翻译资源；除此之外 Renderer/Main 源码无硬编码产品文案（中文命中检查已完成，其余命中均为注释、日志与测试数据）。
 - `LocalLanguageModel` 的中文示例回复为开发模型输出，按计划范围保持原样。

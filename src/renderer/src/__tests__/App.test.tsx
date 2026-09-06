@@ -926,16 +926,18 @@ describe('App language settings', () => {
     fireEvent.change(screen.getByLabelText('练习内容'), { target: { value: 'kept draft' } })
     fireEvent.click(screen.getByRole('button', { name: '设置' }))
 
-    const dialog = screen.getByRole('dialog', { name: '设置' })
-    expect(within(dialog).getByRole('radio', { name: '跟随系统 / System' })).toBeChecked()
+    // 设置页替换对话视图：语言区块可见，对话视图隐藏但保持挂载
+    expect(screen.getByRole('heading', { name: '语言' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: '跟随系统 / System' })).toBeChecked()
+    expect(screen.getByRole('button', { name: '发送', hidden: true })).toBeInTheDocument()
 
-    fireEvent.click(within(dialog).getByRole('radio', { name: 'English' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'English' }))
 
     // 保存成功后按返回的 resolvedLocale 切换界面语言
     await waitFor(() => {
       expect(mock.calls.setLocale).toEqual([{ preference: 'en' }])
     })
-    expect(await screen.findByRole('button', { name: 'Send' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Back' })).toBeInTheDocument()
 
     // 草稿保留、会话与数据不受影响；已有终态提示立即换语言
     expect(screen.getByLabelText('Practice text')).toHaveValue('kept draft')
@@ -944,17 +946,14 @@ describe('App language settings', () => {
     expect(englishSessionTitle?.textContent).toMatch(/^Conversation · /)
     expect(document.querySelectorAll('.message')).toHaveLength(0)
 
-    // 关闭面板后焦点返回设置按钮
-    fireEvent.click(
-      within(screen.getByRole('dialog', { name: 'Settings' })).getByRole('button', {
-        name: 'Close'
-      })
-    )
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    // 返回对话视图后设置页卸载，焦点回到设置按钮，草稿仍在
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.queryByRole('radio', { name: 'English' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Settings' })).toHaveFocus()
+    expect(screen.getByLabelText('Practice text')).toHaveValue('kept draft')
   })
 
-  it('closes the settings dialog with Escape and restores focus', async () => {
+  it('exits the settings page with Escape and restores focus', async () => {
     const mock = installApiMock({
       list: { status: 'ok', conversations: [summary(SESSION_A, NOW)] },
       load: () => ({
@@ -966,10 +965,9 @@ describe('App language settings', () => {
     await renderReady(mock)
 
     fireEvent.click(screen.getByRole('button', { name: '设置' }))
-    const dialog = screen.getByRole('dialog', { name: '设置' })
-    fireEvent.keyDown(dialog, { key: 'Escape' })
+    fireEvent.keyDown(screen.getByRole('main', { name: '设置' }), { key: 'Escape' })
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: 'English' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '设置' })).toHaveFocus()
   })
 
@@ -989,8 +987,8 @@ describe('App language settings', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'English' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('保存语言设置失败，请重试。')
-    // 保存失败保留原语言与原选择
-    expect(screen.getByRole('button', { name: '发送' })).toBeInTheDocument()
+    // 保存失败保留原语言与原选择，对话视图仍可返回
+    expect(screen.getByRole('button', { name: '发送', hidden: true })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: '跟随系统 / System' })).toBeChecked()
     expect(screen.getByRole('radio', { name: 'English' })).not.toBeChecked()
   })

@@ -58,7 +58,7 @@ test('starts in the saved language, keeps user content across a restart and swit
 
     // 运行中切回中文：面板语言名称固定，draft 与历史保持
     await secondWindow.fill('#message', 'kept draft')
-    await switchLanguage(secondWindow, '简体中文', 'zh-CN')
+    await switchLanguage(secondWindow, '中文', 'zh-CN')
     await expect(secondWindow.locator('#message')).toHaveValue('kept draft')
     await expect(secondWindow.locator('.status')).toHaveText('准备就绪')
     await expect(secondWindow.locator('.message.user')).toContainText('Hello')
@@ -122,14 +122,16 @@ test('switching language during generation keeps the stream and canonical ids in
     await draft.waitFor()
     const draftId = await draft.getAttribute('data-message-id')
 
-    // 生成进行中打开设置面板并切换语言：不取消生成、不重建投影
+    // 生成进行中打开设置页并切换语言：不取消生成、不重建投影
     await window.click('.settings-button')
     await window.getByRole('radio', { name: 'English' }).check()
     await window.waitForFunction(() => document.documentElement.lang === 'en', undefined, {
       timeout: 10_000
     })
-    await expect(window.getByRole('button', { name: 'Cancel' })).toBeVisible()
-    await window.click('.settings-actions button')
+    // 对话视图被设置页隐藏但保持挂载，生成仍在进行（Cancel 仍可用）
+    const cancel = window.getByRole('button', { name: 'Cancel', includeHidden: true })
+    await expect(cancel).toBeAttached()
+    await window.click('.settings-back-button')
 
     await expect(window.locator('.status')).toHaveText('Reply complete', { timeout: 15_000 })
     expect(await window.locator('.message.assistant').getAttribute('data-message-id')).toBe(draftId)

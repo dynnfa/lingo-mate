@@ -16,8 +16,12 @@
   },
   "settings": {
     "title": "设置",
+    "back": "返回",
+    "menuLabel": "设置菜单",
     "language": "界面语言",
-    "close": "关闭"
+    "sections": {
+      "language": "语言"
+    }
   },
   "preferences": {
     "startupError": "无法读取语言偏好，已使用默认语言。",
