@@ -16,8 +16,12 @@
   },
   "settings": {
     "title": "Settings",
+    "back": "Back",
+    "menuLabel": "Settings menu",
     "language": "Display language",
-    "close": "Close"
+    "sections": {
+      "language": "Language"
+    }
   },
   "preferences": {
     "startupError": "Couldn't load your language preference. Using the default language.",

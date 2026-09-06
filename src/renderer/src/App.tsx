@@ -6,10 +6,12 @@ import { isGenerating } from './conversation/conversation-state'
 import { ConversationPanel } from './conversation/ConversationPanel'
 import { formatDateTime } from './i18n/formatters'
 import { normalizeI18nLocale } from './i18n'
-import { LanguageSettings } from './preferences/LanguageSettings'
+import { SettingsPage } from './settings/SettingsPage'
 import type { ConversationSummary } from '../../shared/conversation'
 
 type AppTFunction = TFunction<['common', 'conversation', 'errors']>
+
+type AppView = 'conversation' | 'settings'
 
 // 翻译完整模板并显式传入当前界面 locale 格式化的时间，不拼接词语。
 function formatConversationLabel(
@@ -32,9 +34,10 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
   // 语言切换只触发重渲染，控制器与订阅不在此时重建。
   const [controller] = useState(() => new ConversationController(window.api.conversation))
   const state = useSyncExternalStore(controller.subscribe, controller.getState)
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [activeView, setActiveView] = useState<AppView>('conversation')
   const [preferenceNoticeVisible, setPreferenceNoticeVisible] = useState(initialPreferenceError)
   const settingsButtonRef = useRef<HTMLButtonElement>(null)
+  const previousViewRef = useRef<AppView>('conversation')
 
   useEffect(() => {
     const detach = controller.attach()
@@ -42,113 +45,119 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
     return detach
   }, [controller])
 
+  // 从设置页返回时把焦点还给设置按钮；初次挂载不抢焦点。
+  useEffect(() => {
+    if (previousViewRef.current === 'settings' && activeView === 'conversation') {
+      settingsButtonRef.current?.focus()
+    }
+    previousViewRef.current = activeView
+  }, [activeView])
+
   const generating = isGenerating(state)
   const composerLocked = state.phase !== 'ready' || generating || state.commandPending
 
-  const closeSettings = (): void => {
-    setSettingsOpen(false)
-    settingsButtonRef.current?.focus()
-  }
-
   return (
-    <main className="chat-shell" data-phase={state.phase}>
-      {preferenceNoticeVisible ? (
-        <div className="preference-notice" role="alert">
-          <p>{t('common:preferences.startupError')}</p>
-          <button onClick={() => setPreferenceNoticeVisible(false)} type="button">
-            {t('common:preferences.dismiss')}
-          </button>
-        </div>
-      ) : null}
-      <aside className="session-sidebar" aria-label={t('common:sidebar.label')}>
-        <nav className="sidebar-menu" aria-label={t('common:sidebar.menuLabel')}>
-          <button className="sidebar-menu-item" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M6 4h12v17l-6-4-6 4V4Z" />
-            </svg>
-            {t('common:sidebar.menuRecorded')}
-          </button>
-          <button className="sidebar-menu-item" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m8 4 12 8-12 8V4Z" />
-            </svg>
-            {t('common:sidebar.menuPractice')}
-          </button>
-        </nav>
-        <div className="session-heading">
-          <h2>{t('common:sidebar.sessionsHeading')}</h2>
-          <button
-            aria-label={t('common:sidebar.newSession')}
-            className="new-session"
-            disabled={state.phase !== 'ready' || state.commandPending}
-            onClick={() => void controller.startNewConversation()}
-            title={t('common:sidebar.newSession')}
-            type="button"
-          >
-            <span aria-hidden="true">＋</span>
-          </button>
-        </div>
-        <nav className="session-list" aria-label={t('common:sidebar.listLabel')}>
-          {state.conversations.map((conversation) => (
+    <>
+      {/* 设置页期间保持对话视图挂载并隐藏，未发送草稿与滚动状态不丢失 */}
+      <main className="chat-shell" data-phase={state.phase} hidden={activeView === 'settings'}>
+        {preferenceNoticeVisible ? (
+          <div className="preference-notice" role="alert">
+            <p>{t('common:preferences.startupError')}</p>
+            <button onClick={() => setPreferenceNoticeVisible(false)} type="button">
+              {t('common:preferences.dismiss')}
+            </button>
+          </div>
+        ) : null}
+        <aside className="session-sidebar" aria-label={t('common:sidebar.label')}>
+          <nav className="sidebar-menu" aria-label={t('common:sidebar.menuLabel')}>
+            <button className="sidebar-menu-item" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 4h12v17l-6-4-6 4V4Z" />
+              </svg>
+              {t('common:sidebar.menuRecorded')}
+            </button>
+            <button className="sidebar-menu-item" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m8 4 12 8-12 8V4Z" />
+              </svg>
+              {t('common:sidebar.menuPractice')}
+            </button>
+          </nav>
+          <div className="session-heading">
+            <h2>{t('common:sidebar.sessionsHeading')}</h2>
             <button
-              className="session-item"
-              aria-pressed={conversation.sessionId === state.sessionId}
-              data-session-id={conversation.sessionId}
+              aria-label={t('common:sidebar.newSession')}
+              className="new-session"
               disabled={state.phase !== 'ready' || state.commandPending}
-              key={conversation.sessionId}
-              onClick={() => void controller.switchSession(conversation.sessionId)}
+              onClick={() => void controller.startNewConversation()}
+              title={t('common:sidebar.newSession')}
               type="button"
             >
-              <span className="session-details">
-                <span className="session-title">
-                  {formatConversationLabel(t, i18n.resolvedLanguage ?? 'zh-CN', conversation)}
-                </span>
-              </span>
+              <span aria-hidden="true">＋</span>
             </button>
-          ))}
-          {state.conversations.length === 0 ? (
-            <p className="session-placeholder">
-              {state.phase === 'loading'
-                ? t('common:sidebar.loadingSessions')
-                : t('common:sidebar.noSessions')}
-            </p>
-          ) : null}
-        </nav>
-        <div
-          className="sidebar-toolbar"
-          role="toolbar"
-          aria-label={t('common:sidebar.toolbarLabel')}
-        >
-          <button
-            aria-expanded={settingsOpen}
-            aria-haspopup="dialog"
-            aria-label={t('common:settings.title')}
-            className="settings-button"
-            onClick={() => setSettingsOpen(true)}
-            ref={settingsButtonRef}
-            title={t('common:settings.title')}
-            type="button"
+          </div>
+          <nav className="session-list" aria-label={t('common:sidebar.listLabel')}>
+            {state.conversations.map((conversation) => (
+              <button
+                className="session-item"
+                aria-pressed={conversation.sessionId === state.sessionId}
+                data-session-id={conversation.sessionId}
+                disabled={state.phase !== 'ready' || state.commandPending}
+                key={conversation.sessionId}
+                onClick={() => void controller.switchSession(conversation.sessionId)}
+                type="button"
+              >
+                <span className="session-details">
+                  <span className="session-title">
+                    {formatConversationLabel(t, i18n.resolvedLanguage ?? 'zh-CN', conversation)}
+                  </span>
+                </span>
+              </button>
+            ))}
+            {state.conversations.length === 0 ? (
+              <p className="session-placeholder">
+                {state.phase === 'loading'
+                  ? t('common:sidebar.loadingSessions')
+                  : t('common:sidebar.noSessions')}
+              </p>
+            ) : null}
+          </nav>
+          <div
+            className="sidebar-toolbar"
+            role="toolbar"
+            aria-label={t('common:sidebar.toolbarLabel')}
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m9 3-.6 2.4-2 .9-2.3-.7-2 3.4 1.7 1.7v2.6L2.1 15l2 3.4 2.3-.7 2 .9L9 21h4l.6-2.4 2-.9 2.3.7 2-3.4-1.7-1.7v-2.6L19.9 9l-2-3.4-2.3.7-2-.9L13 3Z" />
-              <circle cx="11" cy="12" r="3" />
-            </svg>
-          </button>
-        </div>
-      </aside>
+            <button
+              aria-label={t('common:settings.title')}
+              className="settings-button"
+              onClick={() => setActiveView('settings')}
+              ref={settingsButtonRef}
+              title={t('common:settings.title')}
+              type="button"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m9 3-.6 2.4-2 .9-2.3-.7-2 3.4 1.7 1.7v2.6L2.1 15l2 3.4 2.3-.7 2 .9L9 21h4l.6-2.4 2-.9 2.3.7 2-3.4-1.7-1.7v-2.6L19.9 9l-2-3.4-2.3.7-2-.9L13 3Z" />
+                <circle cx="11" cy="12" r="3" />
+              </svg>
+            </button>
+          </div>
+        </aside>
 
-      <ConversationPanel
-        messages={state.messages}
-        status={state.status}
-        generating={generating}
-        composerLocked={composerLocked}
-        onSend={(text) => void controller.send(text)}
-        onCancel={() => void controller.cancel()}
-        onRetry={(messageId) => void controller.retry(messageId)}
-      />
+        <ConversationPanel
+          messages={state.messages}
+          status={state.status}
+          generating={generating}
+          composerLocked={composerLocked}
+          onSend={(text) => void controller.send(text)}
+          onCancel={() => void controller.cancel()}
+          onRetry={(messageId) => void controller.retry(messageId)}
+        />
+      </main>
 
-      {settingsOpen ? <LanguageSettings onClose={closeSettings} /> : null}
-    </main>
+      {activeView === 'settings' ? (
+        <SettingsPage onExit={() => setActiveView('conversation')} />
+      ) : null}
+    </>
   )
 }
 
