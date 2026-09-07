@@ -1,5 +1,5 @@
 import type { WebContents } from 'electron'
-import { ipcMain } from 'electron'
+import { BrowserWindow, ipcMain } from 'electron'
 import type {
   ConversationEventListener,
   ConversationModule
@@ -10,6 +10,7 @@ import {
   conversationEventSchema,
   loadConversationInputSchema,
   retryMessageInputSchema,
+  runConversationSkillInputSchema,
   sendMessageInputSchema,
   type CancelMessageResult,
   type ConversationEvent,
@@ -19,6 +20,7 @@ import {
   type LoadConversationResult,
   type RetryMessageInput,
   type RetryMessageResult,
+  type RunConversationSkillResult,
   type SendMessageResult
 } from '../shared/conversation'
 import { toSafeRequestError } from './conversation-errors'
@@ -28,7 +30,7 @@ interface RequestOwnership {
   senderDestroyed: boolean
 }
 
-export function registerConversationIpc(module: ConversationModule): void {
+export function registerConversationIpc(module: ConversationModule, rendererUrl?: string): void {
   // sender 所有权：只有创建请求的 WebContents 能取消它；sender 销毁时取消其全部请求。
   const requestOwners = new Map<string, RequestOwnership>()
 
@@ -57,6 +59,27 @@ export function registerConversationIpc(module: ConversationModule): void {
       } catch (error) {
         return { status: 'error', error: toSafeRequestError(error) }
       }
+    }
+  )
+
+  ipcMain.handle(
+    CONVERSATION_CHANNELS.runSkill,
+    async (event, rawInput: unknown): Promise<RunConversationSkillResult> => {
+      if (
+        rendererUrl &&
+        (event.sender.isDestroyed() ||
+          BrowserWindow.fromWebContents(event.sender)?.webContents !== event.sender ||
+          event.senderFrame == null ||
+          event.senderFrame !== event.sender.mainFrame ||
+          event.senderFrame.url !== rendererUrl)
+      ) {
+        return { status: 'error', error: { code: 'UNTRUSTED_SOURCE' } }
+      }
+      const parsed = runConversationSkillInputSchema.safeParse(rawInput)
+      if (!parsed.success) return { status: 'error', error: { code: 'INVALID_INPUT' } }
+      return runGeneration(module, requestOwners, event.sender, parsed.data.requestId, (emit) =>
+        module.runSkill(parsed.data, emit)
+      )
     }
   )
 
@@ -101,7 +124,7 @@ async function runGeneration(
   sender: WebContents,
   requestId: string,
   run: (emit: ConversationEventListener) => Promise<GenerationAccepted>
-): Promise<SendMessageResult | RetryMessageResult> {
+): Promise<SendMessageResult | RetryMessageResult | RunConversationSkillResult> {
   if (requestOwners.has(requestId)) {
     return { status: 'error', error: { code: 'REQUEST_BUSY' } }
   }

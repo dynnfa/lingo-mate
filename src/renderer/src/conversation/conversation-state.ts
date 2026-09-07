@@ -27,7 +27,7 @@ interface ActiveGeneration {
 export type ConversationPhase = 'loading' | 'ready' | 'failed'
 
 // 触发一次交互的位置；IPC 拒绝时用它选择本地语义的失败提示。
-export type StatusOperation = 'load' | 'list' | 'create' | 'send' | 'cancel' | 'retry'
+export type StatusOperation = 'load' | 'list' | 'create' | 'send' | 'runSkill' | 'cancel' | 'retry'
 
 // 状态只保留语义与安全错误信息，不保存翻译后的文案；
 // 组件在每次 render 时按当前界面语言翻译，切换语言即可更新既有提示。
@@ -37,7 +37,9 @@ export type ConversationStatus =
   | { kind: 'creating' }
   | { kind: 'ready' }
   | { kind: 'generating' }
+  | { kind: 'skillPhase'; phase: 'analyzing' | 'committing' | 'summarizing' }
   | { kind: 'completed' }
+  | { kind: 'skillDescriptionFailed'; cancelled: boolean }
   | { kind: 'cancelled' }
   | { kind: 'protocolError' }
   | { kind: 'generationError'; error: GenerationEventError }
@@ -135,7 +137,7 @@ function toDisplayMessages(messages: ConversationMessage[]): DisplayMessage[] {
     role: message.role,
     content: message.content,
     streaming: false,
-    retryable: false
+    retryable: message.role === 'user' && message.retryable === true
   }))
   const last = display.at(-1)
   if (last?.role === 'user') {
@@ -193,6 +195,11 @@ function applyEvent(state: ConversationState, event: ConversationEvent): Convers
     case 'started':
       return applyGenerationStarted(state, event)
 
+    case 'skillPhase': {
+      if (!state.activeRequests[event.requestId]) return state
+      return { ...state, status: { kind: 'skillPhase', phase: event.phase } }
+    }
+
     case 'chunk': {
       const active = state.activeRequests[event.requestId]
       if (!active) return state
@@ -226,8 +233,26 @@ function applyEvent(state: ConversationState, event: ConversationEvent): Convers
         streaming: false,
         retryable: false
       }
-      const messages = upsertMessage(retired.messages, completed)
-      return { ...retired, messages, status: { kind: 'completed' } }
+      let messages = upsertMessage(retired.messages, completed)
+      if (event.retryableUserMessageId) {
+        messages = messages.map((message) =>
+          message.messageId === event.retryableUserMessageId
+            ? { ...message, retryable: true }
+            : message
+        )
+      }
+      return {
+        ...retired,
+        messages,
+        status:
+          event.skillCompletion === 'description_failed' ||
+          event.skillCompletion === 'description_cancelled'
+            ? {
+                kind: 'skillDescriptionFailed',
+                cancelled: event.skillCompletion === 'description_cancelled'
+              }
+            : { kind: 'completed' }
+      }
     }
 
     case 'cancelled': {

@@ -7,6 +7,8 @@
   "requestBusy": "该回复请求已在处理中。",
   "retryNotAllowed": "这条消息当前无法重试。",
   "requestNotFound": "没有找到进行中的回复请求。",
+  "invalidInput": "请求内容无效，请检查词汇输入后重试。",
+  "untrustedSource": "只能从应用窗口执行此操作。",
   "persistence": "访问本地会话数据失败，请稍后重试。",
   "unknown": "发生未知错误，请稍后重试。",
   "generation": {
@@ -20,6 +22,7 @@
     "list": "无法刷新会话列表，请稍后重试。",
     "create": "无法创建会话，请稍后重试。",
     "send": "无法发送消息，请稍后重试。",
+    "runSkill": "无法启动词汇行动，请稍后重试。",
     "cancel": "无法取消回复，请稍后重试。",
     "retry": "无法重试，请稍后重试。"
   },

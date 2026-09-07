@@ -1,10 +1,17 @@
 import type Database from 'better-sqlite3'
+import { runConversationSkillInputSchema } from '../shared/conversation'
+import { vocabularyBatchSchema } from '../shared/vocabulary'
 import {
   ConversationPersistenceError,
   type ConversationRepository,
   type StoredConversation,
   type StoredMessage
 } from '../core/conversation/conversation-repository'
+import type {
+  ConversationSkillPhase,
+  ConversationSkillRepository,
+  StoredConversationSkillExecution
+} from '../core/conversation/conversation-skill-repository'
 
 interface ConversationRow {
   id: string
@@ -18,9 +25,26 @@ interface MessageRow {
   role: 'user' | 'assistant'
   content: string
   created_at: string
+  retryable?: number
 }
 
-export class SqliteConversationRepository implements ConversationRepository {
+interface SkillExecutionRow {
+  id: string
+  session_id: string
+  user_message_id: string
+  assistant_message_id: string | null
+  skill_id: 'vocabulary'
+  arguments_json: string
+  explanation_language: 'zh-CN' | 'en'
+  phase: ConversationSkillPhase
+  batch_json: string | null
+  created_at: string
+  updated_at: string
+}
+
+export class SqliteConversationRepository
+  implements ConversationRepository, ConversationSkillRepository
+{
   constructor(private readonly database: Database.Database) {}
 
   async create(conversation: StoredConversation): Promise<void> {
@@ -68,10 +92,16 @@ export class SqliteConversationRepository implements ConversationRepository {
     try {
       const rows = this.database
         .prepare(
-          `SELECT id, session_id, role, content, created_at
-           FROM conversation_messages
-           WHERE session_id = ?
-           ORDER BY created_at ASC, rowid ASC`
+          `SELECT m.id, m.session_id, m.role, m.content, m.created_at,
+                  CASE WHEN e.phase IN (
+                    'started', 'analyzing', 'committing', 'summarizing', 'cancelled', 'failed',
+                    'description_failed', 'description_cancelled'
+                  )
+                       THEN 1 ELSE 0 END AS retryable
+           FROM conversation_messages m
+           LEFT JOIN conversation_skill_executions e ON e.user_message_id = m.id
+           WHERE m.session_id = ?
+           ORDER BY m.created_at ASC, m.rowid ASC`
         )
         .all(sessionId) as MessageRow[]
 
@@ -103,6 +133,94 @@ export class SqliteConversationRepository implements ConversationRepository {
       })
     }
   }
+
+  async createExecution(
+    execution: StoredConversationSkillExecution,
+    userMessage: StoredMessage
+  ): Promise<void> {
+    try {
+      this.database.transaction(() => {
+        this.database
+          .prepare(
+            `INSERT INTO conversation_messages (id, session_id, role, content, created_at)
+             VALUES (@id, @sessionId, @role, @content, @createdAt)`
+          )
+          .run(userMessage)
+        this.database
+          .prepare(
+            `INSERT INTO conversation_skill_executions
+             (id, session_id, user_message_id, skill_id, arguments_json,
+              explanation_language, phase, created_at, updated_at)
+             VALUES (@id, @sessionId, @userMessageId, @skillId, @argumentsJson,
+                     @explanationLanguage, @phase, @createdAt, @updatedAt)`
+          )
+          .run({ ...execution, argumentsJson: JSON.stringify(execution.arguments) })
+        this.database
+          .prepare('UPDATE conversations SET updated_at = MAX(updated_at, ?) WHERE id = ?')
+          .run(userMessage.createdAt, userMessage.sessionId)
+      })()
+    } catch (error) {
+      throw new ConversationPersistenceError('Unable to create skill execution', { cause: error })
+    }
+  }
+
+  async findExecutionByUserMessage(
+    sessionId: string,
+    userMessageId: string
+  ): Promise<StoredConversationSkillExecution | undefined> {
+    try {
+      const row = this.database
+        .prepare(
+          `SELECT * FROM conversation_skill_executions
+           WHERE session_id = ? AND user_message_id = ?`
+        )
+        .get(sessionId, userMessageId) as SkillExecutionRow | undefined
+      return row ? toStoredSkillExecution(row) : undefined
+    } catch (error) {
+      throw new ConversationPersistenceError('Unable to find skill execution', { cause: error })
+    }
+  }
+
+  async setExecutionPhase(executionId: string, phase: ConversationSkillPhase): Promise<void> {
+    try {
+      const result = this.database
+        .prepare('UPDATE conversation_skill_executions SET phase = ?, updated_at = ? WHERE id = ?')
+        .run(phase, new Date().toISOString(), executionId)
+      if (result.changes !== 1) throw new Error('Skill execution not found')
+    } catch (error) {
+      throw new ConversationPersistenceError('Unable to update skill execution', { cause: error })
+    }
+  }
+
+  async finishExecution(
+    executionId: string,
+    phase: 'completed' | 'description_failed' | 'description_cancelled',
+    assistantMessage: StoredMessage
+  ): Promise<void> {
+    try {
+      this.database.transaction(() => {
+        this.database
+          .prepare(
+            `INSERT INTO conversation_messages (id, session_id, role, content, created_at)
+             VALUES (@id, @sessionId, @role, @content, @createdAt)`
+          )
+          .run(assistantMessage)
+        const result = this.database
+          .prepare(
+            `UPDATE conversation_skill_executions
+             SET assistant_message_id = ?, phase = ?, updated_at = ?
+             WHERE id = ? AND batch_json IS NOT NULL`
+          )
+          .run(assistantMessage.id, phase, assistantMessage.createdAt, executionId)
+        if (result.changes !== 1) throw new Error('Committed skill execution not found')
+        this.database
+          .prepare('UPDATE conversations SET updated_at = MAX(updated_at, ?) WHERE id = ?')
+          .run(assistantMessage.createdAt, assistantMessage.sessionId)
+      })()
+    } catch (error) {
+      throw new ConversationPersistenceError('Unable to finish skill execution', { cause: error })
+    }
+  }
 }
 
 function toStoredConversation(row: ConversationRow): StoredConversation {
@@ -115,6 +233,24 @@ function toStoredMessage(row: MessageRow): StoredMessage {
     sessionId: row.session_id,
     role: row.role,
     content: row.content,
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    ...(row.retryable === 1 ? { retryable: true } : {})
+  }
+}
+
+function toStoredSkillExecution(row: SkillExecutionRow): StoredConversationSkillExecution {
+  const args = runConversationSkillInputSchema.shape.arguments.parse(JSON.parse(row.arguments_json))
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    userMessageId: row.user_message_id,
+    ...(row.assistant_message_id ? { assistantMessageId: row.assistant_message_id } : {}),
+    skillId: row.skill_id,
+    arguments: args,
+    explanationLanguage: row.explanation_language,
+    phase: row.phase,
+    ...(row.batch_json ? { batch: vocabularyBatchSchema.parse(JSON.parse(row.batch_json)) } : {}),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
   }
 }

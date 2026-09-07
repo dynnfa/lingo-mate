@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   CONVERSATION_ACTIONS,
+  extractVocabularyDraft,
   filterConversationActions,
+  isSelectedSkillDraft,
   parseSlashTrigger,
   type ConversationActionMeta
 } from '../conversation-actions'
@@ -30,6 +32,31 @@ describe('parseSlashTrigger', () => {
     expect(parseSlashTrigger('／tr')).toBeUndefined()
     expect(parseSlashTrigger('')).toBeUndefined()
     expect(parseSlashTrigger('practice / now')).toBeUndefined()
+  })
+})
+
+describe('vocabulary command boundary', () => {
+  it('extracts only text after the selected complete command prefix', () => {
+    expect(extractVocabularyDraft('/vocabulary apple, banana', 'vocabulary')).toEqual({
+      status: 'ok',
+      text: 'apple, banana'
+    })
+    expect(extractVocabularyDraft('/vocabulary   ', 'vocabulary')).toEqual({ status: 'empty' })
+    expect(extractVocabularyDraft('/vocabulary\tapple', 'vocabulary')).toEqual({
+      status: 'ok',
+      text: 'apple'
+    })
+  })
+
+  it('does not activate pasted, embedded, or modified commands', () => {
+    expect(extractVocabularyDraft('/vocabulary apple', null)).toEqual({
+      status: 'invalid-prefix'
+    })
+    expect(extractVocabularyDraft('note /vocabulary apple', 'vocabulary')).toEqual({
+      status: 'invalid-prefix'
+    })
+    expect(isSelectedSkillDraft('/vocab apple', 'vocabulary')).toBe(false)
+    expect(isSelectedSkillDraft('/vocabulary apple', 'vocabulary')).toBe(true)
   })
 })
 

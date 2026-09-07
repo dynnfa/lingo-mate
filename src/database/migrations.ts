@@ -99,6 +99,33 @@ export const MIGRATIONS: Migration[] = [
       );
       CREATE INDEX vocabulary_created_at ON vocabulary(created_at DESC, id DESC);
     `)
+  },
+  {
+    version: 4,
+    up: (database) =>
+      database.exec(`
+      CREATE TABLE conversation_skill_executions (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        user_message_id TEXT NOT NULL UNIQUE,
+        assistant_message_id TEXT,
+        skill_id TEXT NOT NULL CHECK(skill_id = 'vocabulary'),
+        arguments_json TEXT NOT NULL CHECK(json_valid(arguments_json)),
+        explanation_language TEXT NOT NULL CHECK(explanation_language IN ('zh-CN', 'en')),
+        phase TEXT NOT NULL CHECK(phase IN (
+          'started', 'analyzing', 'committing', 'summarizing', 'completed',
+          'cancelled', 'failed', 'description_failed', 'description_cancelled'
+        )),
+        batch_json TEXT CHECK(batch_json IS NULL OR json_valid(batch_json)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (session_id) REFERENCES conversations (id),
+        FOREIGN KEY (user_message_id) REFERENCES conversation_messages (id),
+        FOREIGN KEY (assistant_message_id) REFERENCES conversation_messages (id)
+      );
+      CREATE INDEX conversation_skill_executions_session
+        ON conversation_skill_executions (session_id, created_at);
+    `)
   }
 ]
 

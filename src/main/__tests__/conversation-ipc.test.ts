@@ -121,4 +121,19 @@ describe('conversation IPC request ownership', () => {
     accepted.resolve({ accepted: true, generation: GENERATION })
     await sendResult
   })
+
+  it('rejects unknown or malformed skill requests before calling Core', async () => {
+    const runSkill = vi.fn()
+    const module = { runSkill } as unknown as ConversationModule
+    registerConversationIpc(module)
+    const sender = new FakeSender()
+
+    await expect(
+      registeredHandler(CONVERSATION_CHANNELS.runSkill)(
+        { sender },
+        { ...INPUT, skillId: 'unknown', arguments: { text: 'apple', wordLanguage: 'en' } }
+      )
+    ).resolves.toEqual({ status: 'error', error: { code: 'INVALID_INPUT' } })
+    expect(runSkill).not.toHaveBeenCalled()
+  })
 })

@@ -11,6 +11,7 @@ import {
   loadConversationInputSchema,
   loadConversationResultSchema,
   retryMessageInputSchema,
+  runConversationSkillInputSchema,
   sendMessageResultSchema
 } from '../conversation'
 
@@ -96,6 +97,25 @@ describe('conversation protocol schemas', () => {
     expect(retryMessageInputSchema.safeParse({ requestId: REQUEST_ID }).success).toBe(false)
     expect(cancelMessageInputSchema.safeParse({ requestId: REQUEST_ID }).success).toBe(true)
     expect(cancelMessageInputSchema.safeParse({ requestId: 'nope' }).success).toBe(false)
+  })
+
+  it('accepts only the typed vocabulary skill contract', () => {
+    const valid = {
+      requestId: REQUEST_ID,
+      sessionId: SESSION_ID,
+      skillId: 'vocabulary',
+      arguments: { text: 'apple, banana', wordLanguage: 'en' }
+    }
+    expect(runConversationSkillInputSchema.parse(valid)).toEqual(valid)
+    expect(
+      runConversationSkillInputSchema.safeParse({ ...valid, skillId: 'unknown' }).success
+    ).toBe(false)
+    expect(
+      runConversationSkillInputSchema.safeParse({
+        ...valid,
+        arguments: { ...valid.arguments, extra: true }
+      }).success
+    ).toBe(false)
   })
 
   it('maps structured cancel results', () => {
@@ -199,6 +219,15 @@ describe('conversation protocol schemas', () => {
         sessionId: SESSION_ID,
         userMessage: USER_MESSAGE,
         assistantMessageId: ASSISTANT_MESSAGE_ID
+      })
+    ).toBeTruthy()
+
+    expect(
+      conversationEventSchema.parse({
+        type: 'skillPhase',
+        requestId: REQUEST_ID,
+        sessionId: SESSION_ID,
+        phase: 'committing'
       })
     ).toBeTruthy()
 

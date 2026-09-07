@@ -131,11 +131,11 @@ export class ConversationController {
     }
   }
 
-  async send(text: string): Promise<void> {
+  async send(text: string): Promise<boolean> {
     const sessionId = this.state.sessionId
     const trimmed = text.trim()
-    if (!trimmed || this.state.phase !== 'ready' || !sessionId) return
-    if (this.state.commandPending || isGenerating(this.state)) return
+    if (!trimmed || this.state.phase !== 'ready' || !sessionId) return false
+    if (this.state.commandPending || isGenerating(this.state)) return false
 
     const requestId = crypto.randomUUID()
     this.dispatch({ type: 'commandStarted' })
@@ -146,14 +146,48 @@ export class ConversationController {
           type: 'commandFailed',
           status: { kind: 'requestError', operation: 'send', error: result.error }
         })
-        return
+        return false
       }
       this.dispatch({ type: 'generationStarted', generation: result.generation })
     } catch {
       this.dispatch({ type: 'commandFailed', status: { kind: 'ipcError', operation: 'send' } })
-      return
+      return false
     }
     this.dispatch({ type: 'commandSettled' })
+    return true
+  }
+
+  async runSkill(input: { skillId: 'vocabulary'; text: string }): Promise<boolean> {
+    const sessionId = this.state.sessionId
+    if (this.state.phase !== 'ready' || !sessionId || !input.text.trim()) return false
+    if (this.state.commandPending || isGenerating(this.state)) return false
+
+    const requestId = crypto.randomUUID()
+    this.dispatch({ type: 'commandStarted' })
+    try {
+      const result = await this.api.runSkill({
+        requestId,
+        sessionId,
+        skillId: input.skillId,
+        arguments: { text: input.text, wordLanguage: 'en' }
+      })
+      if (result.status === 'error') {
+        this.dispatch({
+          type: 'commandFailed',
+          status: { kind: 'requestError', operation: 'runSkill', error: result.error }
+        })
+        return false
+      }
+      this.dispatch({ type: 'generationStarted', generation: result.generation })
+    } catch {
+      this.dispatch({
+        type: 'commandFailed',
+        status: { kind: 'ipcError', operation: 'runSkill' }
+      })
+      return false
+    }
+    this.dispatch({ type: 'commandSettled' })
+    return true
   }
 
   async cancel(): Promise<void> {

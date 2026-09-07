@@ -148,7 +148,8 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
           status={state.status}
           generating={generating}
           composerLocked={composerLocked}
-          onSend={(text) => void controller.send(text)}
+          onSend={(text) => controller.send(text)}
+          onRunSkill={(input) => controller.runSkill(input)}
           onCancel={() => void controller.cancel()}
           onRetry={(messageId) => void controller.retry(messageId)}
         />

@@ -8,10 +8,22 @@ import type {
   GenerationStarted,
   LoadedConversation,
   RetryMessageInput,
+  RunConversationSkillInput,
   SendMessageInput
 } from '../../shared/conversation'
+import { runConversationSkillInputSchema } from '../../shared/conversation'
 import type { LanguageModel, ModelMessage } from '../llm/language-model'
 import { ModelConfigValidationError, ModelNotConfiguredError } from '../llm/model-config'
+import {
+  VocabularyDescriptionError,
+  type VocabularyConversationSkill
+} from '../learning/vocabulary/vocabulary-conversation-skill'
+import { deterministicVocabularyFacts } from '../learning/vocabulary/vocabulary-result-describer'
+import { VocabularyError } from '../learning/vocabulary/parse-vocabulary-input'
+import type {
+  ConversationSkillRepository,
+  StoredConversationSkillExecution
+} from './conversation-skill-repository'
 import {
   ConversationBusyError,
   ConversationNotFoundError,
@@ -44,7 +56,9 @@ export class ConversationModule {
     private readonly model: LanguageModel,
     private readonly repository: ConversationRepository,
     // 每次生成开始时解析当前界面语言并显式传给模型，语言切换不重建本模块。
-    private readonly resolveOutputLanguage: () => string = () => 'zh-CN'
+    private readonly resolveOutputLanguage: () => 'zh-CN' | 'en' = () => 'zh-CN',
+    private readonly vocabularySkill?: VocabularyConversationSkill,
+    private readonly skillRepository?: ConversationSkillRepository
   ) {}
 
   async createConversation(): Promise<ConversationSummary> {
@@ -116,6 +130,71 @@ export class ConversationModule {
     return this.launchGeneration(generation, emit)
   }
 
+  async runSkill(
+    input: RunConversationSkillInput,
+    emit: ConversationEventListener
+  ): Promise<GenerationAccepted> {
+    runConversationSkillInputSchema.parse(input)
+    if (!this.vocabularySkill || !this.skillRepository) {
+      throw new Error('Conversation skills are not configured')
+    }
+    const conversation = await this.withPersistence(() => this.repository.find(input.sessionId))
+    if (!conversation) throw new ConversationNotFoundError(input.sessionId)
+
+    const now = new Date().toISOString()
+    const userMessage: StoredMessage = {
+      id: randomUUID(),
+      sessionId: input.sessionId,
+      role: 'user',
+      content: `/vocabulary ${input.arguments.text}`,
+      createdAt: now
+    }
+    const execution: StoredConversationSkillExecution = {
+      id: randomUUID(),
+      sessionId: input.sessionId,
+      userMessageId: userMessage.id,
+      skillId: 'vocabulary',
+      arguments: input.arguments,
+      explanationLanguage: this.resolveOutputLanguage(),
+      phase: 'started',
+      createdAt: now,
+      updatedAt: now
+    }
+    const assistantMessageId = randomUUID()
+    this.registerExecution(input.requestId, {
+      controller: new AbortController(),
+      sessionId: input.sessionId,
+      userMessageId: userMessage.id,
+      assistantMessageId
+    })
+
+    try {
+      await this.withPersistence(() =>
+        this.skillRepository!.createExecution(execution, userMessage)
+      )
+    } catch (error) {
+      this.releaseExecution(input.requestId)
+      emit({
+        type: 'failed',
+        requestId: input.requestId,
+        sessionId: input.sessionId,
+        error: this.toSafeError(error)
+      })
+      throw error
+    }
+
+    const generation: GenerationStarted = {
+      requestId: input.requestId,
+      sessionId: input.sessionId,
+      userMessage: toMessage(userMessage),
+      assistantMessageId
+    }
+    const active = this.activeRequests.get(input.requestId)
+    if (!active) throw new Error('Skill execution is not registered')
+    void this.runVocabularySkill(generation, execution, active, emit)
+    return { accepted: true, generation }
+  }
+
   async retryMessage(
     input: RetryMessageInput,
     emit: ConversationEventListener
@@ -131,6 +210,45 @@ export class ConversationModule {
     )
     if (!userMessage || userMessage.role !== 'user') {
       throw new MessageNotFoundError(input.userMessageId)
+    }
+
+    const skillExecution = this.skillRepository
+      ? await this.withPersistence(() =>
+          this.skillRepository!.findExecutionByUserMessage(input.sessionId, input.userMessageId)
+        )
+      : undefined
+
+    if (skillExecution) {
+      if (!this.vocabularySkill || skillExecution.phase === 'completed') {
+        throw new RetryNotAllowedError('skill execution cannot be retried')
+      }
+      const assistantMessageId = randomUUID()
+      this.registerExecution(input.requestId, {
+        controller: new AbortController(),
+        sessionId: input.sessionId,
+        userMessageId: userMessage.id,
+        assistantMessageId
+      })
+      const generation: GenerationStarted = {
+        requestId: input.requestId,
+        sessionId: input.sessionId,
+        userMessage: toMessage({ ...userMessage, retryable: false }),
+        assistantMessageId
+      }
+      const active = this.activeRequests.get(input.requestId)
+      if (!active) throw new Error('Skill retry is not registered')
+      if (skillExecution.batch) {
+        void this.retryVocabularyDescription(
+          generation,
+          skillExecution,
+          skillExecution.batch,
+          active,
+          emit
+        )
+      } else {
+        void this.runVocabularySkill(generation, skillExecution, active, emit)
+      }
+      return { accepted: true, generation }
     }
 
     const lastMessage = history.at(-1)
@@ -260,6 +378,189 @@ export class ConversationModule {
     }
   }
 
+  private async runVocabularySkill(
+    generation: GenerationStarted,
+    skillExecution: StoredConversationSkillExecution,
+    execution: ActiveExecution,
+    emit: ConversationEventListener
+  ): Promise<void> {
+    const { requestId, sessionId, assistantMessageId } = generation
+    const eventBase = { requestId, sessionId }
+    try {
+      emit({ type: 'started', ...generation })
+      if (execution.controller.signal.aborted) {
+        await this.skillRepository!.setExecutionPhase(skillExecution.id, 'cancelled')
+        emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
+        return
+      }
+
+      const result = await this.vocabularySkill!.run({
+        requestId,
+        executionId: skillExecution.id,
+        arguments: skillExecution.arguments,
+        explanationLanguage: skillExecution.explanationLanguage,
+        signal: execution.controller.signal,
+        onPhase: async (phase) => {
+          await this.skillRepository!.setExecutionPhase(skillExecution.id, phase)
+          emit({ ...eventBase, type: 'skillPhase', phase })
+        }
+      })
+
+      if (result.batch.outcome === 'cancelled') {
+        await this.skillRepository!.setExecutionPhase(skillExecution.id, 'cancelled')
+        emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
+        return
+      }
+      await this.persistSkillReply(
+        generation,
+        skillExecution,
+        result.batch,
+        result.description,
+        'completed',
+        emit
+      )
+    } catch (error) {
+      if (error instanceof VocabularyDescriptionError) {
+        try {
+          await this.persistSkillReply(
+            generation,
+            skillExecution,
+            error.batch,
+            '',
+            execution.controller.signal.aborted ? 'description_cancelled' : 'description_failed',
+            emit
+          )
+        } catch (persistenceError) {
+          emit({
+            ...eventBase,
+            type: 'failed',
+            messageId: assistantMessageId,
+            error: this.toSafeError(persistenceError)
+          })
+        }
+      } else if (execution.controller.signal.aborted) {
+        try {
+          await this.skillRepository!.setExecutionPhase(skillExecution.id, 'cancelled')
+          emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
+        } catch (persistenceError) {
+          emit({
+            ...eventBase,
+            type: 'failed',
+            messageId: assistantMessageId,
+            error: this.toSafeError(persistenceError)
+          })
+        }
+      } else {
+        try {
+          await this.skillRepository!.setExecutionPhase(skillExecution.id, 'failed')
+        } catch {
+          // The original safe error is more useful than a secondary phase update failure.
+        }
+        emit({
+          ...eventBase,
+          type: 'failed',
+          messageId: assistantMessageId,
+          error: this.toSafeError(error)
+        })
+      }
+    } finally {
+      this.releaseExecution(requestId)
+    }
+  }
+
+  private async retryVocabularyDescription(
+    generation: GenerationStarted,
+    skillExecution: StoredConversationSkillExecution,
+    batch: NonNullable<StoredConversationSkillExecution['batch']>,
+    execution: ActiveExecution,
+    emit: ConversationEventListener
+  ): Promise<void> {
+    const { requestId, sessionId } = generation
+    const eventBase = { requestId, sessionId }
+    try {
+      emit({ type: 'started', ...generation })
+      const description = await this.vocabularySkill!.describe(
+        batch,
+        skillExecution.explanationLanguage,
+        execution.controller.signal,
+        async () => {
+          await this.skillRepository!.setExecutionPhase(skillExecution.id, 'summarizing')
+          emit({ ...eventBase, type: 'skillPhase', phase: 'summarizing' })
+        }
+      )
+      await this.persistSkillReply(
+        generation,
+        skillExecution,
+        batch,
+        description,
+        'completed',
+        emit
+      )
+    } catch (error) {
+      try {
+        await this.persistSkillReply(
+          generation,
+          skillExecution,
+          batch,
+          '',
+          execution.controller.signal.aborted ? 'description_cancelled' : 'description_failed',
+          emit
+        )
+      } catch (persistenceError) {
+        emit({
+          ...eventBase,
+          type: 'failed',
+          messageId: generation.assistantMessageId,
+          error: this.toSafeError(persistenceError ?? error)
+        })
+      }
+    } finally {
+      this.releaseExecution(requestId)
+    }
+  }
+
+  private async persistSkillReply(
+    generation: GenerationStarted,
+    skillExecution: StoredConversationSkillExecution,
+    batch: NonNullable<StoredConversationSkillExecution['batch']>,
+    description: string,
+    phase: 'completed' | 'description_failed' | 'description_cancelled',
+    emit: ConversationEventListener
+  ): Promise<void> {
+    const fallback =
+      skillExecution.explanationLanguage === 'zh-CN'
+        ? phase === 'description_cancelled'
+          ? '词汇处理已完成，结果描述已取消。'
+          : '词汇处理已完成，但结果描述失败。'
+        : phase === 'description_cancelled'
+          ? 'Vocabulary processing completed, but the result description was cancelled.'
+          : 'Vocabulary processing completed, but the result description failed.'
+    const facts = deterministicVocabularyFacts(batch, skillExecution.explanationLanguage)
+    const assistantMessage: StoredMessage = {
+      id: generation.assistantMessageId,
+      sessionId: generation.sessionId,
+      role: 'assistant',
+      content: `${description || fallback}\n\n${facts}`,
+      createdAt: new Date().toISOString()
+    }
+    await this.withPersistence(() =>
+      this.skillRepository!.finishExecution(skillExecution.id, phase, assistantMessage)
+    )
+    emit({
+      requestId: generation.requestId,
+      sessionId: generation.sessionId,
+      type: 'completed',
+      message: toMessage(assistantMessage),
+      skillCompletion:
+        phase === 'completed'
+          ? 'complete'
+          : phase === 'description_cancelled'
+            ? 'description_cancelled'
+            : 'description_failed',
+      ...(phase === 'completed' ? {} : { retryableUserMessageId: skillExecution.userMessageId })
+    })
+  }
+
   private releaseExecution(requestId: string): void {
     const execution = this.activeRequests.get(requestId)
     this.activeRequests.delete(requestId)
@@ -287,6 +588,10 @@ export class ConversationModule {
   // Core 只返回安全错误码，不负责界面翻译；内部原因留在产生处。
   private toSafeError(error: unknown): GenerationEventError {
     if (error instanceof ConversationPersistenceError) {
+      return { code: 'PERSISTENCE_ERROR' }
+    }
+
+    if (error instanceof VocabularyError && error.code === 'STORAGE_FAILED') {
       return { code: 'PERSISTENCE_ERROR' }
     }
 
@@ -320,7 +625,8 @@ function toMessage(message: StoredMessage): ConversationMessage {
     sessionId: message.sessionId,
     role: message.role,
     content: message.content,
-    createdAt: message.createdAt
+    createdAt: message.createdAt,
+    ...(message.retryable === true ? { retryable: true } : {})
   }
 }
 
