@@ -829,4 +829,134 @@ describe('ConversationModule', () => {
       ).rejects.toThrow(ConversationNotFoundError)
     })
   })
+
+  describe('word concept command', () => {
+    class RecordingModel implements LanguageModel {
+      readonly inputs: StreamReplyInput[] = []
+
+      async *streamReply(input: StreamReplyInput): AsyncIterable<string> {
+        this.inputs.push(input)
+        yield '解释'
+      }
+    }
+
+    // 第一次调用产出首个 chunk 后挂起直到被取消；重试调用正常完成。
+    class RecordingBlockingOnceModel implements LanguageModel {
+      readonly inputs: StreamReplyInput[] = []
+      private calls = 0
+
+      async *streamReply(input: StreamReplyInput): AsyncIterable<string> {
+        this.inputs.push(input)
+        this.calls += 1
+        if (this.calls === 1) {
+          yield 'partial'
+          await abortOnSignal(input.signal)
+          return
+        }
+        yield 'retried'
+      }
+    }
+
+    async function sendUntilTerminal(
+      module: ConversationModule,
+      sessionId: string,
+      text: string
+    ): Promise<void> {
+      await new Promise<void>((resolve) => {
+        void module
+          .sendMessage({ requestId: REQUEST_ID, sessionId, text }, (event) => {
+            if (
+              event.type === 'completed' ||
+              event.type === 'failed' ||
+              event.type === 'cancelled'
+            ) {
+              resolve()
+            }
+          })
+          .then(() => undefined)
+      })
+    }
+
+    it.each(['/concept pursue', ' /concept pursue '])(
+      'answers %s with the word-concept prompt and the raw command text',
+      async (text) => {
+        const repository = new MemoryConversationRepository()
+        const model = new RecordingModel()
+        const module = new ConversationModule(model, repository)
+        const { sessionId } = await module.createConversation()
+
+        await sendUntilTerminal(module, sessionId, text)
+
+        expect(model.inputs).toHaveLength(1)
+        expect(model.inputs[0].promptKind).toBe('word-concept')
+        // 原始命令消息保留在发给模型的上下文中，不额外改写或拼接
+        expect(model.inputs[0].messages.at(-1)).toEqual({ role: 'user', content: text })
+      }
+    )
+
+    it('keeps the conversation prompt for ordinary chat and follow-up questions', async () => {
+      const repository = new MemoryConversationRepository()
+      const model = new RecordingModel()
+      const module = new ConversationModule(model, repository)
+      const { sessionId } = await module.createConversation()
+
+      await sendUntilTerminal(module, sessionId, 'Hello')
+      await sendUntilTerminal(module, sessionId, '/concept pursue')
+      await sendUntilTerminal(module, sessionId, '再举个例子')
+
+      expect(model.inputs.map((input) => input.promptKind)).toEqual([
+        'conversation',
+        'word-concept',
+        'conversation'
+      ])
+    })
+
+    it.each(['/conceptual drift', 'What does /concept mean?'])(
+      'does not treat %s as the command',
+      async (text) => {
+        const repository = new MemoryConversationRepository()
+        const model = new RecordingModel()
+        const module = new ConversationModule(model, repository)
+        const { sessionId } = await module.createConversation()
+
+        await sendUntilTerminal(module, sessionId, text)
+
+        expect(model.inputs).toHaveLength(1)
+        expect(model.inputs[0].promptKind).toBe('conversation')
+      }
+    )
+
+    it('reapplies the word-concept prompt when retrying a cancelled /concept message', async () => {
+      const repository = new MemoryConversationRepository()
+      const model = new RecordingBlockingOnceModel()
+      const module = new ConversationModule(model, repository)
+      const { sessionId } = await module.createConversation()
+
+      await new Promise<void>((resolve) => {
+        void module
+          .sendMessage({ requestId: REQUEST_ID, sessionId, text: '/concept drift' }, (event) => {
+            if (event.type === 'chunk') module.cancelMessage(REQUEST_ID)
+            if (event.type === 'cancelled') resolve()
+          })
+          .then(() => undefined)
+      })
+      const user = repository.messages.find((message) => message.role === 'user')!
+
+      await new Promise<void>((resolve) => {
+        void module
+          .retryMessage(
+            { requestId: OTHER_REQUEST_ID, sessionId, userMessageId: user.id },
+            (event) => {
+              if (event.type === 'completed' || event.type === 'failed') resolve()
+            }
+          )
+          .then(() => undefined)
+      })
+
+      expect(model.inputs.map((input) => input.promptKind)).toEqual([
+        'word-concept',
+        'word-concept'
+      ])
+    })
+  })
 })

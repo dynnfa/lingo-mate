@@ -12,8 +12,9 @@ import type {
   SendMessageInput
 } from '../../shared/conversation'
 import { runConversationSkillInputSchema } from '../../shared/conversation'
-import type { LanguageModel, ModelMessage } from '../llm/language-model'
+import type { LanguageModel, ModelMessage, ReplyPromptKind } from '../llm/language-model'
 import { ModelConfigValidationError, ModelNotConfiguredError } from '../llm/model-config'
+import { isWordConceptMessage } from '../prompt/word-concept'
 import { VocabularyConversationSkill } from '../learning/vocabulary/vocabulary-conversation-skill'
 import { VocabularyError } from '../learning/vocabulary/parse-vocabulary-input'
 import type {
@@ -329,6 +330,13 @@ export class ConversationModule {
 
       const history = await this.withPersistence(() => this.repository.history(sessionId))
       const modelMessages: ModelMessage[] = history.map(({ role, content }) => ({ role, content }))
+      // 本次回复面向会话最后一条消息；仅当它是用户的 /concept 命令消息时
+      // 切换到概念讲解提示词。命令保留在原始消息里，重试路径据此重新应用。
+      const answered = history.at(-1)
+      const promptKind: ReplyPromptKind =
+        answered?.role === 'user' && isWordConceptMessage(answered.content)
+          ? 'word-concept'
+          : 'conversation'
       let response = ''
 
       for await (const delta of this.model.streamReply({
@@ -336,6 +344,7 @@ export class ConversationModule {
         outputLanguage: this.resolveOutputLanguage(),
         // 首版默认英语练习；学习语言不随界面语言切换。
         targetLanguage: 'en',
+        promptKind,
         signal: execution.controller.signal
       })) {
         if (execution.controller.signal.aborted) break

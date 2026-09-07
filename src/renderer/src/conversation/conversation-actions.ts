@@ -1,7 +1,7 @@
 // `/` 行动选择器的展示元数据与纯函数：只描述稳定身份与文案 key，
 // 不包含 Prompt 或业务执行逻辑；vocabulary 选择会转换为类型化会话 skill 提交。
 
-export type ConversationActionId = 'translate' | 'polish' | 'practice' | 'vocabulary'
+export type ConversationActionId = 'translate' | 'polish' | 'practice' | 'concept' | 'vocabulary'
 export type SelectedConversationSkillId = 'vocabulary'
 
 export const VOCABULARY_COMMAND_PREFIX = '/vocabulary'
@@ -42,6 +42,8 @@ export type ConversationActionTextKey =
   | 'conversation:actionPicker.actions.polish.description'
   | 'conversation:actionPicker.actions.practice.name'
   | 'conversation:actionPicker.actions.practice.description'
+  | 'conversation:actionPicker.actions.concept.name'
+  | 'conversation:actionPicker.actions.concept.description'
 
 export interface ConversationActionMeta {
   // 稳定行动 ID：高亮身份与选择结果的协议字段，不随界面语言变化。
@@ -73,6 +75,12 @@ export const CONVERSATION_ACTIONS: readonly ConversationActionMeta[] = [
     descriptionKey: 'conversation:actionPicker.actions.practice.description'
   },
   {
+    id: 'concept',
+    command: 'concept',
+    nameKey: 'conversation:actionPicker.actions.concept.name',
+    descriptionKey: 'conversation:actionPicker.actions.concept.description'
+  },
+  {
     id: 'vocabulary',
     command: 'vocabulary',
     nameKey: 'conversation:actionPicker.actions.vocabulary.name',
@@ -83,6 +91,8 @@ export const CONVERSATION_ACTIONS: readonly ConversationActionMeta[] = [
 // 仅半角 `/` 作为首字符触发；不做 trim，前导空格与全角斜杠都不算。
 // 返回值为 `/` 之后的查询词，不符合前缀时为 undefined。
 export function parseSlashTrigger(draft: string): string | undefined {
+  // 完整 concept 命令进入参数阶段后直接发送，不再作为选择器查询。
+  if (/^\/concept\s/u.test(draft)) return undefined
   return draft.startsWith('/') ? draft.slice(1) : undefined
 }
 

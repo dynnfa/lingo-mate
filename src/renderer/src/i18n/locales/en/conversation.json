@@ -34,6 +34,10 @@
         "name": "Speaking practice",
         "description": "Have a conversation around a topic to practice speaking."
       },
+      "concept": {
+        "name": "Word concept",
+        "description": "Explain the core idea behind a word so it carries over to new contexts."
+      },
       "vocabulary": {
         "name": "Vocabulary",
         "description": "Analyze and save English words and phrases in a batch."
