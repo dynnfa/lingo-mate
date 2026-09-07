@@ -126,6 +126,45 @@ export const MIGRATIONS: Migration[] = [
       CREATE INDEX conversation_skill_executions_session
         ON conversation_skill_executions (session_id, created_at);
     `)
+  },
+  {
+    version: 5,
+    up: (database) => {
+      // 旧表的 UNIQUE(word_language, lookup_key) 与 CHECK(json_valid(analysis_json))
+      // 引用了待删除字段，无法直接 DROP COLUMN，需整表重建。
+      // 音标、意思、概念、例句无旧数据来源，迁移行先置 NULL，由后续写入补齐。
+      database.exec(`
+        CREATE TABLE vocabulary_v2 (
+          id TEXT PRIMARY KEY,
+          term TEXT NOT NULL,
+          phonetic TEXT,
+          meaning TEXT,
+          concept TEXT,
+          example_sentences TEXT,
+          model_id TEXT NOT NULL,
+          prompt_version TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        INSERT INTO vocabulary_v2 (id, term, model_id, prompt_version, created_at)
+        SELECT id, term, model_id, prompt_version, created_at
+        FROM vocabulary
+        ORDER BY rowid;
+      `)
+
+      const sourceCount = countRows(database, 'vocabulary')
+      const targetCount = countRows(database, 'vocabulary_v2')
+      if (targetCount !== sourceCount) {
+        throw new Error(
+          `Migration row count mismatch: copied ${targetCount} of ${sourceCount} vocabulary entries`
+        )
+      }
+
+      database.exec(`
+        DROP TABLE vocabulary;
+        ALTER TABLE vocabulary_v2 RENAME TO vocabulary;
+        CREATE INDEX vocabulary_created_at ON vocabulary(created_at DESC, id DESC);
+      `)
+    }
   }
 ]
 

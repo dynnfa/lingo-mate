@@ -1,6 +1,5 @@
 import type { SupportedLocale } from '../../../shared/preferences'
-import type { VocabularyAnalysis } from '../../../shared/vocabulary'
-export { vocabularyAnalysisSchema } from '../../../shared/vocabulary'
+import type { VocabularyInsertContent } from './vocabulary-insert'
 
 export interface AnalyzeVocabularyInput {
   term: string
@@ -10,10 +9,10 @@ export interface AnalyzeVocabularyInput {
 }
 export type VocabularyAnalysisResult =
   | {
-      status: 'recognized'
-      analysis: VocabularyAnalysis
+      status: 'insert'
+      content: VocabularyInsertContent
       modelId: string
-      promptVersion: 'vocabulary-v1'
+      promptVersion: 'vocabulary-sql-v1'
     }
   | { status: 'unrecognized' }
 export interface VocabularyAnalyzer {

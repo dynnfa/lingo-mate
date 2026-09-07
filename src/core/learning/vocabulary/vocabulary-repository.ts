@@ -1,29 +1,28 @@
 import type {
   VocabularyEntry,
   VocabularyCursor,
-  ListVocabularyInput
+  ListVocabularyInput,
+  VocabularyBatch
 } from '../../../shared/vocabulary'
-import type { VocabularyBatch } from '../../../shared/vocabulary'
+import type { VocabularyInsertCommand } from './vocabulary-insert'
 
-export interface StoredVocabulary extends VocabularyEntry {
-  lookupKey: string
-  analysisSchemaVersion: 1
-  modelId: string
-  promptVersion: 'vocabulary-v1'
-  updatedAt: string
-}
 export interface VocabularyPage {
   entries: VocabularyEntry[]
   nextCursor?: VocabularyCursor
 }
 export interface VocabularyRepository {
-  find(wordLanguage: 'en', lookupKey: string): VocabularyEntry | undefined
+  find(lookupKey: string): VocabularyEntry | undefined
+  // 批次预查：一次读取词项建立 key 索引，避免逐词扫描词库。
+  findExisting(lookupKeys: string[]): Map<string, VocabularyEntry>
   // Synchronous short transaction. No cancellation or async work may interleave with commit.
-  saveBatch(entries: StoredVocabulary[]): Array<{ id: string; status: 'saved' | 'existing' }>
-  // Inserts vocabulary and saves the validated execution report in one short transaction.
+  saveBatch(
+    commands: VocabularyInsertCommand[]
+  ): Array<{ id: string; status: 'saved' | 'existing' }>
+  // Executes the validated model-returned INSERT commands and saves the execution
+  // report in one short transaction.
   saveBatchWithResult(
     executionId: string,
-    entries: StoredVocabulary[],
+    commands: VocabularyInsertCommand[],
     finalize: (saved: Array<{ id: string; status: 'saved' | 'existing' }>) => VocabularyBatch
   ): VocabularyBatch
   list(input: ListVocabularyInput): VocabularyPage

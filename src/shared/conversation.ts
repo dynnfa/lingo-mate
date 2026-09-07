@@ -127,6 +127,7 @@ const generationEventErrorSchema = z.object({
     'MODEL_ERROR',
     'MODEL_NOT_CONFIGURED',
     'CREDENTIAL_DECRYPT_FAILED',
+    'TOOL_CALL_NOT_SUPPORTED',
     'PERSISTENCE_ERROR',
     'UNKNOWN_ERROR'
   ])

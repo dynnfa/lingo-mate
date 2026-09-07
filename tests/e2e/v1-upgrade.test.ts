@@ -115,10 +115,10 @@ test('upgrades a v1 database and keeps history readable', async () => {
 
     await app.close()
 
-    // 升级后的数据库结构达到 v3
+    // 升级后的数据库结构达到当前 schema 版本（v5 词表）
     const raw = new Database(join(userDataPath, 'lingo-mate.sqlite'))
     try {
-      expect(raw.pragma('user_version', { simple: true })).toBe(4)
+      expect(raw.pragma('user_version', { simple: true })).toBe(5)
       expect(
         (
           raw

@@ -1,64 +1,6 @@
 import { z } from 'zod'
 
 const text = (max: number): z.ZodString => z.string().trim().min(1).max(max)
-export const vocabularyAnalysisSchema = z
-  .strictObject({
-    senses: z
-      .array(
-        z.strictObject({
-          id: z.string().regex(/^s[1-5]$/),
-          partOfSpeech: z.enum([
-            'noun',
-            'verb',
-            'adjective',
-            'adverb',
-            'pronoun',
-            'preposition',
-            'conjunction',
-            'interjection',
-            'determiner',
-            'phrase',
-            'other'
-          ]),
-          definition: text(500)
-        })
-      )
-      .min(1)
-      .max(5),
-    pronunciations: z
-      .array(
-        z.strictObject({
-          accent: z.enum(['en-US', 'en-GB', 'unspecified']),
-          ipa: text(200).regex(/^(\/[^/]+\/|\[[^[\]]+\])$/),
-          guidance: text(500),
-          senseIds: z
-            .array(z.string().regex(/^s[1-5]$/))
-            .min(1)
-            .max(5)
-        })
-      )
-      .min(1)
-      .max(6)
-  })
-  .superRefine((analysis, context) => {
-    const ids = new Set(analysis.senses.map((sense) => sense.id))
-    const linked = new Set<string>()
-    let invalid = ids.size !== analysis.senses.length
-    for (const pronunciation of analysis.pronunciations) {
-      if (new Set(pronunciation.senseIds).size !== pronunciation.senseIds.length) invalid = true
-      for (const id of pronunciation.senseIds) {
-        if (!ids.has(id)) invalid = true
-        linked.add(id)
-      }
-      const phonemes = pronunciation.ipa.slice(1, -1).trim()
-      if (!/\p{Letter}/u.test(phonemes) || /[?\d]|unknown|unavailable|n\/a/i.test(phonemes))
-        invalid = true
-    }
-    if ([...ids].some((id) => !linked.has(id))) invalid = true
-    if (invalid)
-      context.addIssue({ code: 'custom', message: 'Invalid pronunciation or sense references' })
-  })
-export type VocabularyAnalysis = z.infer<typeof vocabularyAnalysisSchema>
 
 export const vocabularyErrorCodeSchema = z.enum([
   'INVALID_INPUT',
@@ -69,6 +11,7 @@ export const vocabularyErrorCodeSchema = z.enum([
   'CREDENTIAL_DECRYPT_FAILED',
   'MODEL_ERROR',
   'INVALID_ANALYSIS',
+  'TOOL_CALL_NOT_SUPPORTED',
   'UNRECOGNIZED',
   'TIMEOUT',
   'CANCELLED',
@@ -76,6 +19,10 @@ export const vocabularyErrorCodeSchema = z.enum([
   'UNKNOWN_ERROR'
 ])
 export type VocabularyErrorCode = z.infer<typeof vocabularyErrorCodeSchema>
+export const vocabularyItemErrorCodeSchema = vocabularyErrorCodeSchema.exclude([
+  'TOOL_CALL_NOT_SUPPORTED'
+])
+export type VocabularyItemErrorCode = z.infer<typeof vocabularyItemErrorCodeSchema>
 export const addVocabularyBatchInputSchema = z.strictObject({
   requestId: z.uuid(),
   text: z.string().min(1).max(4000),
@@ -86,13 +33,14 @@ export const listVocabularyInputSchema = z.strictObject({
   limit: z.number().int().min(1).max(100).default(50),
   cursor: vocabularyCursorSchema.optional()
 })
+// 历史 v5 行允许四个内容字段为 NULL（迁移未回填旧分析），读取时不得因此失败。
 export const vocabularyEntrySchema = z.strictObject({
   id: z.uuid(),
   term: text(4000),
-  wordLanguage: z.literal('en'),
-  explanationLanguage: z.enum(['zh-CN', 'en']),
-  analysis: vocabularyAnalysisSchema,
-  analysisSource: z.literal('llm'),
+  phonetic: z.string().min(1).max(200).nullable(),
+  meaning: z.string().min(1).max(2000).nullable(),
+  concept: z.string().min(1).max(2000).nullable(),
+  exampleSentences: z.array(z.string().min(1).max(500)).min(1).max(3).nullable(),
   createdAt: z.iso.datetime()
 })
 const itemBase = z.strictObject({ inputIndex: z.number().int().min(0).max(19), term: text(4000) })
@@ -103,7 +51,7 @@ export const vocabularyItemResultSchema = z.discriminatedUnion('status', [
     status: z.literal('duplicate'),
     sourceInputIndex: z.number().int().min(0).max(19)
   }),
-  itemBase.extend({ status: z.literal('failed'), code: vocabularyErrorCodeSchema })
+  itemBase.extend({ status: z.literal('failed'), code: vocabularyItemErrorCodeSchema })
 ])
 export const vocabularyBatchSchema = z
   .strictObject({

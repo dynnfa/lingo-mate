@@ -1,16 +1,18 @@
 import { randomUUID } from 'node:crypto'
 import type { SupportedLocale } from '../../../shared/preferences'
-import {
-  vocabularyAnalysisSchema,
-  type AddVocabularyBatchInput,
-  type VocabularyBatch,
-  type VocabularyItemResult,
-  type VocabularyErrorCode
+import type {
+  AddVocabularyBatchInput,
+  VocabularyBatch,
+  VocabularyErrorCode,
+  VocabularyItemResult,
+  VocabularyItemErrorCode
 } from '../../../shared/vocabulary'
 import { parseVocabularyInput, VocabularyError } from './parse-vocabulary-input'
-import type { StoredVocabulary, VocabularyRepository } from './vocabulary-repository'
+import { buildVocabularyInsertCommand, type VocabularyInsertCommand } from './vocabulary-insert'
+import type { VocabularyRepository } from './vocabulary-repository'
 import type { VocabularyAnalyzer } from './vocabulary-analyzer'
 import { abortableOperation } from './abortable-operation'
+import { VOCABULARY_PROMPT_VERSION } from '../../prompt/vocabulary-analysis'
 
 interface Execution {
   controller: AbortController
@@ -80,15 +82,19 @@ export class VocabularyModule {
           }
         : { inputIndex: item.inputIndex, term: item.term, status: 'failed', code: 'TIMEOUT' }
     )
-    const pending: Array<{ inputIndex: number; entry: StoredVocabulary }> = []
-    const fail = (index: number, code: VocabularyErrorCode): void => {
+    // 模型阶段只暂存已通过校验的写入命令；提交前取消直接丢弃，不接触数据库。
+    const pending: Array<{ inputIndex: number; command: VocabularyInsertCommand }> = []
+    const fail = (index: number, code: VocabularyItemErrorCode): void => {
       results[index] = { inputIndex: index, term: items[index].term, status: 'failed', code }
     }
     try {
       await options.onPhase?.('analyzing')
-      const newItems = items.filter((item) => {
-        if (item.sourceInputIndex !== undefined) return false
-        const existing = this.repository.find(input.wordLanguage, item.lookupKey)
+      const candidates = items.filter((item) => item.sourceInputIndex === undefined)
+      const existingByLookupKey = this.repository.findExisting(
+        candidates.map((item) => item.lookupKey)
+      )
+      const newItems = candidates.filter((item) => {
+        const existing = existingByLookupKey.get(item.lookupKey)
         if (!existing) return true
         results[item.inputIndex] = {
           inputIndex: item.inputIndex,
@@ -126,28 +132,25 @@ export class VocabularyModule {
             )
             if (execution.controller.signal.aborted) break
             if (result.status === 'unrecognized') throw new VocabularyError('UNRECOGNIZED')
-            const parsed = vocabularyAnalysisSchema.safeParse(result.analysis)
-            if (!parsed.success) throw new VocabularyError('INVALID_ANALYSIS')
-            const now = new Date().toISOString()
+            if (result.status !== 'insert') throw new VocabularyError('INVALID_ANALYSIS')
             pending.push({
               inputIndex: item.inputIndex,
-              entry: {
+              command: buildVocabularyInsertCommand(result.content, {
                 id: randomUUID(),
-                term: item.term,
-                lookupKey: item.lookupKey,
-                wordLanguage: input.wordLanguage,
-                explanationLanguage,
-                analysis: parsed.data,
-                analysisSource: 'llm',
-                analysisSchemaVersion: 1,
                 modelId: result.modelId,
-                promptVersion: result.promptVersion,
-                createdAt: now,
-                updatedAt: now
-              }
+                promptVersion: VOCABULARY_PROMPT_VERSION,
+                createdAt: new Date().toISOString()
+              })
             })
           } catch (cause) {
-            fail(item.inputIndex, cause instanceof VocabularyError ? cause.code : 'MODEL_ERROR')
+            // 工具调用能力缺失属于当前模型/接口的批次级配置错误；继续把它
+            // 降级为单词失败会伪装成已完成批次，并对其余词重复发送必败请求。
+            if (cause instanceof VocabularyError) {
+              if (cause.code === 'TOOL_CALL_NOT_SUPPORTED') throw cause
+              fail(item.inputIndex, cause.code)
+            } else {
+              fail(item.inputIndex, 'MODEL_ERROR')
+            }
           }
         }
       }
@@ -171,7 +174,7 @@ export class VocabularyModule {
             pending.forEach((item, index) => {
               results[item.inputIndex] = {
                 inputIndex: item.inputIndex,
-                term: item.entry.term,
+                term: item.command.parameters.term,
                 status: saved[index].status,
                 entryId: saved[index].id
               }
@@ -181,12 +184,12 @@ export class VocabularyModule {
           if (options.executionId) {
             return this.repository.saveBatchWithResult(
               options.executionId,
-              pending.map((item) => item.entry),
+              pending.map((item) => item.command),
               finalize
             )
           }
           const saved = pending.length
-            ? this.repository.saveBatch(pending.map((item) => item.entry))
+            ? this.repository.saveBatch(pending.map((item) => item.command))
             : []
           finalize(saved)
         } catch (cause) {

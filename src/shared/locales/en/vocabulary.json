@@ -1,0 +1,7 @@
+{
+  "feedback": {
+    "summary": "Processed {{total}} terms: {{saved}} added ({{savedTerms}}); {{existing}} already saved ({{existingTerms}}); {{duplicate}} repeated in this input ({{duplicateTerms}}); {{failed}} failed ({{failedTerms}}).",
+    "emptyList": "none",
+    "duplicateSourceFailed": "Repeated items whose source word failed were not saved."
+  }
+}

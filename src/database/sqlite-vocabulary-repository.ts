@@ -8,84 +8,115 @@ import {
   type ListVocabularyInput,
   type VocabularyBatch
 } from '../shared/vocabulary'
+import {
+  normalizeLookupKey,
+  VocabularyError
+} from '../core/learning/vocabulary/parse-vocabulary-input'
+import {
+  assertValidInsertCommand,
+  exampleSentenceListSchema,
+  type VocabularyInsertCommand
+} from '../core/learning/vocabulary/vocabulary-insert'
 import type {
-  StoredVocabulary,
   VocabularyRepository,
   VocabularyPage
 } from '../core/learning/vocabulary/vocabulary-repository'
-import { VocabularyError } from '../core/learning/vocabulary/parse-vocabulary-input'
 
-const storedSchema = vocabularyEntrySchema.extend({
-  lookupKey: z.string().min(1).max(100),
-  analysisSchemaVersion: z.literal(1),
-  modelId: z.string().min(1).max(200),
-  promptVersion: z.literal('vocabulary-v1'),
-  updatedAt: z.iso.datetime()
-})
+// v5 词表 9 列；历史迁移行允许四个内容字段为 NULL，读取时不得因此失败。
+const ROW_COLUMNS =
+  'id, term, phonetic, meaning, concept, example_sentences, model_id, prompt_version, created_at'
+const SELECT_ROWS = `SELECT ${ROW_COLUMNS} FROM vocabulary`
+
 const rowSchema = z.object({
   id: z.string(),
   term: z.string(),
-  lookup_key: z.string(),
-  word_language: z.string(),
-  explanation_language: z.string(),
-  analysis_json: z.string(),
-  analysis_schema_version: z.number(),
-  analysis_source: z.string(),
+  phonetic: z.string().nullable(),
+  meaning: z.string().nullable(),
+  concept: z.string().nullable(),
+  example_sentences: z.string().nullable(),
   model_id: z.string(),
   prompt_version: z.string(),
-  created_at: z.string(),
-  updated_at: z.string()
+  created_at: z.string()
 })
 function fromRow(raw: unknown): VocabularyEntry {
   const row = rowSchema.parse(raw)
-  const stored = storedSchema.parse({
+  return vocabularyEntrySchema.parse({
     id: row.id,
     term: row.term,
-    lookupKey: row.lookup_key,
-    wordLanguage: row.word_language,
-    explanationLanguage: row.explanation_language,
-    analysis: JSON.parse(row.analysis_json) as unknown,
-    analysisSchemaVersion: row.analysis_schema_version,
-    analysisSource: row.analysis_source,
-    modelId: row.model_id,
-    promptVersion: row.prompt_version,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
-  })
-  return vocabularyEntrySchema.parse({
-    id: stored.id,
-    term: stored.term,
-    wordLanguage: stored.wordLanguage,
-    explanationLanguage: stored.explanationLanguage,
-    analysis: stored.analysis,
-    analysisSource: stored.analysisSource,
-    createdAt: stored.createdAt
+    phonetic: row.phonetic,
+    meaning: row.meaning,
+    concept: row.concept,
+    exampleSentences: parseExampleSentences(row.example_sentences),
+    createdAt: row.created_at
   })
 }
+// NULL 表示历史未回填内容；非空但不符编码的值属于单条记录的数据错误，
+// 以 STORAGE_FAILED 暴露，不静默丢弃记录或整页。
+function parseExampleSentences(value: string | null): string[] | null {
+  if (value === null) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch {
+    throw new Error('Invalid example_sentences encoding')
+  }
+  if (!exampleSentenceListSchema.safeParse(parsed).success) {
+    throw new Error('Invalid example_sentences encoding')
+  }
+  return parsed as string[]
+}
+
+interface KeyIndexRow {
+  id: string
+  term: string
+}
+
 export class SqliteVocabularyRepository implements VocabularyRepository {
   constructor(private readonly database: Database.Database) {}
-  find(wordLanguage: 'en', lookupKey: string): VocabularyEntry | undefined {
+
+  find(lookupKey: string): VocabularyEntry | undefined {
     return this.withStorage(() => {
-      const row: unknown = this.database
-        .prepare('SELECT * FROM vocabulary WHERE word_language = ? AND lookup_key = ?')
-        .get(wordLanguage, lookupKey)
+      const rows = this.database
+        .prepare(`${SELECT_ROWS} ORDER BY created_at ASC, id ASC`)
+        .all() as unknown[]
+      const row = rows.find((raw) => normalizeLookupKey((raw as KeyIndexRow).term) === lookupKey)
       return row ? fromRow(row) : undefined
     })
   }
-  saveBatch(entries: StoredVocabulary[]): Array<{ id: string; status: 'saved' | 'existing' }> {
+
+  findExisting(lookupKeys: string[]): Map<string, VocabularyEntry> {
+    return this.withStorage(() => {
+      const wanted = new Set(lookupKeys)
+      const found = new Map<string, VocabularyEntry>()
+      if (!wanted.size) return found
+      const rows = this.database
+        .prepare(`${SELECT_ROWS} ORDER BY created_at ASC, id ASC`)
+        .all() as unknown[]
+      for (const raw of rows) {
+        const key = normalizeLookupKey((raw as KeyIndexRow).term)
+        if (wanted.has(key) && !found.has(key)) found.set(key, fromRow(raw))
+      }
+      return found
+    })
+  }
+
+  saveBatch(
+    commands: VocabularyInsertCommand[]
+  ): Array<{ id: string; status: 'saved' | 'existing' }> {
     return this.withStorage(() =>
-      this.database.transaction(() => this.saveEntries(entries)).immediate()
+      this.database.transaction(() => this.saveCommands(commands)).immediate()
     )
   }
+
   saveBatchWithResult(
     executionId: string,
-    entries: StoredVocabulary[],
+    commands: VocabularyInsertCommand[],
     finalize: (saved: Array<{ id: string; status: 'saved' | 'existing' }>) => VocabularyBatch
   ): VocabularyBatch {
     return this.withStorage(() =>
       this.database
         .transaction(() => {
-          const saved = this.saveEntries(entries)
+          const saved = this.saveCommands(commands)
           const batch = vocabularyBatchSchema.parse(finalize(saved))
           const updated = this.database
             .prepare(
@@ -100,17 +131,18 @@ export class SqliteVocabularyRepository implements VocabularyRepository {
         .immediate()
     )
   }
+
   list(raw: ListVocabularyInput): VocabularyPage {
     return this.withStorage(() => {
       const { limit, cursor } = listVocabularyInputSchema.parse(raw)
-      const rows = cursor
+      const rows: unknown[] = cursor
         ? this.database
             .prepare(
-              'SELECT * FROM vocabulary WHERE (created_at, id) < (?, ?) ORDER BY created_at DESC, id DESC LIMIT ?'
+              `${SELECT_ROWS} WHERE (created_at, id) < (?, ?) ORDER BY created_at DESC, id DESC LIMIT ?`
             )
             .all(cursor.createdAt, cursor.id, limit + 1)
         : this.database
-            .prepare('SELECT * FROM vocabulary ORDER BY created_at DESC, id DESC LIMIT ?')
+            .prepare(`${SELECT_ROWS} ORDER BY created_at DESC, id DESC LIMIT ?`)
             .all(limit + 1)
       const entries = rows.slice(0, limit).map(fromRow)
       const last = entries.at(-1)
@@ -122,6 +154,7 @@ export class SqliteVocabularyRepository implements VocabularyRepository {
       }
     })
   }
+
   private withStorage<T>(operation: () => T): T {
     try {
       return operation()
@@ -130,25 +163,33 @@ export class SqliteVocabularyRepository implements VocabularyRepository {
     }
   }
 
-  private saveEntries(
-    entries: StoredVocabulary[]
+  private saveCommands(
+    commands: VocabularyInsertCommand[]
   ): Array<{ id: string; status: 'saved' | 'existing' }> {
-    return entries.map((raw) => {
-      const entry = storedSchema.parse(raw)
-      const result = this.database
-        .prepare(
-          `INSERT INTO vocabulary
-          (id, term, lookup_key, word_language, explanation_language, analysis_json, analysis_schema_version, analysis_source, model_id, prompt_version, created_at, updated_at)
-          VALUES (@id, @term, @lookupKey, @wordLanguage, @explanationLanguage, @analysisJson, @analysisSchemaVersion, @analysisSource, @modelId, @promptVersion, @createdAt, @updatedAt)
-          ON CONFLICT(word_language, lookup_key) DO NOTHING`
-        )
-        .run({ ...entry, analysisJson: JSON.stringify(entry.analysis) })
-      if (result.changes) return { id: entry.id, status: 'saved' as const }
-      const row = this.database
-        .prepare('SELECT id FROM vocabulary WHERE word_language = ? AND lookup_key = ?')
-        .get(entry.wordLanguage, entry.lookupKey) as { id: string } | undefined
-      if (!row) throw new Error('Missing conflicting entry')
-      return { id: row.id, status: 'existing' as const }
+    // 词表没有 term 唯一约束；查重完全依赖本入口在事务内维护的 key 索引。
+    const index = this.loadKeyIndex()
+    return commands.map((command) => {
+      assertValidInsertCommand(command)
+      const key = normalizeLookupKey(command.parameters.term)
+      const existingId = index.get(key)
+      if (existingId !== undefined) return { id: existingId, status: 'existing' as const }
+      this.database.prepare(command.sql).run(command.parameters)
+      index.set(key, command.parameters.id)
+      return { id: command.parameters.id, status: 'saved' as const }
     })
+  }
+
+  // 每次提交在事务内重建索引：同 key 历史多行按 created_at ASC, id ASC 取首个，
+  // 本批新写入即时并入索引，两个连接并发写入也不会重复新增。
+  private loadKeyIndex(): Map<string, string> {
+    const rows = this.database
+      .prepare('SELECT id, term FROM vocabulary ORDER BY created_at ASC, id ASC')
+      .all() as KeyIndexRow[]
+    const index = new Map<string, string>()
+    for (const row of rows) {
+      const key = normalizeLookupKey(row.term)
+      if (!index.has(key)) index.set(key, row.id)
+    }
+    return index
   }
 }

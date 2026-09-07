@@ -19,6 +19,7 @@ function cases(): ConversationStatus[] {
     { kind: 'protocolError' },
     { kind: 'generationError', error: { code: 'MODEL_ERROR' } },
     { kind: 'generationError', error: { code: 'MODEL_NOT_CONFIGURED' } },
+    { kind: 'generationError', error: { code: 'TOOL_CALL_NOT_SUPPORTED' } },
     { kind: 'generationError', error: { code: 'CREDENTIAL_DECRYPT_FAILED' } },
     { kind: 'generationError', error: { code: 'PERSISTENCE_ERROR' } },
     { kind: 'generationError', error: { code: 'UNKNOWN_ERROR' } },
@@ -107,5 +108,11 @@ describe('conversation status translation', () => {
         error: { code: 'PERSISTENCE_ERROR' }
       })
     ).toBe('保存会话失败，请稍后重试。')
+    expect(
+      translateConversationStatus(t, {
+        kind: 'generationError',
+        error: { code: 'TOOL_CALL_NOT_SUPPORTED' }
+      })
+    ).toBe('当前模型或接口不支持词汇保存所需的工具调用，请更换模型或接口后重试。')
   })
 })

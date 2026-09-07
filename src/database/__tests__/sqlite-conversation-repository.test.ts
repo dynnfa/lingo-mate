@@ -98,7 +98,7 @@ function storedMessage(
 }
 
 describe('SqliteConversationRepository', () => {
-  it('creates the v4 schema for a fresh database', () => {
+  it('creates the latest schema for a fresh database', () => {
     const path = databasePath()
     const repository = openRepository(path)
 
@@ -111,7 +111,7 @@ describe('SqliteConversationRepository', () => {
 
     const raw = new Database(path)
     try {
-      expect(raw.pragma('user_version', { simple: true })).toBe(4)
+      expect(raw.pragma('user_version', { simple: true })).toBe(5)
       expect(
         raw
           .prepare(
@@ -265,9 +265,9 @@ describe('SqliteConversationRepository', () => {
   it('rejects databases from a newer schema version', () => {
     const path = databasePath()
     const raw = new Database(path)
-    raw.pragma('user_version = 5')
+    raw.pragma('user_version = 6')
     raw.close()
 
-    expect(() => openRepository(path)).toThrow('Unsupported database schema version: 5')
+    expect(() => openRepository(path)).toThrow('Unsupported database schema version: 6')
   })
 })
