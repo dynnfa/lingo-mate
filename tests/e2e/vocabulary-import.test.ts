@@ -6,19 +6,26 @@ import {
   waitForReady,
   withTempUserData,
   writeLocalePreference,
-  writeModelsConfig,
-  switchLanguage
+  writeModelsConfig
 } from './helpers'
 import { startVocabularyServer } from '../integration/fixtures/vocabulary-server'
 import type { LingoMateApi } from '../../src/shared/conversation'
 
-async function enterVocabulary(window: Page): Promise<void> {
-  await window.locator('#message').fill('/vocabulary')
-  await window.locator('#message').press('Enter')
-  await expect(window.locator('#vocabulary-input')).toBeFocused()
+async function selectVocabulary(window: Page): Promise<void> {
+  const input = window.locator('#message')
+  await input.fill('/vocabulary')
+  await input.press('Enter')
+  await expect(input).toHaveValue('/vocabulary ')
+  await expect(window.getByRole('region', { name: 'Conversation history' })).toBeVisible()
 }
 
-test('imports, deduplicates, shows meanings and pronunciation, and persists across app restart', async () => {
+async function submitVocabulary(window: Page, text: string): Promise<void> {
+  await selectVocabulary(window)
+  await window.locator('#message').fill(`/vocabulary ${text}`)
+  await window.locator('#message').press('Enter')
+}
+
+test('runs vocabulary inside the conversation, deduplicates, summarizes, and restores history', async () => {
   const server = await startVocabularyServer()
   try {
     await withTempUserData(async (directory) => {
@@ -28,48 +35,51 @@ test('imports, deduplicates, shows meanings and pronunciation, and persists acro
       try {
         let window = await app.firstWindow()
         await waitForReady(window)
-        const apiKeys = await window.evaluate(() =>
+
+        const conversationKeys = await window.evaluate(() =>
           Object.keys(
-            (globalThis as typeof globalThis & { api: LingoMateApi }).api.vocabulary
+            (globalThis as typeof globalThis & { api: LingoMateApi }).api.conversation
           ).sort()
         )
-        expect(apiKeys).toEqual(['addBatch', 'cancelBatch', 'list'])
-        await enterVocabulary(window)
-        await window.locator('#vocabulary-input').fill('apple, banana, orange, apple, bad')
-        await window.getByRole('button', { name: 'Analyze and save' }).click()
-        const results = window.getByRole('region', { name: 'Batch results' })
-        await expect(results).toContainText('3 saved')
-        await expect(results).toContainText('Same as entry 1')
-        await expect(window.locator('.vocabulary-entry')).toHaveCount(3)
-        const apple = window
-          .locator('.vocabulary-entry')
-          .filter({ has: window.getByRole('heading', { name: 'apple', exact: true }) })
-        await expect(apple).toContainText('/ˈæpəl/')
-        await expect(apple).toContainText('Follow the stress mark')
-        await expect(window.locator('.message')).toHaveCount(0)
+        expect(conversationKeys).toEqual([
+          'cancel',
+          'create',
+          'list',
+          'load',
+          'onEvent',
+          'retry',
+          'runSkill',
+          'send'
+        ])
+        await submitVocabulary(window, 'apple, banana, orange, apple, bad')
+        await expect(window.locator('.message.user').last()).toContainText(
+          '/vocabulary apple, banana, orange, apple, bad'
+        )
+        const firstReply = window.locator('.message.assistant').last()
+        await expect(firstReply).toContainText(
+          'Vocabulary result summary from the configured model.'
+        )
+        await expect(firstReply).toContainText('3 added')
+        await expect(firstReply).toContainText('1 duplicate in this input')
+        await expect(firstReply).toContainText('1 failed')
         expect(server.terms).toHaveLength(4)
-        await window.locator('#vocabulary-input').fill('apple, banana, orange')
-        await window.getByRole('button', { name: 'Analyze and save' }).click()
-        await expect(results).toContainText('3 existing')
+        expect(server.summaries).toHaveLength(1)
+
+        await submitVocabulary(window, 'apple, banana, orange, apple')
+        const secondReply = window.locator('.message.assistant').last()
+        await expect(secondReply).toContainText('0 added')
+        await expect(secondReply).toContainText('3 existing')
+        await expect(secondReply).toContainText('1 duplicate in this input')
         expect(server.terms).toHaveLength(4)
-        await switchLanguage(window, '中文', 'zh-CN')
-        await expect(window.locator('.vocabulary-entry')).toHaveCount(3)
-        expect(server.terms).toHaveLength(4)
-        await window.screenshot({ path: test.info().outputPath('vocabulary.png') })
-        await window.locator('.vocabulary-entry').first().scrollIntoViewIfNeeded()
-        await window.screenshot({ path: test.info().outputPath('vocabulary-list.png') })
+        expect(server.summaries).toHaveLength(2)
+
         await app.close()
         app = await launchApp(directory)
         window = await app.firstWindow()
         await waitForReady(window)
-        await enterVocabulary(window)
-        await expect(window.locator('.vocabulary-entry')).toHaveCount(3)
-        const entries = await window.evaluate(() =>
-          (globalThis as typeof globalThis & { api: LingoMateApi }).api.vocabulary.list({})
-        )
-        expect(entries.status).toBe('ok')
-        if (entries.status === 'ok')
-          expect(entries.entries.every((entry) => entry.explanationLanguage === 'en')).toBe(true)
+        await expect(window.locator('.message.user')).toHaveCount(2)
+        await expect(window.locator('.message.assistant')).toHaveCount(2)
+        await expect(window.locator('.message.assistant').last()).toContainText('0 added')
       } finally {
         await app.close()
       }
@@ -79,75 +89,45 @@ test('imports, deduplicates, shows meanings and pronunciation, and persists acro
   }
 })
 
-test('missing config and cancellation produce no saved entries and leave input usable', async () => {
+test('keeps verified facts and offers description-only retry when the summary model fails', async () => {
+  await withTempUserData(async (directory) => {
+    await writeLocalePreference(directory, 'en')
+    const app = await launchApp(directory)
+    try {
+      const window = await app.firstWindow()
+      await waitForReady(window)
+      await submitVocabulary(window, 'apple')
+
+      const reply = window.locator('.message.assistant').last()
+      await expect(reply).toContainText('Vocabulary processing completed')
+      await expect(reply).toContainText('0 added')
+      await expect(reply).toContainText('1 failed')
+      await expect(window.getByRole('button', { name: 'Retry' })).toBeVisible()
+    } finally {
+      await app.close()
+    }
+  })
+})
+
+test('cancels analysis before commit and keeps the conversation input usable', async () => {
   const server = await startVocabularyServer()
   try {
     await withTempUserData(async (directory) => {
       await writeLocalePreference(directory, 'en')
+      await writeModelsConfig(directory, server.baseUrl, 'test-model')
       const app = await launchApp(directory)
       try {
         const window = await app.firstWindow()
         await waitForReady(window)
-        await enterVocabulary(window)
-        await window.locator('#vocabulary-input').fill('apple')
-        await window.getByRole('button', { name: 'Analyze and save' }).click()
-        await expect(window.getByRole('region', { name: 'Batch results' })).toContainText(
-          'Configure a real model'
-        )
-        await expect(window.locator('.vocabulary-entry')).toHaveCount(0)
-        await window.evaluate(async (baseUrl) => {
-          const api = (globalThis as typeof globalThis & { api: LingoMateApi }).api
-          await api.models.saveSettings({
-            protocol: 'openai-compatible',
-            baseUrl,
-            modelId: 'test-model',
-            credential: { action: 'remove' }
-          })
-        }, server.baseUrl)
-        await window.locator('#vocabulary-input').fill('slow,orange')
-        await window.getByRole('button', { name: 'Analyze and save' }).click()
-        await expect(window.locator('#vocabulary-input')).toBeDisabled()
-        await window.getByRole('button', { name: 'Cancel batch' }).click()
-        await expect(window.getByRole('region', { name: 'Batch results' })).toContainText(
-          'Batch cancelled'
-        )
-        await expect(window.locator('#vocabulary-input')).toHaveValue('slow,orange')
-        await expect(window.locator('#vocabulary-input')).toBeEnabled()
-        await expect(window.locator('.vocabulary-entry')).toHaveCount(0)
-      } finally {
-        await app.close()
-      }
-    })
-  } finally {
-    await server.close()
-  }
-})
-
-test('closing the window during analysis cancels the batch before a restart', async () => {
-  const server = await startVocabularyServer()
-  try {
-    await withTempUserData(async (directory) => {
-      await writeLocalePreference(directory, 'en')
-      await writeModelsConfig(directory, server.baseUrl, 'test-model')
-      let app = await launchApp(directory)
-      try {
-        let window = await app.firstWindow()
-        await waitForReady(window)
-        await enterVocabulary(window)
-        await window.locator('#vocabulary-input').fill('slow,orange')
-        await window.getByRole('button', { name: 'Analyze and save' }).click()
+        await submitVocabulary(window, 'slow, orange')
         await expect.poll(() => server.terms.includes('slow')).toBe(true)
-        await window.close()
-        await app.close()
-        app = await launchApp(directory)
-        window = await app.firstWindow()
-        await waitForReady(window)
-        await enterVocabulary(window)
-        await expect(window.getByText('No vocabulary saved yet.')).toBeVisible()
-        const listed = await window.evaluate(() =>
-          (globalThis as typeof globalThis & { api: LingoMateApi }).api.vocabulary.list({})
-        )
-        expect(listed).toEqual({ status: 'ok', entries: [] })
+        await window.getByRole('button', { name: 'Cancel' }).click()
+        await expect(window.getByText('Cancelled. You can retry.')).toBeVisible()
+        await expect(window.locator('#message')).toBeEnabled()
+        await expect(window.locator('.message.assistant')).toHaveCount(0)
+
+        await submitVocabulary(window, 'orange')
+        await expect(window.locator('.message.assistant').last()).toContainText('1 added')
       } finally {
         await app.close()
       }

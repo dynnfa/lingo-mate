@@ -10,6 +10,7 @@ const IPC_FAILURE_KEYS: Record<StatusOperation, IpcFailureKey> = {
   list: 'errors:ipc.list',
   create: 'errors:ipc.create',
   send: 'errors:ipc.send',
+  runSkill: 'errors:ipc.runSkill',
   cancel: 'errors:ipc.cancel',
   retry: 'errors:ipc.retry'
 }
@@ -19,6 +20,7 @@ type IpcFailureKey =
   | 'errors:ipc.list'
   | 'errors:ipc.create'
   | 'errors:ipc.send'
+  | 'errors:ipc.runSkill'
   | 'errors:ipc.cancel'
   | 'errors:ipc.retry'
 
@@ -37,8 +39,16 @@ export function translateConversationStatus(
       return t('conversation:status.ready')
     case 'generating':
       return t('conversation:status.generating')
+    case 'skillPhase':
+      if (status.phase === 'analyzing') return t('conversation:status.analyzing')
+      if (status.phase === 'committing') return t('conversation:status.committing')
+      return t('conversation:status.summarizing')
     case 'completed':
       return t('conversation:status.completed')
+    case 'skillDescriptionFailed':
+      return status.cancelled
+        ? t('conversation:status.descriptionCancelled')
+        : t('conversation:status.descriptionFailed')
     case 'cancelled':
       return t('conversation:status.cancelled')
     case 'protocolError':
@@ -66,6 +76,10 @@ function translateRequestError(t: StatusTFunction, error: ConversationRequestErr
       return t('errors:retryNotAllowed')
     case 'REQUEST_NOT_FOUND':
       return t('errors:requestNotFound')
+    case 'INVALID_INPUT':
+      return t('errors:invalidInput')
+    case 'UNTRUSTED_SOURCE':
+      return t('errors:untrustedSource')
     case 'PERSISTENCE_ERROR':
       return t('errors:persistence')
     case 'UNKNOWN_ERROR':

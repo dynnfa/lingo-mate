@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import type { VocabularyApi } from './vocabulary'
 import type { ModelsApi } from './models'
 import type { PreferencesApi } from './preferences'
 
@@ -8,6 +7,7 @@ export const CONVERSATION_CHANNELS = {
   list: 'conversation:list',
   load: 'conversation:load',
   send: 'conversation:send',
+  runSkill: 'conversation:runSkill',
   retry: 'conversation:retry',
   cancel: 'conversation:cancel',
   event: 'conversation:event'
@@ -27,7 +27,8 @@ export const conversationMessageSchema = z.object({
   sessionId: identifierSchema,
   role: z.enum(['user', 'assistant']),
   content: z.string(),
-  createdAt: timestampSchema
+  createdAt: timestampSchema,
+  retryable: z.boolean().optional()
 })
 
 // send 结果与 started 事件共享同一 canonical 起始载荷；
@@ -43,6 +44,17 @@ export const sendMessageInputSchema = z.object({
   requestId: identifierSchema,
   sessionId: identifierSchema,
   text: z.string().trim().min(1).max(4_000)
+})
+
+export const conversationSkillIdSchema = z.literal('vocabulary')
+export const runConversationSkillInputSchema = z.strictObject({
+  requestId: identifierSchema,
+  sessionId: identifierSchema,
+  skillId: conversationSkillIdSchema,
+  arguments: z.strictObject({
+    text: z.string().min(1).max(4_000),
+    wordLanguage: z.literal('en')
+  })
 })
 
 export const retryMessageInputSchema = z.object({
@@ -63,6 +75,8 @@ export const conversationRequestErrorSchema = z.discriminatedUnion('code', [
   z.object({ code: z.literal('REQUEST_BUSY') }),
   z.object({ code: z.literal('RETRY_NOT_ALLOWED') }),
   z.object({ code: z.literal('REQUEST_NOT_FOUND') }),
+  z.object({ code: z.literal('INVALID_INPUT') }),
+  z.object({ code: z.literal('UNTRUSTED_SOURCE') }),
   z.object({ code: z.literal('PERSISTENCE_ERROR') }),
   z.object({ code: z.literal('UNKNOWN_ERROR') })
 ])
@@ -100,6 +114,7 @@ const generationResultSchema = z.discriminatedUnion('status', [
 ])
 
 export const sendMessageResultSchema = generationResultSchema
+export const runConversationSkillResultSchema = generationResultSchema
 export const retryMessageResultSchema = generationResultSchema
 
 export const cancelMessageResultSchema = z.discriminatedUnion('status', [
@@ -129,13 +144,19 @@ export const conversationEventSchema = z.discriminatedUnion('type', [
     assistantMessageId: identifierSchema
   }),
   eventBaseSchema.extend({
+    type: z.literal('skillPhase'),
+    phase: z.enum(['analyzing', 'committing', 'summarizing'])
+  }),
+  eventBaseSchema.extend({
     type: z.literal('chunk'),
     messageId: identifierSchema,
     delta: z.string()
   }),
   eventBaseSchema.extend({
     type: z.literal('completed'),
-    message: conversationMessageSchema
+    message: conversationMessageSchema,
+    skillCompletion: z.enum(['complete', 'description_failed', 'description_cancelled']).optional(),
+    retryableUserMessageId: identifierSchema.optional()
   }),
   eventBaseSchema.extend({
     type: z.literal('cancelled'),
@@ -149,9 +170,11 @@ export const conversationEventSchema = z.discriminatedUnion('type', [
 ])
 
 export type SendMessageInput = z.infer<typeof sendMessageInputSchema>
+export type RunConversationSkillInput = z.infer<typeof runConversationSkillInputSchema>
 export type RetryMessageInput = z.infer<typeof retryMessageInputSchema>
 export type CancelMessageInput = z.infer<typeof cancelMessageInputSchema>
 export type SendMessageResult = z.infer<typeof sendMessageResultSchema>
+export type RunConversationSkillResult = z.infer<typeof runConversationSkillResultSchema>
 export type RetryMessageResult = z.infer<typeof retryMessageResultSchema>
 export type CancelMessageResult = z.infer<typeof cancelMessageResultSchema>
 export type GenerationStarted = z.infer<typeof generationStartedSchema>
@@ -181,13 +204,13 @@ export interface ConversationApi {
   list(): Promise<ListConversationsResult>
   load(input: LoadConversationInput): Promise<LoadConversationResult>
   send(input: SendMessageInput): Promise<SendMessageResult>
+  runSkill(input: RunConversationSkillInput): Promise<RunConversationSkillResult>
   retry(input: RetryMessageInput): Promise<RetryMessageResult>
   cancel(input: CancelMessageInput): Promise<CancelMessageResult>
   onEvent(listener: (event: ConversationEvent) => void): () => void
 }
 
 export interface LingoMateApi {
-  vocabulary: VocabularyApi
   conversation: ConversationApi
   preferences: PreferencesApi
   models: ModelsApi

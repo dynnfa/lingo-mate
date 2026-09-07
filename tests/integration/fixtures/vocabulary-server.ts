@@ -5,6 +5,7 @@ import { ANALYSIS } from '../../../src/core/learning/vocabulary/__tests__/fixtur
 export interface VocabularyServer {
   baseUrl: string
   terms: string[]
+  summaries: unknown[]
   requests: Array<{
     model: string
     messages: Array<{ role: string; content: string }>
@@ -14,6 +15,7 @@ export interface VocabularyServer {
 }
 export async function startVocabularyServer(): Promise<VocabularyServer> {
   const terms: string[] = []
+  const summaries: unknown[] = []
   const requests: VocabularyServer['requests'] = []
   const timers = new Set<ReturnType<typeof setTimeout>>()
   const respond = (res: ServerResponse, content: unknown): void => {
@@ -32,6 +34,16 @@ export async function startVocabularyServer(): Promise<VocabularyServer> {
       })
     )
   }
+  const respondText = (res: ServerResponse, content: string): void => {
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(
+      JSON.stringify({
+        id: 'fixture-summary',
+        object: 'chat.completion',
+        choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content } }]
+      })
+    )
+  }
   const server = createServer((req, res) => {
     void (async () => {
       const buffers: Buffer[] = []
@@ -40,7 +52,17 @@ export async function startVocabularyServer(): Promise<VocabularyServer> {
         Buffer.concat(buffers).toString('utf8')
       ) as VocabularyServer['requests'][number]
       requests.push(body)
-      const data = JSON.parse(body.messages[1].content) as { term: string }
+      const data = JSON.parse(body.messages[1].content) as { term?: string; counts?: unknown }
+      if (!data.term && data.counts) {
+        summaries.push(data)
+        respondText(res, 'Vocabulary result summary from the configured model.')
+        return
+      }
+      if (!data.term) {
+        res.writeHead(400)
+        res.end()
+        return
+      }
       terms.push(data.term)
       if (data.term === 'service-error') {
         res.writeHead(503)
@@ -100,6 +122,7 @@ export async function startVocabularyServer(): Promise<VocabularyServer> {
   return {
     baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`,
     terms,
+    summaries,
     requests,
     close: async () => {
       for (const timer of timers) clearTimeout(timer)

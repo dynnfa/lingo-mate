@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it } from 'vitest'
 import { openDatabase } from '../database'
@@ -30,7 +31,7 @@ describe('vocabulary persistence and migrations', () => {
       .run('session', 'before', 'before')
     migrateDatabase(database)
     migrateDatabase(database)
-    expect(database.pragma('user_version', { simple: true })).toBe(3)
+    expect(database.pragma('user_version', { simple: true })).toBe(4)
     expect(database.prepare('SELECT id FROM conversations').all()).toEqual([{ id: 'session' }])
     expect(new SqliteVocabularyRepository(database).list({})).toEqual({ entries: [] })
   })
@@ -109,5 +110,57 @@ describe('vocabulary persistence and migrations', () => {
     repository.saveBatch([stored()])
     database.exec('UPDATE vocabulary SET analysis_schema_version = 2')
     expect(() => repository.list({})).toThrow('STORAGE_FAILED')
+  })
+
+  it('commits vocabulary and the durable batch report atomically, including zero inserts', () => {
+    const database = open()
+    const repository = new SqliteVocabularyRepository(database)
+    const sessionId = randomUUID()
+    const messageId = randomUUID()
+    const executionId = randomUUID()
+    const stamp = new Date().toISOString()
+    database.prepare('INSERT INTO conversations VALUES (?, ?, ?)').run(sessionId, stamp, stamp)
+    database
+      .prepare('INSERT INTO conversation_messages VALUES (?, ?, ?, ?, ?)')
+      .run(messageId, sessionId, 'user', '/vocabulary apple', stamp)
+    database
+      .prepare(
+        `INSERT INTO conversation_skill_executions
+         (id, session_id, user_message_id, skill_id, arguments_json, explanation_language,
+          phase, created_at, updated_at)
+         VALUES (?, ?, ?, 'vocabulary', ?, 'en', 'committing', ?, ?)`
+      )
+      .run(
+        executionId,
+        sessionId,
+        messageId,
+        JSON.stringify({ text: 'apple', wordLanguage: 'en' }),
+        stamp,
+        stamp
+      )
+
+    const entry = stored('apple', { explanationLanguage: 'en' })
+    const batch = repository.saveBatchWithResult(executionId, [entry], ([saved]) => ({
+      requestId: randomUUID(),
+      outcome: 'completed',
+      explanationLanguage: 'en',
+      items: [{ inputIndex: 0, term: 'apple', status: saved.status, entryId: saved.id }],
+      counts: {
+        total: 1,
+        saved: saved.status === 'saved' ? 1 : 0,
+        existing: saved.status === 'existing' ? 1 : 0,
+        duplicate: 0,
+        failed: 0
+      }
+    }))
+    expect(batch.counts.saved).toBe(1)
+    expect(
+      database.prepare('SELECT phase, batch_json FROM conversation_skill_executions').get()
+    ).toMatchObject({ phase: 'summarizing', batch_json: expect.stringContaining('"saved":1') })
+
+    expect(() =>
+      repository.saveBatchWithResult(randomUUID(), [stored('orange')], () => batch)
+    ).toThrow('STORAGE_FAILED')
+    expect(repository.find('en', 'orange')).toBeUndefined()
   })
 })

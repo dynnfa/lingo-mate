@@ -47,6 +47,7 @@ function apiStub(overrides: Partial<ConversationApi>): ConversationApi {
     list: unconfigured('list'),
     load: unconfigured('load'),
     send: unconfigured('send'),
+    runSkill: unconfigured('runSkill'),
     retry: unconfigured('retry'),
     cancel: unconfigured('cancel'),
     onEvent: unconfigured('onEvent'),

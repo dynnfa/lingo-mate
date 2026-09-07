@@ -142,11 +142,6 @@ function installApiMock(
   }
 
   const api: LingoMateApi = {
-    vocabulary: {
-      list: async () => ({ status: 'ok', entries: [] }),
-      addBatch: async () => ({ status: 'error', error: { code: 'MODEL_NOT_CONFIGURED' } }),
-      cancelBatch: async () => ({ status: 'ok', outcome: 'too_late' })
-    },
     preferences,
     // App 测试不关注模型设置；提供未配置的稳定桩供 Settings 页读取。
     models: modelsApiStub(),
@@ -188,6 +183,9 @@ function installApiMock(
         userContent.set(generation.userMessage.messageId, input.text)
         const fallback = { status: 'ok' as const, accepted: true as const, generation }
         return setup.send?.(generation) ?? fallback
+      },
+      async runSkill() {
+        return { status: 'error', error: { code: 'INVALID_INPUT' } }
       },
       async retry(input) {
         mock.calls.retry.push(input)

@@ -7,6 +7,8 @@
   "requestBusy": "This reply request is already being processed.",
   "retryNotAllowed": "This message can't be retried right now.",
   "requestNotFound": "No active reply request was found.",
+  "invalidInput": "The request is invalid. Check the vocabulary input and try again.",
+  "untrustedSource": "This action is only available from the application window.",
   "persistence": "Couldn't access local conversation data. Please try again later.",
   "unknown": "Something went wrong. Please try again later.",
   "generation": {
@@ -20,6 +22,7 @@
     "list": "Couldn't refresh the conversation list. Please try again later.",
     "create": "Couldn't create a conversation. Please try again later.",
     "send": "Couldn't send your message. Please try again later.",
+    "runSkill": "Couldn't start the vocabulary action. Please try again later.",
     "cancel": "Couldn't cancel the reply. Please try again later.",
     "retry": "Couldn't retry. Please try again later."
   },

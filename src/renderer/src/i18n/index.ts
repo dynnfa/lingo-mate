@@ -1,5 +1,3 @@
-import vocabularyEn from './locales/en/vocabulary.json'
-import vocabularyZhCN from './locales/zh-CN/vocabulary.json'
 import { createInstance, type i18n as I18nextInstance, type Resource } from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import { SUPPORTED_LOCALES, type SupportedLocale } from '../../../shared/preferences'
@@ -11,19 +9,17 @@ import conversationZhCN from './locales/zh-CN/conversation.json'
 import errorsZhCN from './locales/zh-CN/errors.json'
 
 export const FALLBACK_LOCALE = 'zh-CN'
-export const I18N_NAMESPACES = ['common', 'conversation', 'errors', 'vocabulary'] as const
+export const I18N_NAMESPACES = ['common', 'conversation', 'errors'] as const
 
 // 资源静态打包进渲染进程；不引入 HTTP backend 或语言探测插件，
 // 界面语言统一由 Main 解析后传入，避免浏览器与桌面偏好形成两套来源。
 export const bundledResources = {
   'zh-CN': {
-    vocabulary: vocabularyZhCN,
     common: commonZhCN,
     conversation: conversationZhCN,
     errors: errorsZhCN
   },
   en: {
-    vocabulary: vocabularyEn,
     common: commonEn,
     conversation: conversationEn,
     errors: errorsEn

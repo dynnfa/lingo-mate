@@ -1,7 +1,35 @@
 // `/` 行动选择器的展示元数据与纯函数：只描述稳定身份与文案 key，
-// 不包含 Prompt、业务执行逻辑或跨进程协议；词汇行动由独立录入模式执行。
+// 不包含 Prompt 或业务执行逻辑；vocabulary 选择会转换为类型化会话 skill 提交。
 
 export type ConversationActionId = 'translate' | 'polish' | 'practice' | 'vocabulary'
+export type SelectedConversationSkillId = 'vocabulary'
+
+export const VOCABULARY_COMMAND_PREFIX = '/vocabulary'
+
+export type VocabularyDraftResult =
+  { status: 'ok'; text: string } | { status: 'empty' } | { status: 'invalid-prefix' }
+
+export function isSelectedSkillDraft(
+  draft: string,
+  selectedSkillId: SelectedConversationSkillId | null
+): boolean {
+  return (
+    selectedSkillId !== 'vocabulary' ||
+    draft === VOCABULARY_COMMAND_PREFIX ||
+    /^\/vocabulary\s/u.test(draft)
+  )
+}
+
+export function extractVocabularyDraft(
+  draft: string,
+  selectedSkillId: SelectedConversationSkillId | null
+): VocabularyDraftResult {
+  if (selectedSkillId !== 'vocabulary') return { status: 'invalid-prefix' }
+  const prefix = /^\/vocabulary\s+/u.exec(draft)?.[0]
+  if (!prefix) return { status: 'invalid-prefix' }
+  const text = draft.slice(prefix.length).trim()
+  return text ? { status: 'ok', text } : { status: 'empty' }
+}
 
 // 文案 key 显式枚举：类型以 zh-CN 资源为基准，拼错在类型检查阶段暴露，
 // 双语 key 集合一致性由 resources.test.ts 保证。

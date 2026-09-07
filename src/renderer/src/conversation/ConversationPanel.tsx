@@ -1,13 +1,15 @@
-import { VocabularyPanel } from '../vocabulary/VocabularyPanel'
 import { useRef, useState, type KeyboardEvent, type SyntheticEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { translateConversationStatus } from './status-messages'
 import { ACTION_PICKER_ID, ConversationActionPicker } from './ConversationActionPicker'
 import {
   CONVERSATION_ACTIONS,
+  extractVocabularyDraft,
   filterConversationActions,
+  isSelectedSkillDraft,
   parseSlashTrigger,
-  type ConversationActionMeta
+  type ConversationActionMeta,
+  type SelectedConversationSkillId
 } from './conversation-actions'
 import type { ConversationStatus, DisplayMessage } from './conversation-state'
 
@@ -16,7 +18,11 @@ interface ConversationPanelProps {
   status: ConversationStatus
   generating: boolean
   composerLocked: boolean
-  onSend: (text: string) => void
+  onSend: (text: string) => boolean | void | Promise<boolean | void>
+  onRunSkill?: (input: {
+    skillId: 'vocabulary'
+    text: string
+  }) => boolean | void | Promise<boolean | void>
   onCancel: () => void
   onRetry: (messageId: string) => void
 }
@@ -33,12 +39,14 @@ export function ConversationPanel({
   generating,
   composerLocked,
   onSend,
+  onRunSkill,
   onCancel,
   onRetry
 }: ConversationPanelProps): React.JSX.Element {
   const { t } = useTranslation(['common', 'conversation', 'errors'])
   const [draft, setDraft] = useState('')
-  const [vocabularyMode, setVocabularyMode] = useState(false)
+  const [selectedSkillId, setSelectedSkillId] = useState<SelectedConversationSkillId | null>(null)
+  const [composerError, setComposerError] = useState<string | null>(null)
   const [composing, setComposing] = useState(false)
   // 组合开始时的查询词：组合期间冻结候选，结束后再按最新草稿过滤。
   const [compositionQuery, setCompositionQuery] = useState<string | undefined>(undefined)
@@ -73,9 +81,11 @@ export function ConversationPanel({
   // 替换后的草稿仍以 `/` 开头，用锁定抑制避免完成后立即弹回。
   const selectAction = (action: ConversationActionMeta): void => {
     if (action.id === 'vocabulary') {
-      setVocabularyMode(true)
-      setDraft('')
+      setSelectedSkillId('vocabulary')
+      setDraft('/vocabulary ')
+      setComposerError(null)
       closePicker('latched')
+      inputRef.current?.focus()
       return
     }
     setDraft(`/${action.command} `)
@@ -85,6 +95,11 @@ export function ConversationPanel({
 
   const updateDraft = (nextDraft: string): void => {
     setDraft(nextDraft)
+    setComposerError(null)
+    if (!isSelectedSkillDraft(nextDraft, selectedSkillId)) {
+      setSelectedSkillId(null)
+      setDismissal('none')
+    }
     // 草稿变化时重置高亮（查询变化后重新高亮第一项）。
     setHighlightedActionId(null)
     if (!nextDraft.startsWith('/')) {
@@ -133,23 +148,32 @@ export function ConversationPanel({
     // 弹层打开或输入法组合期间不发送；不能只依赖按钮禁用或键盘事件。
     if (pickerOpen || composing) return
     if (composerLocked || !draft.trim()) return
-    updateDraft('')
-    // 传原始草稿，trim 由 Controller 完成。
-    onSend(draft)
-  }
 
-  if (vocabularyMode)
-    return (
-      <div className="conversation-panel">
-        <VocabularyPanel
-          onExit={() => {
-            setVocabularyMode(false)
-            closePicker('soft')
-            requestAnimationFrame(() => inputRef.current?.focus())
-          }}
-        />
-      </div>
-    )
+    if (selectedSkillId === 'vocabulary') {
+      const parsed = extractVocabularyDraft(draft, selectedSkillId)
+      if (parsed.status !== 'ok') {
+        setComposerError(t('conversation:composer.vocabularyRequired'))
+        return
+      }
+      const submission = onRunSkill?.({ skillId: 'vocabulary', text: parsed.text })
+      const clearAcceptedSkill = (accepted: boolean | void): void => {
+        if (accepted === false) return
+        setSelectedSkillId(null)
+        updateDraft('')
+      }
+      if (submission instanceof Promise) void submission.then(clearAcceptedSkill)
+      else clearAcceptedSkill(submission)
+      return
+    }
+
+    // 请求被 Main 接受后才清空草稿；IPC/校验失败时保留用户输入。
+    const submission = onSend(draft)
+    if (submission instanceof Promise) {
+      void submission.then((accepted) => {
+        if (accepted !== false) updateDraft('')
+      })
+    } else if (submission !== false) updateDraft('')
+  }
 
   return (
     <div className="conversation-panel">
@@ -218,7 +242,7 @@ export function ConversationPanel({
             aria-label={t('common:composer.label')}
             disabled={composerLocked}
             id="message"
-            maxLength={4000}
+            maxLength={4012}
             onBlur={() => setInputFocused(false)}
             onChange={(event) => updateDraft(event.target.value)}
             onCompositionEnd={() => setComposing(false)}
@@ -247,6 +271,11 @@ export function ConversationPanel({
             </button>
           )}
         </div>
+        {composerError ? (
+          <p className="composer-error" role="alert">
+            {composerError}
+          </p>
+        ) : null}
       </form>
     </div>
   )

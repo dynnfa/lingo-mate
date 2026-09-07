@@ -2,9 +2,11 @@ import type Database from 'better-sqlite3'
 import { z } from 'zod'
 import {
   vocabularyEntrySchema,
+  vocabularyBatchSchema,
   listVocabularyInputSchema,
   type VocabularyEntry,
-  type ListVocabularyInput
+  type ListVocabularyInput,
+  type VocabularyBatch
 } from '../shared/vocabulary'
 import type {
   StoredVocabulary,
@@ -72,24 +74,29 @@ export class SqliteVocabularyRepository implements VocabularyRepository {
   }
   saveBatch(entries: StoredVocabulary[]): Array<{ id: string; status: 'saved' | 'existing' }> {
     return this.withStorage(() =>
+      this.database.transaction(() => this.saveEntries(entries)).immediate()
+    )
+  }
+  saveBatchWithResult(
+    executionId: string,
+    entries: StoredVocabulary[],
+    finalize: (saved: Array<{ id: string; status: 'saved' | 'existing' }>) => VocabularyBatch
+  ): VocabularyBatch {
+    return this.withStorage(() =>
       this.database
-        .transaction(() =>
-          entries.map((raw) => {
-            const entry = storedSchema.parse(raw)
-            const result = this.database
-              .prepare(
-                `INSERT INTO vocabulary
-        (id, term, lookup_key, word_language, explanation_language, analysis_json, analysis_schema_version, analysis_source, model_id, prompt_version, created_at, updated_at)
-        VALUES (@id, @term, @lookupKey, @wordLanguage, @explanationLanguage, @analysisJson, @analysisSchemaVersion, @analysisSource, @modelId, @promptVersion, @createdAt, @updatedAt)
-        ON CONFLICT(word_language, lookup_key) DO NOTHING`
-              )
-              .run({ ...entry, analysisJson: JSON.stringify(entry.analysis) })
-            if (result.changes) return { id: entry.id, status: 'saved' as const }
-            const existing = this.find(entry.wordLanguage, entry.lookupKey)
-            if (!existing) throw new Error('Missing conflicting entry')
-            return { id: existing.id, status: 'existing' as const }
-          })
-        )
+        .transaction(() => {
+          const saved = this.saveEntries(entries)
+          const batch = vocabularyBatchSchema.parse(finalize(saved))
+          const updated = this.database
+            .prepare(
+              `UPDATE conversation_skill_executions
+               SET batch_json = ?, phase = 'summarizing', updated_at = ?
+               WHERE id = ? AND batch_json IS NULL`
+            )
+            .run(JSON.stringify(batch), new Date().toISOString(), executionId)
+          if (updated.changes !== 1) throw new Error('Missing or already committed skill execution')
+          return batch
+        })
         .immediate()
     )
   }
@@ -121,5 +128,27 @@ export class SqliteVocabularyRepository implements VocabularyRepository {
     } catch (cause) {
       throw new VocabularyError('STORAGE_FAILED', { cause })
     }
+  }
+
+  private saveEntries(
+    entries: StoredVocabulary[]
+  ): Array<{ id: string; status: 'saved' | 'existing' }> {
+    return entries.map((raw) => {
+      const entry = storedSchema.parse(raw)
+      const result = this.database
+        .prepare(
+          `INSERT INTO vocabulary
+          (id, term, lookup_key, word_language, explanation_language, analysis_json, analysis_schema_version, analysis_source, model_id, prompt_version, created_at, updated_at)
+          VALUES (@id, @term, @lookupKey, @wordLanguage, @explanationLanguage, @analysisJson, @analysisSchemaVersion, @analysisSource, @modelId, @promptVersion, @createdAt, @updatedAt)
+          ON CONFLICT(word_language, lookup_key) DO NOTHING`
+        )
+        .run({ ...entry, analysisJson: JSON.stringify(entry.analysis) })
+      if (result.changes) return { id: entry.id, status: 'saved' as const }
+      const row = this.database
+        .prepare('SELECT id FROM vocabulary WHERE word_language = ? AND lookup_key = ?')
+        .get(entry.wordLanguage, entry.lookupKey) as { id: string } | undefined
+      if (!row) throw new Error('Missing conflicting entry')
+      return { id: row.id, status: 'existing' as const }
+    })
   }
 }

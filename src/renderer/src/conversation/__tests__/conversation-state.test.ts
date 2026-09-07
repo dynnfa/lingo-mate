@@ -273,6 +273,23 @@ describe('conversation projection reducer', () => {
       expect(findMessage(state, USER_MESSAGE_ID)).toMatchObject({ retryable: true })
       expect(isGenerating(state)).toBe(false)
     })
+
+    it('keeps deterministic skill facts and marks only the source user retryable', () => {
+      const state = reduceConversation(startedWithChunks(), {
+        type: 'generationEvent',
+        event: {
+          ...completedEvent,
+          message: { ...completedEvent.message, content: 'Verified vocabulary facts' },
+          skillCompletion: 'description_failed',
+          retryableUserMessageId: USER_MESSAGE_ID
+        }
+      })
+
+      expect(findMessage(state, ASSISTANT_MESSAGE_ID)?.content).toBe('Verified vocabulary facts')
+      expect(findMessage(state, USER_MESSAGE_ID)?.retryable).toBe(true)
+      expect(state.status).toEqual({ kind: 'skillDescriptionFailed', cancelled: false })
+      expect(isGenerating(state)).toBe(false)
+    })
   })
 
   describe('cancelled and failed', () => {

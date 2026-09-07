@@ -12,6 +12,7 @@ export interface StoredMessage {
   role: ModelRole
   content: string
   createdAt: string
+  retryable?: boolean
 }
 
 export interface ConversationRepository {

@@ -38,20 +38,21 @@ export function stored(
 }
 export function memoryRepository(): VocabularyRepository & { entries: StoredVocabulary[] } {
   const entries: StoredVocabulary[] = []
+  const save = (values: StoredVocabulary[]): Array<{ id: string; status: 'saved' | 'existing' }> =>
+    values.map((value) => {
+      const existing = entries.find(
+        (entry) => entry.wordLanguage === value.wordLanguage && entry.lookupKey === value.lookupKey
+      )
+      if (existing) return { id: existing.id, status: 'existing' as const }
+      entries.push(value)
+      return { id: value.id, status: 'saved' as const }
+    })
   return {
     entries,
     find: (language, key) =>
       entries.find((entry) => entry.wordLanguage === language && entry.lookupKey === key),
-    saveBatch: (values) =>
-      values.map((value) => {
-        const existing = entries.find(
-          (entry) =>
-            entry.wordLanguage === value.wordLanguage && entry.lookupKey === value.lookupKey
-        )
-        if (existing) return { id: existing.id, status: 'existing' }
-        entries.push(value)
-        return { id: value.id, status: 'saved' }
-      }),
+    saveBatch: save,
+    saveBatchWithResult: (_executionId, values, finalize) => finalize(save(values)),
     list: () => ({ entries })
   }
 }

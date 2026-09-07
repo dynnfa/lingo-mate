@@ -1,6 +1,6 @@
 import { expect, launchApp, test, withTempUserData } from './helpers'
 
-test('exposes the conversation and preferences interfaces from the sandboxed preload', async () => {
+test('exposes the conversation skill and preferences interfaces from the sandboxed preload', async () => {
   await withTempUserData(async (userDataPath) => {
     const electronApp = await launchApp(userDataPath)
     try {
@@ -25,6 +25,22 @@ test('exposes the conversation and preferences interfaces from the sandboxed pre
         ).sort()
       )
       expect(exposedPreferencesKeys).toEqual(['getLocale', 'setLocale'])
+
+      const exposedApiKeys = await window.evaluate(() =>
+        Object.keys((globalThis as typeof globalThis & { api?: object }).api ?? {}).sort()
+      )
+      expect(exposedApiKeys).toEqual(['conversation', 'models', 'preferences'])
+
+      const conversationKeys = await window.evaluate(() =>
+        Object.keys(
+          (
+            globalThis as typeof globalThis & {
+              api: { conversation: object }
+            }
+          ).api.conversation
+        ).sort()
+      )
+      expect(conversationKeys).toContain('runSkill')
 
       const locale = await window.evaluate(async () => {
         const preferences = (

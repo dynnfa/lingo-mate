@@ -31,6 +31,7 @@ function panelElement(props: Partial<Parameters<typeof ConversationPanel>[0]>): 
         generating={props.generating ?? false}
         composerLocked={props.composerLocked ?? false}
         onSend={props.onSend ?? (() => {})}
+        onRunSkill={props.onRunSkill ?? (() => {})}
         onCancel={props.onCancel ?? (() => {})}
         onRetry={props.onRetry ?? (() => {})}
       />
@@ -40,6 +41,7 @@ function panelElement(props: Partial<Parameters<typeof ConversationPanel>[0]>): 
 
 interface PanelCallbacks {
   onSend: Mock<(text: string) => void>
+  onRunSkill: Mock<(input: { skillId: 'vocabulary'; text: string }) => void>
   onCancel: Mock<() => void>
   onRetry: Mock<(messageId: string) => void>
 }
@@ -50,6 +52,7 @@ function renderPanel(props: Partial<Parameters<typeof ConversationPanel>[0]> = {
 } {
   const callbacks: PanelCallbacks = {
     onSend: vi.fn<(text: string) => void>(),
+    onRunSkill: vi.fn<(input: { skillId: 'vocabulary'; text: string }) => void>(),
     onCancel: vi.fn<() => void>(),
     onRetry: vi.fn<(messageId: string) => void>()
   }
@@ -311,6 +314,40 @@ describe('ConversationPanel picker keyboard selection', () => {
     expect(input).toHaveFocus()
     expect(input).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('keeps vocabulary in the conversation composer and submits typed arguments as a skill', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/vocabulary')
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(input).toHaveValue('/vocabulary ')
+    expect(screen.getByRole('region', { name: '对话记录' })).toBeInTheDocument()
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+
+    fireEvent.change(input, { target: { value: '/vocabulary apple, banana' } })
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    expect(callbacks.onRunSkill).toHaveBeenCalledExactlyOnceWith({
+      skillId: 'vocabulary',
+      text: 'apple, banana'
+    })
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(input).toHaveValue('')
+  })
+
+  it('requires vocabulary arguments and clears selection when the command is edited', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/vocabulary')
+    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+    expect(screen.getByRole('alert')).toHaveTextContent('请在 /vocabulary 后输入')
+    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
+
+    fireEvent.change(input, { target: { value: '/vocab apple' } })
+    fireEvent.keyDown(input, { key: 'Escape' })
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+    expect(callbacks.onSend).toHaveBeenCalledWith('/vocab apple')
   })
 
   it('does not select or send on Enter when nothing matches', () => {

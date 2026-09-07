@@ -1,11 +1,5 @@
 import { z } from 'zod'
 
-export const VOCABULARY_CHANNELS = {
-  addBatch: 'vocabulary:addBatch',
-  cancelBatch: 'vocabulary:cancelBatch',
-  list: 'vocabulary:list'
-} as const
-
 const text = (max: number): z.ZodString => z.string().trim().min(1).max(max)
 export const vocabularyAnalysisSchema = z
   .strictObject({
@@ -82,16 +76,11 @@ export const vocabularyErrorCodeSchema = z.enum([
   'UNKNOWN_ERROR'
 ])
 export type VocabularyErrorCode = z.infer<typeof vocabularyErrorCodeSchema>
-const errorResultSchema = z.strictObject({
-  status: z.literal('error'),
-  error: z.strictObject({ code: vocabularyErrorCodeSchema })
-})
 export const addVocabularyBatchInputSchema = z.strictObject({
   requestId: z.uuid(),
   text: z.string().min(1).max(4000),
   wordLanguage: z.literal('en')
 })
-export const cancelVocabularyBatchInputSchema = z.strictObject({ requestId: z.uuid() })
 export const vocabularyCursorSchema = z.strictObject({ createdAt: z.iso.datetime(), id: z.uuid() })
 export const listVocabularyInputSchema = z.strictObject({
   limit: z.number().int().min(1).max(100).default(50),
@@ -155,35 +144,9 @@ export const vocabularyBatchSchema = z
     if (invalid) context.addIssue({ code: 'custom', message: 'Inconsistent batch result' })
   })
 
-export const addVocabularyBatchResultSchema = z.discriminatedUnion('status', [
-  z.strictObject({ status: z.literal('ok'), batch: vocabularyBatchSchema }),
-  errorResultSchema
-])
-export const cancelVocabularyBatchResultSchema = z.discriminatedUnion('status', [
-  z.strictObject({ status: z.literal('ok'), outcome: z.enum(['cancelled', 'too_late']) }),
-  errorResultSchema
-])
-export const listVocabularyResultSchema = z.discriminatedUnion('status', [
-  z.strictObject({
-    status: z.literal('ok'),
-    entries: z.array(vocabularyEntrySchema).max(100),
-    nextCursor: vocabularyCursorSchema.optional()
-  }),
-  errorResultSchema
-])
 export type AddVocabularyBatchInput = z.infer<typeof addVocabularyBatchInputSchema>
 export type VocabularyBatch = z.infer<typeof vocabularyBatchSchema>
 export type VocabularyItemResult = z.infer<typeof vocabularyItemResultSchema>
 export type VocabularyEntry = z.infer<typeof vocabularyEntrySchema>
 export type VocabularyCursor = z.infer<typeof vocabularyCursorSchema>
 export type ListVocabularyInput = z.input<typeof listVocabularyInputSchema>
-export type AddVocabularyBatchResult = z.infer<typeof addVocabularyBatchResultSchema>
-export type CancelVocabularyBatchResult = z.infer<typeof cancelVocabularyBatchResultSchema>
-export type ListVocabularyResult = z.infer<typeof listVocabularyResultSchema>
-export interface VocabularyApi {
-  addBatch(input: AddVocabularyBatchInput): Promise<AddVocabularyBatchResult>
-  cancelBatch(
-    input: z.infer<typeof cancelVocabularyBatchInputSchema>
-  ): Promise<CancelVocabularyBatchResult>
-  list(input: ListVocabularyInput): Promise<ListVocabularyResult>
-}

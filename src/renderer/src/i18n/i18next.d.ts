@@ -1,4 +1,3 @@
-import type vocabulary from './locales/zh-CN/vocabulary.json'
 import type common from './locales/zh-CN/common.json'
 import type conversation from './locales/zh-CN/conversation.json'
 import type errors from './locales/zh-CN/errors.json'
@@ -9,7 +8,6 @@ declare module 'i18next' {
   interface CustomTypeOptions {
     defaultNS: 'common'
     resources: {
-      vocabulary: typeof vocabulary
       common: typeof common
       conversation: typeof conversation
       errors: typeof errors

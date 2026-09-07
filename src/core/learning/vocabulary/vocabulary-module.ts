@@ -18,6 +18,12 @@ interface Execution {
   cancelled: boolean
   timer?: ReturnType<typeof setTimeout>
 }
+
+export interface VocabularyBatchOptions {
+  executionId?: string
+  signal?: AbortSignal
+  onPhase?: (phase: 'analyzing' | 'committing') => void | Promise<void>
+}
 export class VocabularyModule {
   private readonly active = new Map<string, Execution>()
   private disposed = false
@@ -43,7 +49,8 @@ export class VocabularyModule {
   }
   async addBatch(
     input: AddVocabularyBatchInput,
-    explanationLanguage: SupportedLocale
+    explanationLanguage: SupportedLocale,
+    options: VocabularyBatchOptions = {}
   ): Promise<VocabularyBatch> {
     if (this.disposed) throw new VocabularyError('CANCELLED')
     if (this.active.has(input.requestId)) throw new VocabularyError('BUSY')
@@ -54,6 +61,10 @@ export class VocabularyModule {
       cancelled: false
     }
     this.active.set(input.requestId, execution)
+    const cancelFromSignal = (): void => {
+      this.cancel(input.requestId)
+    }
+    options.signal?.addEventListener('abort', cancelFromSignal, { once: true })
     const timer = setTimeout(
       () => execution.controller.abort(new VocabularyError('TIMEOUT')),
       this.timeouts.batchMs
@@ -74,6 +85,7 @@ export class VocabularyModule {
       results[index] = { inputIndex: index, term: items[index].term, status: 'failed', code }
     }
     try {
+      await options.onPhase?.('analyzing')
       const newItems = items.filter((item) => {
         if (item.sourceInputIndex !== undefined) return false
         const existing = this.repository.find(input.wordLanguage, item.lookupKey)
@@ -144,47 +156,78 @@ export class VocabularyModule {
         for (const item of items)
           if (results[item.inputIndex].status !== 'existing' && item.sourceInputIndex === undefined)
             fail(item.inputIndex, 'CANCELLED')
-      } else if (pending.length) {
+      } else {
+        await options.onPhase?.('committing')
+        if (execution.cancelled) {
+          for (const item of pending) fail(item.inputIndex, 'CANCELLED')
+          return createBatch(input.requestId, explanationLanguage, results, true)
+        }
         // There is deliberately no await between this cancellation check and commit.
         execution.committing = true
         try {
-          const saved = this.repository.saveBatch(pending.map((item) => item.entry))
-          pending.forEach((item, index) => {
-            results[item.inputIndex] = {
-              inputIndex: item.inputIndex,
-              term: item.entry.term,
-              status: saved[index].status,
-              entryId: saved[index].id
-            }
-          })
-        } catch {
+          const finalize = (
+            saved: Array<{ id: string; status: 'saved' | 'existing' }>
+          ): VocabularyBatch => {
+            pending.forEach((item, index) => {
+              results[item.inputIndex] = {
+                inputIndex: item.inputIndex,
+                term: item.entry.term,
+                status: saved[index].status,
+                entryId: saved[index].id
+              }
+            })
+            return createBatch(input.requestId, explanationLanguage, results, false)
+          }
+          if (options.executionId) {
+            return this.repository.saveBatchWithResult(
+              options.executionId,
+              pending.map((item) => item.entry),
+              finalize
+            )
+          }
+          const saved = pending.length
+            ? this.repository.saveBatch(pending.map((item) => item.entry))
+            : []
+          finalize(saved)
+        } catch (cause) {
+          if (options.executionId) throw new VocabularyError('STORAGE_FAILED', { cause })
           for (const item of pending) fail(item.inputIndex, 'STORAGE_FAILED')
         }
       }
-      const counts = { total: results.length, saved: 0, existing: 0, duplicate: 0, failed: 0 }
-      let resolved = 0
-      for (const result of results) {
-        counts[result.status]++
-        const source = result.status === 'duplicate' ? results[result.sourceInputIndex] : result
-        if (source.status === 'saved' || source.status === 'existing') resolved++
-      }
-      return {
-        requestId: input.requestId,
-        explanationLanguage,
-        items: results,
-        counts,
-        outcome: execution.cancelled
-          ? 'cancelled'
-          : resolved === results.length
-            ? 'completed'
-            : resolved
-              ? 'partial'
-              : 'failed'
-      }
+      return createBatch(input.requestId, explanationLanguage, results, execution.cancelled)
     } finally {
+      options.signal?.removeEventListener('abort', cancelFromSignal)
       clearTimeout(timer)
       execution.controller.abort()
       this.active.delete(input.requestId)
     }
+  }
+}
+
+function createBatch(
+  requestId: string,
+  explanationLanguage: SupportedLocale,
+  results: VocabularyItemResult[],
+  cancelled: boolean
+): VocabularyBatch {
+  const counts = { total: results.length, saved: 0, existing: 0, duplicate: 0, failed: 0 }
+  let resolved = 0
+  for (const result of results) {
+    counts[result.status]++
+    const source = result.status === 'duplicate' ? results[result.sourceInputIndex] : result
+    if (source.status === 'saved' || source.status === 'existing') resolved++
+  }
+  return {
+    requestId,
+    explanationLanguage,
+    items: results,
+    counts,
+    outcome: cancelled
+      ? 'cancelled'
+      : resolved === results.length
+        ? 'completed'
+        : resolved
+          ? 'partial'
+          : 'failed'
   }
 }
