@@ -29,7 +29,15 @@ test('exposes the conversation skill and preferences interfaces from the sandbox
       const exposedApiKeys = await window.evaluate(() =>
         Object.keys((globalThis as typeof globalThis & { api?: object }).api ?? {}).sort()
       )
-      expect(exposedApiKeys).toEqual(['conversation', 'models', 'preferences'])
+      expect(exposedApiKeys).toEqual(['conversation', 'models', 'preferences', 'usage'])
+
+      // 用量窄接口：只暴露聚合读取，不暴露通用 invoke 或任意时间范围
+      const exposedUsageKeys = await window.evaluate(() =>
+        Object.keys(
+          (globalThis as typeof globalThis & { api?: { usage?: object } }).api?.usage ?? {}
+        ).sort()
+      )
+      expect(exposedUsageKeys).toEqual(['getOverview'])
 
       const conversationKeys = await window.evaluate(() =>
         Object.keys(

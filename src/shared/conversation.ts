@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { ModelsApi } from './models'
 import type { PreferencesApi } from './preferences'
+import type { UsageApi } from './usage'
 
 export const CONVERSATION_CHANNELS = {
   create: 'conversation:create',
@@ -215,4 +216,5 @@ export interface LingoMateApi {
   conversation: ConversationApi
   preferences: PreferencesApi
   models: ModelsApi
+  usage: UsageApi
 }

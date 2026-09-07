@@ -1,7 +1,7 @@
 # Settings Usage：Token 用量图表计划
 
 - 日期：2026-09-07
-- 状态：待实施
+- 状态：已实施（2026-09-07）
 - 目标：在设置页左侧新增 Usage 菜单，右侧通过图表展示日、周维度的 token 用量，并支持查看每日用量。
 - 本次交付为实施计划。
 
@@ -83,12 +83,12 @@
 
 ## 实施步骤
 
-- [ ] 1. 完成前置 token 采集计划，确认三类真实调用落库及缺失值语义；通过固定 fixture 验证原始记录后再接图表。
-- [ ] 2. 实现 Core 统计服务和仓储聚合，补充时间索引迁移，固定自然日／周、有效字段和完整性语义。
-- [ ] 3. 定义 Shared 协议，接入 Main、Preload 与 `LingoMateApi`；同步现有测试中的 API mocks。
-- [ ] 4. 添加 Usage 菜单和页面，实现摘要、日／周切换、周内每日图表、数据表和刷新状态。
-- [ ] 5. 补齐中英文资源、键盘交互和窄窗口布局，确认模型草稿与取消连接测试逻辑正常。
-- [ ] 6. 完成下述验证，记录结果并更新计划状态。
+- [x] 1. 完成前置 token 采集计划，确认三类真实调用落库及缺失值语义；通过固定 fixture 验证原始记录后再接图表。
+- [x] 2. 实现 Core 统计服务和仓储聚合，补充时间索引迁移，固定自然日／周、有效字段和完整性语义。
+- [x] 3. 定义 Shared 协议，接入 Main、Preload 与 `LingoMateApi`；同步现有测试中的 API mocks。
+- [x] 4. 添加 Usage 菜单和页面，实现摘要、日／周切换、周内每日图表、数据表和刷新状态。
+- [x] 5. 补齐中英文资源、键盘交互和窄窗口布局，确认模型草稿与取消连接测试逻辑正常。
+- [x] 6. 完成下述验证，记录结果并更新计划状态。
 
 ## 验收与测试
 
@@ -110,3 +110,18 @@
 - 实施完成后运行 `pnpm test`、`pnpm lint`、`pnpm typecheck`、`pnpm build`、相关 Playwright 用例及 `git diff --check`。
 
 完成标准：设置页可通过 Usage 查看真实持久化用量；日／周总量及每周每日明细口径一致；缺失数据表达准确；刷新、国际化、无障碍和进程隔离均符合项目约定。
+
+## 实施说明（与计划的偏差与补充）
+
+- 桶结构在计划字段之外增加了 `runningCount`（`status = 'started'` 计数）：规则 7 要求“运行中的记录计入请求数并标注统计可能变化”，该标注需要知道桶内是否存在进行中请求。
+- 图表交互采用“SVG 柱 + 全高透明命中区 + 柱形聚焦/悬停时在图下固定详情区展示完整数值”的方式，数值详情不依赖跟随式 tooltip；柱形 `tabIndex` + 方向键移动焦点，周柱以 Enter/Space 选择。
+- zh-CN 资源按项目“双语 key 集合一致”约束补齐了与 en 对应的 `_one` 复数 key（中文只消费 `_other`）。
+- 顺手修正了两处既有测试的过期断言：`v1-upgrade.test.ts` 期望 schema 版本 5（前置计划升至 v6 时已过期，本次更新为 v7）；各仓储测试的 `user_version` 断言与“更新版本拒绝”守卫同步到 v7/v8。
+- `tests/e2e/action-picker.test.ts` 在本次改动前即已失败（已用 stash 验证），与本计划无关，未处理。
+
+## 验证结果（2026-09-07）
+
+- `pnpm test`：49 个文件 562 个用例全部通过（新增 Core 统计 8 例、仓储聚合与 v7 迁移 4 例、Shared 协议 5 例、Main IPC 7 例、Renderer Usage 11 例，并同步既有版本断言）。
+- `pnpm lint`：无错误无警告；`pnpm typecheck`：无错误；`pnpm build`：成功。
+- Playwright：`tests/e2e/usage-settings.test.ts`（真实 Electron 下 Usage 入口、空账本空状态、桥接读取 30 天/8 周/周内 7 天快照）与更新后的 `preload.test.ts`（`api.usage` 仅暴露 `getOverview`）通过；`v1-upgrade.test.ts` 更新断言后通过。全套 e2e 仅剩与本计划无关的既有失败 `action-picker.test.ts`。
+- `git diff --check`：干净。

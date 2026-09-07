@@ -1,4 +1,10 @@
 import type Database from 'better-sqlite3'
+import {
+  LlmUsageStatisticsError,
+  type LlmUsageBucketAggregate,
+  type LlmUsageBucketWindow,
+  type LlmUsageStatisticsStore
+} from '../core/llm/llm-usage-statistics'
 import type {
   LlmUsageQuery,
   LlmUsageRecord,
@@ -22,11 +28,23 @@ interface UsageRow {
   error_code: string | null
 }
 
+interface AggregateRow {
+  requestCount: number
+  runningCount: number
+  invalidCount: number
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  inputUnknownCount: number
+  outputUnknownCount: number
+  totalUnknownCount: number
+}
+
 const DEFAULT_PAGE_LIMIT = 50
 
 // 一次实际 chat.completions.create 调用一行；写入失败由调用方
-// （LlmUsageRecorder）按旁路失败策略处理，这里不做静默重试。
-export class SqliteLlmUsageRepository implements LlmUsageRepository {
+//（LlmUsageRecorder）按旁路失败策略处理，这里不做静默重试。
+export class SqliteLlmUsageRepository implements LlmUsageRepository, LlmUsageStatisticsStore {
   constructor(private readonly database: Database.Database) {}
 
   insertStarted(record: LlmUsageStart): void {
@@ -106,6 +124,65 @@ export class SqliteLlmUsageRepository implements LlmUsageRepository {
       }) as UsageRow[]
     return rows.map(toRecord)
   }
+
+  // 时间桶聚合：invalid 记录不进入 token 合计与未知计数，单独计数；
+  // 指标为 NULL 的非 invalid 记录计入对应未知计数，显式 0 计入合计。
+  // 全部聚合值做安全整数检查，溢出抛 OVERFLOW，不悄悄舍入。
+  aggregateBuckets(windows: readonly LlmUsageBucketWindow[]): LlmUsageBucketAggregate[] {
+    const statement = this.database.prepare(`
+      SELECT
+        COUNT(*) AS requestCount,
+        COALESCE(SUM(status = 'started'), 0) AS runningCount,
+        COALESCE(SUM(usage_status = 'invalid'), 0) AS invalidCount,
+        COALESCE(SUM(CASE
+          WHEN usage_status <> 'invalid' AND input_tokens IS NOT NULL THEN input_tokens
+        END), 0) AS inputTokens,
+        COALESCE(SUM(CASE
+          WHEN usage_status <> 'invalid' AND output_tokens IS NOT NULL THEN output_tokens
+        END), 0) AS outputTokens,
+        COALESCE(SUM(CASE
+          WHEN usage_status <> 'invalid' AND total_tokens IS NOT NULL THEN total_tokens
+        END), 0) AS totalTokens,
+        COALESCE(SUM(usage_status <> 'invalid' AND input_tokens IS NULL), 0) AS inputUnknownCount,
+        COALESCE(SUM(usage_status <> 'invalid' AND output_tokens IS NULL), 0) AS outputUnknownCount,
+        COALESCE(SUM(usage_status <> 'invalid' AND total_tokens IS NULL), 0) AS totalUnknownCount
+      FROM llm_request_usage
+      WHERE started_at >= @startAt AND started_at < @endAt
+    `)
+    return windows.map((window) => {
+      if (window.endAt <= window.startAt) return { ...EMPTY_AGGREGATE }
+      const row = statement.get(window) as AggregateRow
+      const aggregate: LlmUsageBucketAggregate = {
+        requestCount: row.requestCount,
+        runningCount: row.runningCount,
+        invalidCount: row.invalidCount,
+        inputTokens: row.inputTokens,
+        outputTokens: row.outputTokens,
+        totalTokens: row.totalTokens,
+        inputUnknownCount: row.inputUnknownCount,
+        outputUnknownCount: row.outputUnknownCount,
+        totalUnknownCount: row.totalUnknownCount
+      }
+      for (const value of Object.values(aggregate)) {
+        if (!Number.isSafeInteger(value) || value < 0) {
+          throw new LlmUsageStatisticsError('OVERFLOW')
+        }
+      }
+      return aggregate
+    })
+  }
+}
+
+const EMPTY_AGGREGATE: LlmUsageBucketAggregate = {
+  requestCount: 0,
+  runningCount: 0,
+  invalidCount: 0,
+  inputTokens: 0,
+  outputTokens: 0,
+  totalTokens: 0,
+  inputUnknownCount: 0,
+  outputUnknownCount: 0,
+  totalUnknownCount: 0
 }
 
 function toRecord(row: UsageRow): LlmUsageRecord {

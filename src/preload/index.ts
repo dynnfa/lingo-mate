@@ -33,6 +33,11 @@ import {
   setLocaleInputSchema,
   setLocaleResultSchema
 } from '../shared/preferences'
+import {
+  USAGE_CHANNELS,
+  usageOverviewInputSchema,
+  usageOverviewResultSchema
+} from '../shared/usage'
 
 const api: LingoMateApi = {
   preferences: {
@@ -69,6 +74,13 @@ const api: LingoMateApi = {
     async clearSettings() {
       const result: unknown = await ipcRenderer.invoke(MODELS_CHANNELS.clearSettings)
       return clearModelsSettingsResultSchema.parse(result)
+    }
+  },
+  usage: {
+    async getOverview(rawInput) {
+      const input = usageOverviewInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(USAGE_CHANNELS.getOverview, input)
+      return usageOverviewResultSchema.parse(result)
     }
   },
   conversation: {

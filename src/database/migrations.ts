@@ -201,6 +201,15 @@ export const MIGRATIONS: Migration[] = [
       CREATE INDEX llm_request_usage_model_started_at
         ON llm_request_usage (model_id, started_at);
     `)
+  },
+  {
+    // 跨模型的时间范围统计按 started_at 聚合；已有 (model_id, started_at)
+    // 复合索引不能服务无模型过滤的时间范围扫描。
+    version: 7,
+    up: (database) =>
+      database.exec(`
+      CREATE INDEX llm_request_usage_started_at ON llm_request_usage (started_at);
+    `)
   }
 ]
 
