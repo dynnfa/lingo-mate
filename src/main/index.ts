@@ -29,6 +29,8 @@ import { createFileModelsConfigStore, createSafeStorageCredentialVault } from '.
 import { PreferencesService } from './preferences'
 import { registerPreferencesIpc } from './preferences-ipc'
 import { createElectronPreferenceStore } from './preferences-store'
+import { LlmUsageStatisticsService } from '../core/llm/llm-usage-statistics'
+import { registerUsageIpc } from './usage-ipc'
 
 let database: Database.Database | undefined
 let conversationModule: ConversationModule | undefined
@@ -92,6 +94,16 @@ app.whenReady().then(() => {
   llmUsageRepository.markInterruptedStarted()
   const llmUsageRecorder = new LlmUsageRecorder(llmUsageRepository)
   const createLlmClient: CreateLlmClient = (config) => new LlmClient(config, llmUsageRecorder)
+
+  // 用量统计按系统本地时区归属自然日/周；时区每次查询读取，
+  // 系统时区改变后下次查询按新时区重新归属历史记录。
+  registerUsageIpc(
+    new LlmUsageStatisticsService(llmUsageRepository, {
+      now: () => Date.now(),
+      getTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone
+    }),
+    rendererUrl
+  )
 
   // 模型配置服务：持久化记录 + 系统安全存储加密密钥；IPC 与对话模型入口共用。
   const modelsService = new ModelConfigService(

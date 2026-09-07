@@ -6,6 +6,7 @@ import Database from 'better-sqlite3'
 import { openDatabase } from '../database'
 import { migrateDatabase } from '../migrations'
 import { SqliteLlmUsageRepository } from '../sqlite-llm-usage-repository'
+import { LlmUsageStatisticsError } from '../../core/llm/llm-usage-statistics'
 import type { LlmUsageStart, LlmUsageTerminal } from '../../core/llm/llm-usage'
 
 const start = (id: string, startedAt = 1_000): LlmUsageStart => ({
@@ -39,7 +40,8 @@ describe('llm_request_usage migrations and repository', () => {
   it('creates the table on a fresh database and upgrades an existing v5 database', () => {
     const fresh = openDatabase(':memory:')
     try {
-      expect(fresh.pragma('user_version', { simple: true })).toBeGreaterThanOrEqual(6)
+      expect(fresh.pragma('user_version', { simple: true })).toBeGreaterThanOrEqual(7)
+      expect(hasIndex(fresh, 'llm_request_usage_started_at')).toBe(true)
     } finally {
       fresh.close()
     }
@@ -48,7 +50,52 @@ describe('llm_request_usage migrations and repository', () => {
     try {
       upgraded.pragma('user_version = 5')
       expect(() => migrateDatabase(upgraded)).not.toThrow()
-      expect(upgraded.pragma('user_version', { simple: true })).toBe(6)
+      expect(upgraded.pragma('user_version', { simple: true })).toBe(7)
+      expect(hasIndex(upgraded, 'llm_request_usage_started_at')).toBe(true)
+    } finally {
+      upgraded.close()
+    }
+  })
+
+  it('upgrades a v6 usage ledger to v7 keeping existing rows', () => {
+    const upgraded = new Database(':memory:')
+    try {
+      // 手工构造 v6 终态：用量表与复合索引存在、无 started_at 单列索引。
+      upgraded.exec(`
+        CREATE TABLE llm_request_usage (
+          id TEXT PRIMARY KEY,
+          operation TEXT NOT NULL CHECK (operation IN (
+            'conversation', 'vocabulary_analysis', 'connection_test'
+          )),
+          model_id TEXT NOT NULL,
+          response_model_id TEXT,
+          started_at INTEGER NOT NULL,
+          finished_at INTEGER,
+          status TEXT NOT NULL CHECK (status IN (
+            'started', 'completed', 'failed', 'cancelled', 'interrupted'
+          )),
+          input_tokens INTEGER,
+          output_tokens INTEGER,
+          total_tokens INTEGER,
+          usage_status TEXT NOT NULL CHECK (usage_status IN (
+            'reported', 'derived', 'partial', 'missing', 'invalid'
+          )),
+          error_code TEXT
+        );
+        CREATE INDEX llm_request_usage_model_started_at
+          ON llm_request_usage (model_id, started_at);
+        INSERT INTO llm_request_usage VALUES
+          ('u1', 'conversation', 'old-model', NULL, 1000, 1100, 'completed',
+           10, 5, 15, 'reported', NULL);
+      `)
+      upgraded.pragma('user_version = 6')
+      migrateDatabase(upgraded)
+      expect(upgraded.pragma('user_version', { simple: true })).toBe(7)
+      expect(hasIndex(upgraded, 'llm_request_usage_started_at')).toBe(true)
+      const rows = upgraded.prepare('SELECT COUNT(*) AS count FROM llm_request_usage').get() as {
+        count: number
+      }
+      expect(rows.count).toBe(1)
     } finally {
       upgraded.close()
     }
@@ -212,6 +259,134 @@ describe('llm_request_usage migrations and repository', () => {
     }
   })
 
+  it('aggregates time buckets with known/unknown/invalid semantics and [start, end) bounds', () => {
+    const database = openDatabase(':memory:')
+    try {
+      const repository = new SqliteLlmUsageRepository(database)
+      const DAY = 86_400_000
+      // 桶 A [1000, 1000+DAY)：同日多请求、多模型、多入口
+      repository.insertStarted(start('a1', 1_000))
+      repository.finish(terminal(start('a1', 1_000)))
+      repository.insertStarted({
+        ...start('a2', 1_500),
+        operation: 'vocabulary_analysis',
+        modelId: 'model-b'
+      })
+      repository.finish({
+        ...terminal(start('a2', 1_500)),
+        inputTokens: 200,
+        outputTokens: null,
+        totalTokens: null,
+        usageStatus: 'partial'
+      })
+      // 显式 0 是已知值，不是未知
+      repository.insertStarted({ ...start('a3', 1_600), operation: 'connection_test' })
+      repository.finish({
+        ...terminal(start('a3', 1_600)),
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        usageStatus: 'reported'
+      })
+      // 运行中的记录计入请求数并计入未知
+      repository.insertStarted(start('a4', 1_700))
+      // invalid：不进入合计，单独计数
+      repository.insertStarted(start('a5', 1_800))
+      repository.finish({
+        ...terminal(start('a5', 1_800)),
+        inputTokens: 999,
+        outputTokens: 999,
+        totalTokens: 1,
+        usageStatus: 'invalid'
+      })
+      // 失败但含已知用量：计入合计
+      repository.insertStarted(start('a6', 1_900))
+      repository.finish({
+        ...terminal(start('a6', 1_900)),
+        status: 'failed',
+        errorCode: 'TIMEOUT',
+        inputTokens: 50,
+        outputTokens: 10,
+        totalTokens: 60,
+        usageStatus: 'reported'
+      })
+      // 桶边界之外：前一天的 999 与次日开始的 2000 不进入桶 A
+      repository.insertStarted(start('before', 999))
+      repository.finish(terminal(start('before', 999)))
+      repository.insertStarted(start('after', 1_000 + DAY))
+      repository.finish(terminal(start('after', 1_000 + DAY)))
+
+      const [empty, bucketA] = repository.aggregateBuckets([
+        { startAt: 0, endAt: 500 },
+        { startAt: 1_000, endAt: 1_000 + DAY }
+      ])
+      expect(empty).toEqual({
+        requestCount: 0,
+        runningCount: 0,
+        invalidCount: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        inputUnknownCount: 0,
+        outputUnknownCount: 0,
+        totalUnknownCount: 0
+      })
+      expect(bucketA).toEqual({
+        requestCount: 6,
+        runningCount: 1,
+        invalidCount: 1,
+        // 100 + 200 + 0 + 50（a5 invalid 排除，a2 output/total 未知，a4 全未知）
+        inputTokens: 350,
+        outputTokens: 20 + 0 + 10,
+        totalTokens: 120 + 0 + 60,
+        inputUnknownCount: 1,
+        outputUnknownCount: 2,
+        totalUnknownCount: 2
+      })
+    } finally {
+      database.close()
+    }
+  })
+
+  it('returns zero aggregates for inverted windows without querying', () => {
+    const database = openDatabase(':memory:')
+    try {
+      const repository = new SqliteLlmUsageRepository(database)
+      repository.insertStarted(start('r1', 1_000))
+      const [inverted] = repository.aggregateBuckets([{ startAt: 2_000, endAt: 1_000 }])
+      expect(inverted.requestCount).toBe(0)
+      expect(inverted.totalTokens).toBe(0)
+    } finally {
+      database.close()
+    }
+  })
+
+  it('throws a safe overflow error when bucket sums exceed safe integers', () => {
+    const database = openDatabase(':memory:')
+    try {
+      const repository = new SqliteLlmUsageRepository(database)
+      repository.insertStarted(start('big1', 1_000))
+      repository.finish({
+        ...terminal(start('big1', 1_000)),
+        inputTokens: Number.MAX_SAFE_INTEGER,
+        outputTokens: 0,
+        totalTokens: Number.MAX_SAFE_INTEGER
+      })
+      repository.insertStarted(start('big2', 1_500))
+      repository.finish({
+        ...terminal(start('big2', 1_500)),
+        inputTokens: Number.MAX_SAFE_INTEGER,
+        outputTokens: 0,
+        totalTokens: Number.MAX_SAFE_INTEGER
+      })
+      expect(() => repository.aggregateBuckets([{ startAt: 1_000, endAt: 2_000 }])).toThrowError(
+        LlmUsageStatisticsError
+      )
+    } finally {
+      database.close()
+    }
+  })
+
   it('enforces enum and non-negative token constraints', () => {
     const database = openDatabase(':memory:')
     try {
@@ -276,3 +451,10 @@ describe('llm_request_usage migrations and repository', () => {
     }
   })
 })
+
+function hasIndex(database: Database.Database, name: string): boolean {
+  const row = database
+    .prepare('SELECT COUNT(*) AS count FROM sqlite_master WHERE type = ? AND name = ?')
+    .get('index', name) as { count: number }
+  return row.count > 0
+}

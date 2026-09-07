@@ -795,6 +795,387 @@ input:disabled {
   opacity: 0.45;
 }
 
+/* 设置页“用量”区块：摘要卡、维度切换、SVG 柱状图与数据表。 */
+.usage-section-body {
+  max-width: 680px;
+}
+
+.usage-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.usage-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.usage-refresh-status {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.usage-stale-error {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.usage-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.usage-card {
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-message);
+  border-radius: 12px;
+  background: var(--color-surface);
+}
+
+.usage-card h3 {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.usage-card-asof {
+  margin: 0 0 10px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.usage-card dl {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.usage-card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.usage-card dt {
+  color: var(--color-text-secondary);
+}
+
+.usage-card dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.usage-card-notes {
+  display: grid;
+  gap: 2px;
+  margin: 10px 0 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.usage-dimension {
+  display: inline-flex;
+  width: max-content;
+  border: 1px solid var(--color-border-composer);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.usage-dimension-option {
+  padding: 6px 14px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.usage-dimension-option[aria-pressed='true'] {
+  color: var(--color-text-active);
+  background: var(--color-surface-active);
+}
+
+.usage-chart-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.usage-chart-block h3 {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.usage-chart {
+  width: 100%;
+  height: auto;
+}
+
+.usage-chart text {
+  fill: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.usage-chart-unit {
+  font-weight: 600;
+}
+
+.usage-gridline {
+  stroke: var(--color-border-header);
+}
+
+.usage-axis-line {
+  stroke: var(--color-border-divider);
+}
+
+.usage-bar {
+  cursor: default;
+}
+
+.usage-bar[role='button'] {
+  cursor: pointer;
+}
+
+.usage-bar:focus {
+  outline: none;
+}
+
+.usage-bar:focus-visible .usage-bar-rect {
+  stroke: var(--color-focus-ring);
+  stroke-width: 2;
+}
+
+.usage-bar-hit {
+  fill: transparent;
+}
+
+.usage-bar-normal .usage-bar-rect {
+  fill: var(--color-primary);
+}
+
+.usage-bar-selected .usage-bar-rect {
+  fill: var(--color-primary-hover);
+}
+
+/* 未到日期与“有调用但用量未知”都以虚线描边表达，不画成确认的零用量柱。 */
+.usage-bar-future .usage-bar-rect {
+  fill: none;
+  stroke: var(--color-border-composer);
+  stroke-dasharray: 3 3;
+}
+
+.usage-bar-unknown .usage-bar-rect {
+  fill: none;
+  stroke: var(--color-text-placeholder);
+  stroke-dasharray: 3 3;
+}
+
+.usage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  list-style: none;
+}
+
+.usage-legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+.usage-legend-total {
+  background: var(--color-primary);
+}
+
+.usage-legend-selected {
+  background: var(--color-primary-hover);
+}
+
+.usage-legend-future {
+  border: 1px dashed var(--color-border-composer);
+}
+
+.usage-legend-unknown {
+  border: 1px dashed var(--color-text-placeholder);
+}
+
+.usage-chart-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  min-height: 24px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-header);
+  border-radius: 8px;
+  background: var(--color-surface);
+  font-size: 13px;
+}
+
+.usage-chart-detail-date {
+  font-weight: 600;
+}
+
+.usage-chart-detail-note {
+  color: var(--color-text-muted);
+}
+
+.usage-chart-detail-hint {
+  color: var(--color-text-muted);
+}
+
+.usage-table-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.usage-table caption {
+  margin-bottom: 8px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  text-align: left;
+}
+
+.usage-table th,
+.usage-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--color-border-header);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.usage-table th:first-child,
+.usage-table td:first-child {
+  text-align: left;
+}
+
+.usage-table thead th {
+  color: var(--color-text-label);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.usage-table-row-week th {
+  font-weight: 600;
+}
+
+.usage-table-date-nested {
+  padding-left: 24px;
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.usage-empty {
+  padding: 16px;
+  border: 1px dashed var(--color-border-composer);
+  border-radius: 12px;
+}
+
+.usage-empty h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.usage-empty p {
+  margin: 0 0 4px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.usage-load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/* 首次加载骨架：区块形状占位，避免布局跳动。 */
+.usage-skeleton {
+  display: grid;
+  gap: 12px;
+}
+
+.usage-skeleton-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.usage-skeleton-block {
+  height: 92px;
+  border-radius: 12px;
+  background: var(--color-surface-secondary);
+  animation: usage-skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+.usage-skeleton-chart {
+  height: 200px;
+  border-radius: 8px;
+}
+
+@keyframes usage-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .usage-skeleton-block {
+    animation: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .usage-summary,
+  .usage-skeleton-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .usage-section-body {
+    max-width: none;
+  }
+
+  .usage-table {
+    font-size: 12px;
+  }
+
+  .usage-table th,
+  .usage-table td {
+    padding: 5px 6px;
+  }
+
+  .usage-table-date-nested {
+    padding-left: 16px;
+  }
+}
+
 @media (max-width: 760px) {
   .chat-shell {
     grid-template-columns: 210px minmax(0, 1fr);

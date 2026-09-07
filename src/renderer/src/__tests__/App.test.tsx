@@ -17,6 +17,7 @@ import type {
 } from '../../../shared/conversation'
 import type { PreferencesApi, SetLocaleInput, SetLocaleResult } from '../../../shared/preferences'
 import type { ModelsApi } from '../../../shared/models'
+import type { UsageApi } from '../../../shared/usage'
 import App from '../App'
 import { createI18n } from '../i18n'
 
@@ -69,6 +70,15 @@ function modelsApiStub(): ModelsApi {
     },
     async clearSettings() {
       return { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
+    }
+  }
+}
+
+// App 测试不关注用量统计；提供稳定失败桩，激活 Usage 区块时不挂起。
+function usageApiStub(): UsageApi {
+  return {
+    async getOverview() {
+      return { status: 'error', error: { code: 'USAGE_READ_FAILED' } }
     }
   }
 }
@@ -145,6 +155,7 @@ function installApiMock(
     preferences,
     // App 测试不关注模型设置；提供未配置的稳定桩供 Settings 页读取。
     models: modelsApiStub(),
+    usage: usageApiStub(),
     conversation: {
       async create() {
         mock.calls.create += 1

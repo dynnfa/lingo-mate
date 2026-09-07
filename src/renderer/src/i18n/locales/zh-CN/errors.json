@@ -50,5 +50,12 @@
     "testUnsupportedResponse": "服务返回了不支持的响应格式。",
     "unknown": "发生未知错误，请稍后重试。",
     "untrustedSource": "只能从应用窗口访问模型设置。"
+  },
+  "usage": {
+    "readFailed": "无法读取用量数据，请稍后重试。",
+    "overflow": "用量合计超出可显示范围。",
+    "invalidInput": "用量请求无效。",
+    "untrustedSource": "只能从应用窗口访问用量统计。",
+    "unknown": "发生未知错误，请稍后重试。"
   }
 }

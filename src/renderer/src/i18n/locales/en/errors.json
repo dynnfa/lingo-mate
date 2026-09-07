@@ -50,5 +50,12 @@
     "testUnsupportedResponse": "The service returned an unsupported response format.",
     "unknown": "Something went wrong. Please try again later.",
     "untrustedSource": "Model settings are only available from the application window."
+  },
+  "usage": {
+    "readFailed": "Couldn't read usage statistics. Please try again later.",
+    "overflow": "Usage totals are too large to display.",
+    "invalidInput": "The usage request is invalid.",
+    "untrustedSource": "Usage statistics are only available from the application window.",
+    "unknown": "Something went wrong. Please try again later."
   }
 }

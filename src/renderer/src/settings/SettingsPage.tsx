@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { LanguagePreferenceSection } from '../preferences/LanguagePreferenceSection'
 import { ModelsSettings } from './ModelsSettings'
 import { useModelsSettings } from './useModelsSettings'
+import { UsageSettings } from './UsageSettings'
+import { useUsageStatistics } from './useUsageStatistics'
 
 // 设置区块注册表：新增设置时在此追加条目，左侧菜单随之扩展。
 // 详情区各区块保持挂载并用 hidden 隐藏，模型草稿在菜单切换间不丢失。
@@ -14,6 +16,10 @@ const SETTINGS_SECTIONS = [
   {
     id: 'models',
     labelKey: 'common:settings.sections.models'
+  },
+  {
+    id: 'usage',
+    labelKey: 'common:settings.sections.usage'
   }
 ] as const
 
@@ -31,12 +37,20 @@ export function SettingsPage({ onExit }: SettingsPageProps): React.JSX.Element {
   const [activeSectionId, setActiveSectionId] = useState<SettingsSectionId>(SETTINGS_SECTIONS[0].id)
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false)
   const modelsSettings = useModelsSettings()
+  const usageStatistics = useUsageStatistics()
   const backButtonRef = useRef<HTMLButtonElement>(null)
   const discardKeepEditingRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     backButtonRef.current?.focus()
   }, [])
+
+  // Usage 首次激活时读取数据，再次进入时重新读取；
+  // 维度与选中周保留在本次设置页会话内。
+  const reloadUsage = usageStatistics.reload
+  useEffect(() => {
+    if (activeSectionId === 'usage') reloadUsage()
+  }, [activeSectionId, reloadUsage])
 
   useEffect(() => {
     if (confirmDiscardOpen) {
@@ -135,6 +149,16 @@ export function SettingsPage({ onExit }: SettingsPageProps): React.JSX.Element {
           <h2 id="settings-section-title-models">{t('common:settings.sections.models')}</h2>
           <div className="settings-section-body">
             <ModelsSettings state={modelsSettings} />
+          </div>
+        </div>
+        <div
+          aria-labelledby="settings-section-title-usage"
+          className="settings-detail-pane"
+          hidden={activeSectionId !== 'usage'}
+        >
+          <h2 id="settings-section-title-usage">{t('common:settings.sections.usage')}</h2>
+          <div className="settings-section-body usage-section-body">
+            <UsageSettings state={usageStatistics} />
           </div>
         </div>
       </section>
