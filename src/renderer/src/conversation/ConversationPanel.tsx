@@ -27,7 +27,7 @@ interface ConversationPanelProps {
   onRetry: (messageId: string) => void
 }
 
-// 关闭抑制：显式关闭（Escape/Tab）后同一草稿不因普通重渲染重开，
+// 关闭抑制：显式关闭（Escape、未触发选择的 Tab）后同一草稿不因普通重渲染重开，
 // 用户编辑或重新聚焦可重开；选择行动后的草稿需先失去 `/` 前缀才能重开。
 type PickerDismissal = 'none' | 'soft' | 'latched'
 
@@ -138,8 +138,22 @@ export function ConversationPanel({
       event.preventDefault()
       closePicker('soft')
     } else if (event.key === 'Tab') {
-      // 不选择候选，让默认焦点顺序离开；随后输入框失焦自然关闭。
-      closePicker('soft')
+      // Shift+Tab 保留反向焦点导航：按原有行为关闭列表，但不选择候选。
+      if (event.shiftKey) {
+        closePicker('soft')
+        return
+      }
+      // 其余修饰键组合属于系统/浏览器快捷键：不选择、不关闭、不拦截。
+      if (event.ctrlKey || event.altKey || event.metaKey) return
+      const highlighted = filteredActions.find((action) => action.id === highlightedId)
+      if (highlighted) {
+        // 与 Enter 同义的选择：补全命令并留在输入框继续输入参数，本次不发送。
+        event.preventDefault()
+        selectAction(highlighted)
+      } else {
+        // 无匹配项时不选择，仅关闭列表并允许默认焦点跳转。
+        closePicker('soft')
+      }
     }
   }
 
@@ -252,7 +266,7 @@ export function ConversationPanel({
             }}
             onFocus={() => {
               setInputFocused(true)
-              // Escape/Tab 关闭后的重新聚焦允许重开；选择行动的锁定抑制不因此解除。
+              // soft 关闭（Escape、未触发选择的 Tab）后的重新聚焦允许重开；选择行动的锁定抑制不因此解除。
               if (dismissal === 'soft') setDismissal('none')
             }}
             onKeyDown={handleInputKeyDown}

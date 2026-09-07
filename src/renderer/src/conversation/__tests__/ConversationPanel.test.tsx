@@ -348,6 +348,63 @@ describe('ConversationPanel picker keyboard selection', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 
+  it.each([
+    ['partial command', '/voc', 'vocabulary', '/vocabulary '],
+    ['full command', '/translate', 'translate', '/translate '],
+    ['slash only', '/', 'translate', '/translate '],
+    ['localized name', '/润', 'polish', '/polish ']
+  ])(
+    'selects the same candidate with Enter and Tab: %s',
+    (_scenario, draft, expectedId, expectedValue) => {
+      for (const key of ['Enter', 'Tab'] as const) {
+        cleanup()
+        const { callbacks } = renderPanel()
+        const input = typeDraft(draft)
+
+        expect(input).toHaveAttribute(
+          'aria-activedescendant',
+          `conversation-action-option-${expectedId}`
+        )
+        // 选择成功时阻止默认行为：Enter 不提交表单，Tab 不移动焦点
+        expect(fireEvent.keyDown(input, { key })).toBe(false)
+
+        expect(input).toHaveValue(expectedValue)
+        expect(input).toHaveFocus()
+        expect(input).toHaveAttribute('aria-expanded', 'false')
+        expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+        expect(callbacks.onSend).not.toHaveBeenCalled()
+        expect(callbacks.onRunSkill).not.toHaveBeenCalled()
+      }
+    }
+  )
+
+  it('selects the arrow-key-highlighted action with Tab without sending', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/')
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(fireEvent.keyDown(input, { key: 'Tab' })).toBe(false)
+
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
+    expect(input).toHaveValue('/polish ')
+    expect(input).toHaveFocus()
+    expect(input).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('selects the hover-highlighted action with Tab', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/')
+
+    fireEvent.mouseEnter(screen.getByRole('option', { name: /口语练习/ }))
+    fireEvent.keyDown(input, { key: 'Tab' })
+
+    expect(input).toHaveValue('/practice ')
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
   it('keeps concept in the conversation composer and submits the draft as a normal message', () => {
     const { callbacks } = renderPanel()
     const input = typeDraft('/concept')
@@ -375,6 +432,26 @@ describe('ConversationPanel picker keyboard selection', () => {
     expect(input).toHaveValue('/vocabulary ')
     expect(screen.getByRole('region', { name: '对话记录' })).toBeInTheDocument()
     expect(callbacks.onSend).not.toHaveBeenCalled()
+
+    fireEvent.change(input, { target: { value: '/vocabulary apple, banana' } })
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    expect(callbacks.onRunSkill).toHaveBeenCalledExactlyOnceWith({
+      skillId: 'vocabulary',
+      text: 'apple, banana'
+    })
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(input).toHaveValue('')
+  })
+
+  it('keeps a Tab-selected vocabulary in the composer and submits the same arguments as Enter', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/voc')
+
+    fireEvent.keyDown(input, { key: 'Tab' })
+    expect(input).toHaveValue('/vocabulary ')
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
 
     fireEvent.change(input, { target: { value: '/vocabulary apple, banana' } })
     fireEvent.submit(input.closest('form') as HTMLFormElement)
@@ -485,15 +562,66 @@ describe('ConversationPanel picker closing and reopen suppression', () => {
     expect(input).toHaveAttribute('aria-expanded', 'true')
   })
 
-  it('closes on Tab without selecting and lets focus leave in DOM order', () => {
+  it('closes on Tab without selecting when nothing matches and keeps the draft', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/zzz')
+
+    // 无匹配项时不选择，也不阻止默认焦点跳转
+    expect(fireEvent.keyDown(input, { key: 'Tab' })).toBe(true)
+
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(input).toHaveValue('/zzz')
+    expect(input).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('closes on Shift+Tab without selecting and keeps reverse focus navigation', () => {
     const { callbacks } = renderPanel()
     const input = typeDraft('/')
 
-    fireEvent.keyDown(input, { key: 'Tab' })
+    expect(fireEvent.keyDown(input, { key: 'Tab', shiftKey: true })).toBe(true)
 
     expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
     expect(input).toHaveValue('/')
     expect(input).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('passes Ctrl, Alt and Meta Tab combinations through without selecting or blocking', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/voc')
+
+    for (const modifiers of [{ ctrlKey: true }, { altKey: true }, { metaKey: true }]) {
+      expect(fireEvent.keyDown(input, { key: 'Tab', ...modifiers })).toBe(true)
+    }
+
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
+    expect(input).toHaveValue('/voc')
+    // 组合键不视为候选交互，列表保持打开
+    expect(input).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+  })
+
+  it('leaves Tab to default focus navigation for plain text without the picker', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('hello')
+
+    expect(fireEvent.keyDown(input, { key: 'Tab' })).toBe(true)
+
+    expect(input).toHaveValue('hello')
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+  })
+
+  it('does not select on Tab while the composer is locked', () => {
+    const { view, callbacks } = renderPanel()
+    const input = typeDraft('/voc')
+
+    view.rerender(panelElement({ composerLocked: true }))
+
+    expect(fireEvent.keyDown(input, { key: 'Tab' })).toBe(true)
+    expect(input).toHaveValue('/voc')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(callbacks.onSend).not.toHaveBeenCalled()
   })
 
   it('does not reopen the suppressed draft after an action selection', () => {
@@ -512,6 +640,33 @@ describe('ConversationPanel picker closing and reopen suppression', () => {
     fireEvent.blur(input)
     fireEvent.focus(input)
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+
+    // 草稿失去 `/` 前缀后，新的 `/` 前缀输入可以重新触发
+    fireEvent.change(input, { target: { value: 'Good morning' } })
+    fireEvent.change(input, { target: { value: '/p' } })
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+  })
+
+  it('does not reopen the suppressed draft after a Tab selection and lets the next Tab leave', () => {
+    const { view } = renderPanel()
+    const input = typeDraft('/tra')
+
+    fireEvent.keyDown(input, { key: 'Tab' })
+    expect(input).toHaveValue('/translate ')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+
+    // 同一草稿的普通重渲染不弹回
+    view.rerender(panelElement({ messages: [message({ messageId: 'm-1' })] }))
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+
+    // 继续补充参数、失焦后重新聚焦同样保持关闭
+    fireEvent.change(input, { target: { value: '/translate Good morning' } })
+    fireEvent.blur(input)
+    fireEvent.focus(input)
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+
+    // 列表已关闭：再次按 Tab 不再被拦截，焦点按默认顺序移出
+    expect(fireEvent.keyDown(input, { key: 'Tab' })).toBe(true)
 
     // 草稿失去 `/` 前缀后，新的 `/` 前缀输入可以重新触发
     fireEvent.change(input, { target: { value: 'Good morning' } })
@@ -619,6 +774,22 @@ describe('ConversationPanel picker input method composition', () => {
     expect(pickerOptions()).toHaveLength(1)
     expect(pickerOptions()[0]).toHaveTextContent('翻译')
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-translate')
+  })
+
+  it('does not select on Tab during input method composition', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/')
+
+    // React 组合状态与原生 isComposing 标记都不触发选择，也不拦截按键
+    fireEvent.compositionStart(input)
+    expect(fireEvent.keyDown(input, { key: 'Tab' })).toBe(true)
+    fireEvent.keyDown(input, { key: 'Tab', isComposing: true })
+    fireEvent.compositionEnd(input)
+
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
+    expect(input).toHaveValue('/')
+    expect(input).toHaveAttribute('aria-expanded', 'true')
   })
 })
 
