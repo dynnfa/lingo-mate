@@ -14,6 +14,7 @@
   "generation": {
     "model": "Couldn't generate a reply. Please try again later.",
     "modelNotConfigured": "No model is configured yet. Set one up in Settings > Models first.",
+    "toolCallNotSupported": "The current model or endpoint doesn't support the tool calls required to save vocabulary. Switch models or endpoints and try again.",
     "persistence": "Couldn't save the conversation. Please try again later.",
     "unknown": "Something went wrong. Please try again later."
   },

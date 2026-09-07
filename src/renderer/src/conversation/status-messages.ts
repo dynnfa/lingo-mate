@@ -95,6 +95,8 @@ function translateGenerationError(t: StatusTFunction, error: GenerationEventErro
       return t('errors:models.credentialDecryptFailed')
     case 'MODEL_NOT_CONFIGURED':
       return t('errors:generation.modelNotConfigured')
+    case 'TOOL_CALL_NOT_SUPPORTED':
+      return t('errors:generation.toolCallNotSupported')
     case 'PERSISTENCE_ERROR':
       return t('errors:generation.persistence')
     case 'UNKNOWN_ERROR':

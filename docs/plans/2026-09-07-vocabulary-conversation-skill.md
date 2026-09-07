@@ -4,6 +4,7 @@
 
 - 日期：2026-09-07。
 - 状态：Implemented（2026-09-07）。自动化与 Electron 实窗验收已通过；仍需使用用户配置的真实模型做最终人工验收。
+- 部分被替代（2026-09-07）：本计划中的旧词条结构（senses/pronunciations JSON 分析）、JSON 文本解析链路、`LlmVocabularyResultDescriber` 二次 LLM 结果描述及 `description_failed / description_cancelled` 重试依赖，已被 [Vocabulary Tool Call SQL 写入重构计划](./2026-09-07-vocabulary-tool-call-sql.md) 取代并移除；`/vocabulary` 对话入口、输入规则、批次结果和持久化恢复能力仍沿用本设计。
 - 目标：移除 Vocabulary 独立界面，用户在原对话输入框选择 `/vocabulary`，输入词汇并发送；应用读取所选 skill 和其后的文本，复用现有 LLM 解析与 SQLite 写入流程，最后再次调用 LLM，在当前会话中说明新增数量和未写入的重复词。
 - 本计划取代 [Vocabulary 批量导入计划](./2026-09-05-vocabulary-batch-import.md) 中的独立录入面板、结果列表和词汇结果不进入会话的交互设计，保留其底层解析、数据结构、查重与模型兼容行为。
 - [单词概念 Skill 计划](./2026-09-06-word-concept-skill.md) 尚未实施，本次不以其落地为前提，也不顺带实现其他 skill。

@@ -281,6 +281,16 @@ describe('conversation protocol schemas', () => {
         requestId: REQUEST_ID,
         sessionId: SESSION_ID,
         messageId: ASSISTANT_MESSAGE_ID,
+        error: { code: 'TOOL_CALL_NOT_SUPPORTED' }
+      })
+    ).toBeTruthy()
+
+    expect(
+      conversationEventSchema.parse({
+        type: 'failed',
+        requestId: REQUEST_ID,
+        sessionId: SESSION_ID,
+        messageId: ASSISTANT_MESSAGE_ID,
         error: { code: 'MODEL_ERROR' }
       })
     ).toBeTruthy()

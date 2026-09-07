@@ -1,22 +1,25 @@
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
-import {
-  VocabularyConversationSkill,
-  VocabularyDescriptionError
-} from '../vocabulary-conversation-skill'
-import { memoryRepository, recognized, stored } from './fixtures'
+import { VocabularyConversationSkill } from '../vocabulary-conversation-skill'
+import { insertCommand, insertResult, memoryRepository } from './fixtures'
+import type { VocabularyBatch } from '../../../../shared/vocabulary'
+
+const formatFeedback = (batch: VocabularyBatch, language: 'zh-CN' | 'en'): string =>
+  language === 'zh-CN'
+    ? `新增 ${batch.counts.saved}，已有 ${batch.counts.existing}`
+    : `${batch.counts.saved} added, ${batch.counts.existing} existing`
 
 describe('VocabularyConversationSkill', () => {
-  it('reuses batch parsing and reports actual saved, existing, and duplicate facts', async () => {
+  it('reuses batch parsing, reports actual facts, and formats local feedback', async () => {
     const repository = memoryRepository()
-    repository.entries.push(stored('banana'))
-    const analyze = vi.fn(async () => recognized())
-    const describe = vi.fn(async () => 'Two words were added.')
+    repository.commands.push(insertCommand('banana'))
+    const analyze = vi.fn(async ({ term }: { term: string }) => insertResult(term))
     const phases: string[] = []
-    const skill = new VocabularyConversationSkill(repository, () => ({
-      analyzer: { analyze },
-      describer: { describe }
-    }))
+    const skill = new VocabularyConversationSkill(
+      repository,
+      () => ({ analyzer: { analyze } }),
+      formatFeedback
+    )
 
     const result = await skill.run({
       requestId: randomUUID(),
@@ -38,31 +41,36 @@ describe('VocabularyConversationSkill', () => {
     })
     expect(phases).toEqual(['analyzing', 'committing', 'summarizing'])
     expect(analyze).toHaveBeenCalledTimes(2)
-    expect(describe).toHaveBeenCalledWith(
-      expect.objectContaining({ batch: result.batch, explanationLanguage: 'en' })
-    )
+    expect(skill.feedback(result.batch, 'en')).toBe('2 added, 1 existing')
+    expect(skill.feedback(result.batch, 'zh-CN')).toBe('新增 2，已有 1')
   })
 
-  it('preserves the committed batch when description fails', async () => {
+  it('stops before the summarizing phase when the batch was cancelled', async () => {
     const repository = memoryRepository()
-    const skill = new VocabularyConversationSkill(repository, () => ({
-      analyzer: { analyze: async () => recognized() },
-      describer: { describe: async () => Promise.reject(new Error('provider detail')) }
-    }))
-
-    const error = await skill
-      .run({
-        requestId: randomUUID(),
-        executionId: randomUUID(),
-        arguments: { text: 'apple', wordLanguage: 'en' },
-        explanationLanguage: 'zh-CN',
-        signal: new AbortController().signal,
-        onPhase: () => undefined
-      })
-      .catch((cause: unknown) => cause)
-
-    expect(error).toBeInstanceOf(VocabularyDescriptionError)
-    expect((error as VocabularyDescriptionError).batch.counts.saved).toBe(1)
-    expect(repository.entries.map((entry) => entry.term)).toEqual(['apple'])
+    const phases: string[] = []
+    const controller = new AbortController()
+    const skill = new VocabularyConversationSkill(
+      repository,
+      () => ({
+        analyzer: {
+          analyze: () => new Promise(() => {})
+        }
+      }),
+      formatFeedback
+    )
+    const result = await skill.run({
+      requestId: randomUUID(),
+      executionId: randomUUID(),
+      arguments: { text: 'apple', wordLanguage: 'en' },
+      explanationLanguage: 'zh-CN',
+      signal: controller.signal,
+      onPhase: (phase) => {
+        phases.push(phase)
+        if (phase === 'analyzing') controller.abort()
+      }
+    })
+    expect(result.batch.outcome).toBe('cancelled')
+    expect(phases).toEqual(['analyzing'])
+    expect(repository.commands).toHaveLength(0)
   })
 })

@@ -14,6 +14,7 @@
   "generation": {
     "model": "生成回复失败，请稍后重试。",
     "modelNotConfigured": "尚未配置模型，请先在设置 > 模型中完成配置。",
+    "toolCallNotSupported": "当前模型或接口不支持词汇保存所需的工具调用，请更换模型或接口后重试。",
     "persistence": "保存会话失败，请稍后重试。",
     "unknown": "发生未知错误，请稍后重试。"
   },

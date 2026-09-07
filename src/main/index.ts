@@ -3,7 +3,7 @@ import { openDatabase } from '../database/database'
 import { SqliteVocabularyRepository } from '../database/sqlite-vocabulary-repository'
 import { VocabularyConversationSkill } from '../core/learning/vocabulary/vocabulary-conversation-skill'
 import { LlmVocabularyAnalyzer } from '../core/llm/llm-vocabulary-analyzer'
-import { LlmVocabularyResultDescriber } from '../core/llm/llm-vocabulary-result-describer'
+import { createVocabularyFeedbackFormatter } from './vocabulary-feedback'
 import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'node:url'
@@ -115,13 +115,11 @@ app.whenReady().then(() => {
     }
   }
   const vocabularyRepository = new SqliteVocabularyRepository(database)
-  const vocabularySkill = new VocabularyConversationSkill(vocabularyRepository, () => {
-    const snapshot = modelsService.resolveSnapshot()
-    return {
-      analyzer: new LlmVocabularyAnalyzer(snapshot, 30_000),
-      describer: new LlmVocabularyResultDescriber(snapshot, 30_000)
-    }
-  })
+  const vocabularySkill = new VocabularyConversationSkill(
+    vocabularyRepository,
+    () => ({ analyzer: new LlmVocabularyAnalyzer(modelsService.resolveSnapshot(), 30_000) }),
+    createVocabularyFeedbackFormatter()
+  )
   conversationModule = new ConversationModule(
     conversationModel,
     conversationRepository,

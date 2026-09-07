@@ -4,12 +4,19 @@ import type { ConversationEvent } from '../../src/shared/conversation'
 import type { LanguageModel } from '../../src/core/llm/language-model'
 import { ConversationModule } from '../../src/core/conversation/conversation-module'
 import { VocabularyConversationSkill } from '../../src/core/learning/vocabulary/vocabulary-conversation-skill'
-import { recognized } from '../../src/core/learning/vocabulary/__tests__/fixtures'
+import type { VocabularyAnalyzer } from '../../src/core/learning/vocabulary/vocabulary-analyzer'
+import { VocabularyError } from '../../src/core/learning/vocabulary/parse-vocabulary-input'
+import { insertResult } from '../../src/core/learning/vocabulary/__tests__/fixtures'
+import { createVocabularyFeedbackFormatter } from '../../src/main/vocabulary-feedback'
 import { openDatabase } from '../../src/database/database'
-import { SqliteConversationRepository } from '../../src/database/sqlite-conversation-repository'
+import {
+  SqliteConversationRepository,
+  type StoredMessage
+} from '../../src/database/sqlite-conversation-repository'
 import { SqliteVocabularyRepository } from '../../src/database/sqlite-vocabulary-repository'
+import type Database from 'better-sqlite3'
 
-const databases: ReturnType<typeof openDatabase>[] = []
+const databases: Database.Database[] = []
 afterEach(() => {
   for (const database of databases.splice(0)) database.close()
 })
@@ -32,18 +39,25 @@ function waitForTerminal(
   })
 }
 
+function makeSkill(
+  repository: SqliteVocabularyRepository,
+  analyze: VocabularyAnalyzer['analyze']
+): VocabularyConversationSkill {
+  return new VocabularyConversationSkill(
+    repository,
+    () => ({ analyzer: { analyze } }),
+    createVocabularyFeedbackFormatter()
+  )
+}
+
 describe('vocabulary conversation integration', () => {
-  it('persists the invocation, actual batch, and assistant reply in one conversation', async () => {
+  it('persists the invocation, actual batch, and localized assistant reply without a second model call', async () => {
     const database = openDatabase(':memory:')
     databases.push(database)
     const conversationRepository = new SqliteConversationRepository(database)
     const vocabularyRepository = new SqliteVocabularyRepository(database)
-    const analyze = vi.fn(async () => recognized())
-    const describe = vi.fn(async () => 'The configured model described the result.')
-    const skill = new VocabularyConversationSkill(vocabularyRepository, () => ({
-      analyzer: { analyze },
-      describer: { describe }
-    }))
+    const analyze = vi.fn(async ({ term }: { term: string }) => insertResult(term))
+    const skill = makeSkill(vocabularyRepository, analyze)
     const module = new ConversationModule(
       unusedConversationModel,
       conversationRepository,
@@ -72,12 +86,16 @@ describe('vocabulary conversation integration', () => {
       'skillPhase',
       'completed'
     ])
+    const completed = events.at(-1)
+    expect(completed).toMatchObject({ type: 'completed', skillCompletion: 'complete' })
     expect(vocabularyRepository.list({}).entries).toHaveLength(2)
     const loaded = await module.loadConversation(sessionId)
     expect(loaded.messages.map((message) => message.role)).toEqual(['user', 'assistant'])
     expect(loaded.messages[0].content).toBe('/vocabulary apple, banana, apple')
-    expect(loaded.messages[1].content).toContain('The configured model described the result.')
     expect(loaded.messages[1].content).toContain('2 added')
+    expect(loaded.messages[1].content).toContain('apple and banana')
+    expect(loaded.messages[1].content).toContain('1 repeated')
+    expect(loaded.messages[1].retryable).toBeUndefined()
 
     const execution = await conversationRepository.findExecutionByUserMessage(
       sessionId,
@@ -85,25 +103,16 @@ describe('vocabulary conversation integration', () => {
     )
     expect(execution?.phase).toBe('completed')
     expect(execution?.batch?.counts).toMatchObject({ saved: 2, duplicate: 1 })
+    expect(analyze).toHaveBeenCalledTimes(2)
   })
 
-  it('retries only the description after vocabulary has committed', async () => {
+  it('regenerates the local reply on retry without calling the model again', async () => {
     const database = openDatabase(':memory:')
     databases.push(database)
-    const conversationRepository = new SqliteConversationRepository(database)
+    const conversationRepository = new FailingFinishRepository(database)
     const vocabularyRepository = new SqliteVocabularyRepository(database)
-    const analyze = vi.fn(async () => recognized())
-    let descriptionAttempts = 0
-    const skill = new VocabularyConversationSkill(vocabularyRepository, () => ({
-      analyzer: { analyze },
-      describer: {
-        describe: async () => {
-          descriptionAttempts += 1
-          if (descriptionAttempts === 1) throw new Error('summary unavailable')
-          return 'Description retry succeeded.'
-        }
-      }
-    }))
+    const analyze = vi.fn(async () => insertResult())
+    const skill = makeSkill(vocabularyRepository, analyze)
     const module = new ConversationModule(
       unusedConversationModel,
       conversationRepository,
@@ -112,6 +121,7 @@ describe('vocabulary conversation integration', () => {
       conversationRepository
     )
     const { sessionId } = await module.createConversation()
+
     const first = await waitForTerminal((emit) =>
       module.runSkill(
         {
@@ -123,13 +133,11 @@ describe('vocabulary conversation integration', () => {
         emit
       )
     )
-    const firstCompleted = first.at(-1)
-    expect(firstCompleted).toMatchObject({
-      type: 'completed',
-      skillCompletion: 'description_failed'
-    })
+    expect(first.at(-1)).toMatchObject({ type: 'failed', error: { code: 'PERSISTENCE_ERROR' } })
     const history = await module.loadConversation(sessionId)
     expect(history.messages[0].retryable).toBe(true)
+    // 词库已提交：报告存在，重试不得再次写库或调用模型。
+    expect(vocabularyRepository.list({}).entries).toHaveLength(1)
     expect(analyze).toHaveBeenCalledTimes(1)
 
     const retry = await waitForTerminal((emit) =>
@@ -146,7 +154,71 @@ describe('vocabulary conversation integration', () => {
     expect(analyze).toHaveBeenCalledTimes(1)
     expect(vocabularyRepository.list({}).entries).toHaveLength(1)
     const afterRetry = await module.loadConversation(sessionId)
-    expect(afterRetry.messages.at(-1)?.content).toContain('Description retry succeeded.')
+    expect(afterRetry.messages.at(-1)?.content).toContain('1 added')
+    expect(afterRetry.messages.at(-1)?.content).toContain('apple')
     expect(afterRetry.messages[0].retryable).toBeUndefined()
+    expect(afterRetry.messages).toHaveLength(2)
+  })
+
+  it('emits a retryable capability error without persisting a failed batch or assistant reply', async () => {
+    const database = openDatabase(':memory:')
+    databases.push(database)
+    const conversationRepository = new SqliteConversationRepository(database)
+    const vocabularyRepository = new SqliteVocabularyRepository(database)
+    const skill = makeSkill(vocabularyRepository, async () => {
+      throw new VocabularyError('TOOL_CALL_NOT_SUPPORTED')
+    })
+    const module = new ConversationModule(
+      unusedConversationModel,
+      conversationRepository,
+      () => 'en',
+      skill,
+      conversationRepository
+    )
+    const { sessionId } = await module.createConversation()
+
+    const events = await waitForTerminal((emit) =>
+      module.runSkill(
+        {
+          requestId: randomUUID(),
+          sessionId,
+          skillId: 'vocabulary',
+          arguments: { text: 'apple', wordLanguage: 'en' }
+        },
+        emit
+      )
+    )
+
+    expect(events.map((event) => event.type)).toEqual(['started', 'skillPhase', 'failed'])
+    expect(events.at(-1)).toMatchObject({
+      type: 'failed',
+      error: { code: 'TOOL_CALL_NOT_SUPPORTED' }
+    })
+    expect(vocabularyRepository.list({}).entries).toHaveLength(0)
+    const history = await module.loadConversation(sessionId)
+    expect(history.messages).toHaveLength(1)
+    expect(history.messages[0]).toMatchObject({ role: 'user', retryable: true })
+    const execution = await conversationRepository.findExecutionByUserMessage(
+      sessionId,
+      history.messages[0].messageId
+    )
+    expect(execution).toMatchObject({ phase: 'failed' })
+    expect(execution?.batch).toBeUndefined()
   })
 })
+
+// 第一次 finishExecution 失败：模拟词库已提交但 assistant 消息尚未保存时退出应用。
+class FailingFinishRepository extends SqliteConversationRepository {
+  private failuresLeft = 1
+  override async finishExecution(
+    executionId: string,
+    phase: 'completed' | 'description_failed' | 'description_cancelled',
+    assistantMessage: StoredMessage
+  ): Promise<void> {
+    if (this.failuresLeft > 0) {
+      this.failuresLeft -= 1
+      throw new Error('fixture: assistant message persistence failed')
+    }
+    return super.finishExecution(executionId, phase, assistantMessage)
+  }
+}

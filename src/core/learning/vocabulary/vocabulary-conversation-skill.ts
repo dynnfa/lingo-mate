@@ -4,21 +4,10 @@ import type { VocabularyBatch } from '../../../shared/vocabulary'
 import { VocabularyModule } from './vocabulary-module'
 import type { VocabularyAnalyzer } from './vocabulary-analyzer'
 import type { VocabularyRepository } from './vocabulary-repository'
-import type { VocabularyResultDescriber } from './vocabulary-result-describer'
+import type { VocabularyFeedbackFormatter } from './vocabulary-feedback'
 
-interface VocabularySkillRuntime {
+export interface VocabularySkillRuntime {
   analyzer: VocabularyAnalyzer
-  describer: VocabularyResultDescriber
-}
-
-export class VocabularyDescriptionError extends Error {
-  constructor(
-    readonly batch: VocabularyBatch,
-    cause: unknown
-  ) {
-    super('Vocabulary result description failed', { cause })
-    this.name = 'VocabularyDescriptionError'
-  }
 }
 
 export interface RunVocabularyConversationSkillInput {
@@ -33,14 +22,12 @@ export interface RunVocabularyConversationSkillInput {
 export class VocabularyConversationSkill {
   constructor(
     private readonly repository: VocabularyRepository,
-    private readonly createRuntime: () => VocabularySkillRuntime
+    private readonly createRuntime: () => VocabularySkillRuntime,
+    private readonly formatFeedback: VocabularyFeedbackFormatter
   ) {}
 
-  async run(input: RunVocabularyConversationSkillInput): Promise<{
-    batch: VocabularyBatch
-    description: string
-  }> {
-    // Both model calls share this immutable runtime/configuration snapshot.
+  async run(input: RunVocabularyConversationSkillInput): Promise<{ batch: VocabularyBatch }> {
+    // The whole batch shares this immutable runtime/configuration snapshot.
     const runtime = this.createRuntime()
     const module = new VocabularyModule(this.repository, () => runtime.analyzer)
     const batch = await module.addBatch(
@@ -56,28 +43,13 @@ export class VocabularyConversationSkill {
         onPhase: input.onPhase
       }
     )
-    if (batch.outcome === 'cancelled') return { batch, description: '' }
-    try {
-      await input.onPhase('summarizing')
-      const description = await runtime.describer.describe({
-        batch,
-        explanationLanguage: input.explanationLanguage,
-        signal: input.signal
-      })
-      return { batch, description }
-    } catch (cause) {
-      throw new VocabularyDescriptionError(batch, cause)
-    }
+    if (batch.outcome === 'cancelled') return { batch }
+    // summarizing 阶段只整理本地结果，不再调用模型描述。
+    await input.onPhase('summarizing')
+    return { batch }
   }
 
-  async describe(
-    batch: VocabularyBatch,
-    explanationLanguage: SupportedLocale,
-    signal: AbortSignal,
-    onPhase: () => void | Promise<void>
-  ): Promise<string> {
-    const runtime = this.createRuntime()
-    await onPhase()
-    return runtime.describer.describe({ batch, explanationLanguage, signal })
+  feedback(batch: VocabularyBatch, language: SupportedLocale): string {
+    return this.formatFeedback(batch, language)
   }
 }
