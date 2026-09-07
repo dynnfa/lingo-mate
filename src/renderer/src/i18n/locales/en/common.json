@@ -24,7 +24,7 @@
       "models": "Models"
     },
     "models": {
-      "description": "Configure the LLM used for language learning. Saved settings apply to the next conversation.",
+      "description": "Configure the LLM used for language learning. Saved settings apply to subsequent conversations and vocabulary analysis.",
       "loading": "Loading model settings…",
       "retryLoad": "Retry",
       "protocolLabel": "API type",

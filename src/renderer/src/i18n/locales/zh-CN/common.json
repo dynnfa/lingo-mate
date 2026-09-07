@@ -24,7 +24,7 @@
       "models": "模型"
     },
     "models": {
-      "description": "配置用于语言学习的 LLM，保存后下一次对话生效。",
+      "description": "配置语言学习使用的大语言模型。保存后将用于后续对话及词汇解析。",
       "loading": "正在读取模型配置…",
       "retryLoad": "重试",
       "protocolLabel": "接口类型",

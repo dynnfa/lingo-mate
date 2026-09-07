@@ -190,6 +190,10 @@ export class ConversationModule {
     return { accepted: true, generation }
   }
 
+  dispose(): void {
+    for (const execution of this.activeRequests.values()) execution.controller.abort()
+  }
+
   private async runGeneration(
     generation: GenerationStarted,
     execution: ActiveExecution,

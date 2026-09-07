@@ -10,7 +10,8 @@ import {
 const zhNames: Record<string, string> = {
   translate: '翻译',
   polish: '润色',
-  practice: '口语练习'
+  practice: '口语练习',
+  vocabulary: '收藏词汇'
 }
 
 const resolveZhName = (action: ConversationActionMeta): string => zhNames[action.id] ?? ''
@@ -37,7 +38,8 @@ describe('CONVERSATION_ACTIONS catalog', () => {
     expect(CONVERSATION_ACTIONS.map((action) => action.id)).toEqual([
       'translate',
       'polish',
-      'practice'
+      'practice',
+      'vocabulary'
     ])
     expect(new Set(CONVERSATION_ACTIONS.map((action) => action.command)).size).toBe(
       CONVERSATION_ACTIONS.length

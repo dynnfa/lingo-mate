@@ -1,3 +1,4 @@
+import { VocabularyPanel } from '../vocabulary/VocabularyPanel'
 import { useRef, useState, type KeyboardEvent, type SyntheticEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { translateConversationStatus } from './status-messages'
@@ -37,6 +38,7 @@ export function ConversationPanel({
 }: ConversationPanelProps): React.JSX.Element {
   const { t } = useTranslation(['common', 'conversation', 'errors'])
   const [draft, setDraft] = useState('')
+  const [vocabularyMode, setVocabularyMode] = useState(false)
   const [composing, setComposing] = useState(false)
   // 组合开始时的查询词：组合期间冻结候选，结束后再按最新草稿过滤。
   const [compositionQuery, setCompositionQuery] = useState<string | undefined>(undefined)
@@ -70,6 +72,12 @@ export function ConversationPanel({
   // 首版行动契约：选择仅填入命令模板进入待输入状态，不发送；
   // 替换后的草稿仍以 `/` 开头，用锁定抑制避免完成后立即弹回。
   const selectAction = (action: ConversationActionMeta): void => {
+    if (action.id === 'vocabulary') {
+      setVocabularyMode(true)
+      setDraft('')
+      closePicker('latched')
+      return
+    }
     setDraft(`/${action.command} `)
     closePicker('latched')
     inputRef.current?.focus()
@@ -129,6 +137,19 @@ export function ConversationPanel({
     // 传原始草稿，trim 由 Controller 完成。
     onSend(draft)
   }
+
+  if (vocabularyMode)
+    return (
+      <div className="conversation-panel">
+        <VocabularyPanel
+          onExit={() => {
+            setVocabularyMode(false)
+            closePicker('soft')
+            requestAnimationFrame(() => inputRef.current?.focus())
+          }}
+        />
+      </div>
+    )
 
   return (
     <div className="conversation-panel">

@@ -1,11 +1,13 @@
 // `/` 行动选择器的展示元数据与纯函数：只描述稳定身份与文案 key，
-// 不包含 Prompt、业务执行逻辑或跨进程协议；行动接入属于计划中的后续范围。
+// 不包含 Prompt、业务执行逻辑或跨进程协议；词汇行动由独立录入模式执行。
 
-export type ConversationActionId = 'translate' | 'polish' | 'practice'
+export type ConversationActionId = 'translate' | 'polish' | 'practice' | 'vocabulary'
 
 // 文案 key 显式枚举：类型以 zh-CN 资源为基准，拼错在类型检查阶段暴露，
 // 双语 key 集合一致性由 resources.test.ts 保证。
 export type ConversationActionTextKey =
+  | 'conversation:actionPicker.actions.vocabulary.name'
+  | 'conversation:actionPicker.actions.vocabulary.description'
   | 'conversation:actionPicker.actions.translate.name'
   | 'conversation:actionPicker.actions.translate.description'
   | 'conversation:actionPicker.actions.polish.name'
@@ -41,6 +43,12 @@ export const CONVERSATION_ACTIONS: readonly ConversationActionMeta[] = [
     command: 'practice',
     nameKey: 'conversation:actionPicker.actions.practice.name',
     descriptionKey: 'conversation:actionPicker.actions.practice.description'
+  },
+  {
+    id: 'vocabulary',
+    command: 'vocabulary',
+    nameKey: 'conversation:actionPicker.actions.vocabulary.name',
+    descriptionKey: 'conversation:actionPicker.actions.vocabulary.description'
   }
 ]
 

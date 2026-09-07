@@ -1,3 +1,10 @@
+import type Database from 'better-sqlite3'
+import { openDatabase } from '../database/database'
+import { SqliteVocabularyRepository } from '../database/sqlite-vocabulary-repository'
+import { VocabularyModule } from '../core/learning/vocabulary/vocabulary-module'
+import { VocabularyError } from '../core/learning/vocabulary/parse-vocabulary-input'
+import { LlmVocabularyAnalyzer } from '../core/llm/llm-vocabulary-analyzer'
+import { registerVocabularyIpc } from './vocabulary-ipc'
 import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'node:url'
@@ -8,7 +15,7 @@ import type { SupportedLocale } from '../shared/preferences'
 import { ConfiguredLanguageModel } from '../core/llm/configured-language-model'
 import { LocalLanguageModel } from '../core/llm/local-language-model'
 import { ModelConnectionTester } from '../core/llm/model-connection-tester'
-import { ModelConfigService } from '../core/llm/model-config'
+import { ModelConfigService, ModelConfigValidationError } from '../core/llm/model-config'
 import type { LanguageModel } from '../core/llm/language-model'
 import { SqliteConversationRepository } from '../database/sqlite-conversation-repository'
 import { registerConversationIpc } from './conversation-ipc'
@@ -18,7 +25,9 @@ import { PreferencesService } from './preferences'
 import { registerPreferencesIpc } from './preferences-ipc'
 import { createElectronPreferenceStore } from './preferences-store'
 
-let conversationRepository: SqliteConversationRepository | undefined
+let database: Database.Database | undefined
+let disposeVocabulary: (() => void) | undefined
+let conversationModule: ConversationModule | undefined
 
 // 加载目标与 IPC 来源白名单使用同一地址，开发模式也只信任指定文档。
 const rendererUrl =
@@ -70,9 +79,8 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  conversationRepository = new SqliteConversationRepository(
-    join(app.getPath('userData'), 'lingo-mate.sqlite')
-  )
+  database = openDatabase(join(app.getPath('userData'), 'lingo-mate.sqlite'))
+  const conversationRepository = new SqliteConversationRepository(database)
 
   // 模型配置服务：持久化记录 + 系统安全存储加密密钥；IPC 与对话模型入口共用。
   const modelsService = new ModelConfigService(
@@ -108,8 +116,30 @@ app.whenReady().then(() => {
       return 'zh-CN'
     }
   }
-  registerConversationIpc(
-    new ConversationModule(conversationModel, conversationRepository, resolveOutputLanguage)
+  conversationModule = new ConversationModule(
+    conversationModel,
+    conversationRepository,
+    resolveOutputLanguage
+  )
+  registerConversationIpc(conversationModule)
+  const vocabularyRepository = new SqliteVocabularyRepository(database)
+  const vocabularyModule = new VocabularyModule(vocabularyRepository, (wordMs) => {
+    try {
+      return new LlmVocabularyAnalyzer(modelsService.resolveSnapshot(), wordMs)
+    } catch (cause) {
+      throw new VocabularyError(
+        cause instanceof ModelConfigValidationError && cause.code === 'CREDENTIAL_DECRYPT_FAILED'
+          ? 'CREDENTIAL_DECRYPT_FAILED'
+          : 'MODEL_ERROR',
+        { cause }
+      )
+    }
+  })
+  disposeVocabulary = registerVocabularyIpc(
+    vocabularyModule,
+    vocabularyRepository,
+    resolveOutputLanguage,
+    rendererUrl
   )
 
   createWindow()
@@ -131,8 +161,11 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
-  conversationRepository?.close()
-  conversationRepository = undefined
+  disposeVocabulary?.()
+  disposeVocabulary = undefined
+  conversationModule?.dispose()
+  database?.close()
+  database = undefined
 })
 
 function isAllowedExternalUrl(rawUrl: string): boolean {
