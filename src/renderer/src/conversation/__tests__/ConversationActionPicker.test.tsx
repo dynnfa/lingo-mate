@@ -45,7 +45,7 @@ describe('ConversationActionPicker rendering', () => {
 
     const listbox = screen.getByRole('listbox', { name: '可用行动' })
     const options = screen.getAllByRole('option')
-    expect(options).toHaveLength(4)
+    expect(options).toHaveLength(5)
     expect(listbox).toContainElement(options[0])
 
     expect(options[0]).toHaveTextContent('翻译')
@@ -53,6 +53,9 @@ describe('ConversationActionPicker rendering', () => {
     expect(options[0]).toHaveTextContent('把文本翻译成目标语言')
     expect(options[1]).toHaveTextContent('润色')
     expect(options[2]).toHaveTextContent('口语练习')
+    expect(options[3]).toHaveTextContent('概念讲解')
+    expect(options[3]).toHaveTextContent('/concept')
+    expect(options[4]).toHaveTextContent('收藏词汇')
   })
 
   it('marks only the highlighted option as selected', () => {

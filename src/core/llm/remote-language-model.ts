@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import { z } from 'zod'
 import { conversationSystemMessage } from '../prompt/conversation-prompt'
+import { wordConceptSystemMessage } from '../prompt/word-concept'
 import type { LanguageModel, StreamReplyInput } from './language-model'
 import type { RuntimeModelConfig } from './model-config'
 
@@ -87,13 +88,17 @@ export class RemoteLanguageModel implements LanguageModel {
     }, this.timeoutMs)
 
     try {
+      const systemPrompt =
+        input.promptKind === 'word-concept'
+          ? wordConceptSystemMessage(input)
+          : conversationSystemMessage(input)
       const { data: stream, response } = await this.client.chat.completions
         .create(
           {
             model: this.config.modelId,
             stream: true,
             messages: [
-              { role: 'system', content: conversationSystemMessage(input) },
+              { role: 'system', content: systemPrompt },
               ...input.messages.map(({ role, content }) => ({ role, content }))
             ]
           },

@@ -34,6 +34,10 @@
         "name": "口语练习",
         "description": "围绕一个话题展开对话，练习口头表达。"
       },
+      "concept": {
+        "name": "概念讲解",
+        "description": "讲清一个单词表达的核心概念，把理解迁移到新语境。"
+      },
       "vocabulary": {
         "name": "收藏词汇",
         "description": "批量解析并收藏英语单词与短语。"

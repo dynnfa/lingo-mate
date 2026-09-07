@@ -164,6 +164,26 @@ describe('RemoteLanguageModel protocol and lifecycle', () => {
     }
   )
 
+  it('sends the word-concept system prompt when promptKind is word-concept', async () => {
+    respond(chunk('Hello') + STOP + DONE)
+    await collect(
+      new RemoteLanguageModel(CONFIG).streamReply({
+        messages: [{ role: 'user', content: '/concept pursue' }],
+        outputLanguage: 'zh-CN',
+        targetLanguage: 'en',
+        promptKind: 'word-concept',
+        signal: new AbortController().signal
+      })
+    )
+    const init = vi.mocked(fetch).mock.calls[0][1]
+    const body = JSON.parse(init?.body as string) as { messages: { content: string }[] }
+    const prompt = body.messages[0].content
+    expect(prompt).toContain('the /concept command')
+    expect(prompt).toContain('commentary on examples in Simplified Chinese (zh-CN)')
+    expect(prompt).toContain('the example sentences themselves in English (en)')
+    expect(prompt).not.toContain('You are Lingo Mate')
+  })
+
   it('does not contact the service for an already cancelled request', async () => {
     respond(STOP + DONE)
     const controller = new AbortController()

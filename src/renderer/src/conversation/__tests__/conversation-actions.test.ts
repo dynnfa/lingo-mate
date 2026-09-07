@@ -13,12 +13,21 @@ const zhNames: Record<string, string> = {
   translate: '翻译',
   polish: '润色',
   practice: '口语练习',
+  concept: '概念讲解',
   vocabulary: '收藏词汇'
 }
 
 const resolveZhName = (action: ConversationActionMeta): string => zhNames[action.id] ?? ''
 
 describe('parseSlashTrigger', () => {
+  it('stops querying when concept has a command separator', () => {
+    expect(parseSlashTrigger('/concept')).toBe('concept')
+    expect(parseSlashTrigger('/concept ')).toBeUndefined()
+    expect(parseSlashTrigger('/concept pursue')).toBeUndefined()
+    expect(parseSlashTrigger('/concept\tbank')).toBeUndefined()
+    expect(parseSlashTrigger('/conceptual drift')).toBe('conceptual drift')
+  })
+
   it('treats a leading half-width slash as the trigger and returns the query', () => {
     expect(parseSlashTrigger('/')).toBe('')
     expect(parseSlashTrigger('/tr')).toBe('tr')
@@ -66,6 +75,7 @@ describe('CONVERSATION_ACTIONS catalog', () => {
       'translate',
       'polish',
       'practice',
+      'concept',
       'vocabulary'
     ])
     expect(new Set(CONVERSATION_ACTIONS.map((action) => action.command)).size).toBe(
@@ -101,10 +111,14 @@ describe('filterConversationActions', () => {
     expect(filterConversationActions(CONVERSATION_ACTIONS, '润', resolveZhName)).toEqual([
       CONVERSATION_ACTIONS[1]
     ])
-    // “t” 命中 translate 与 practice 两个命令名，顺序沿用目录
+    expect(filterConversationActions(CONVERSATION_ACTIONS, '概念', resolveZhName)).toEqual([
+      CONVERSATION_ACTIONS[3]
+    ])
+    // “t” 命中 translate、practice 与 concept 三个命令名，顺序沿用目录
     expect(filterConversationActions(CONVERSATION_ACTIONS, 't', resolveZhName)).toEqual([
       CONVERSATION_ACTIONS[0],
-      CONVERSATION_ACTIONS[2]
+      CONVERSATION_ACTIONS[2],
+      CONVERSATION_ACTIONS[3]
     ])
   })
 
