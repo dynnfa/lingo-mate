@@ -25,6 +25,10 @@
       "practice": {
         "name": "Speaking practice",
         "description": "Have a conversation around a topic to practice speaking."
+      },
+      "vocabulary": {
+        "name": "Vocabulary",
+        "description": "Analyze and save English words and phrases in a batch."
       }
     }
   }

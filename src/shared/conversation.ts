@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { VocabularyApi } from './vocabulary'
 import type { ModelsApi } from './models'
 import type { PreferencesApi } from './preferences'
 
@@ -186,6 +187,7 @@ export interface ConversationApi {
 }
 
 export interface LingoMateApi {
+  vocabulary: VocabularyApi
   conversation: ConversationApi
   preferences: PreferencesApi
   models: ModelsApi

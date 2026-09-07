@@ -1,3 +1,4 @@
+import { openDatabase } from '../database'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -34,15 +35,15 @@ interface V1Message {
 }
 
 let workspace: string
-let repositories: SqliteConversationRepository[]
+let databases: Database.Database[]
 
 beforeEach(async () => {
   workspace = await mkdtemp(join(tmpdir(), 'lingo-mate-sqlite-'))
-  repositories = []
+  databases = []
 })
 
 afterEach(async () => {
-  for (const repository of repositories) repository.close()
+  for (const database of databases) database.close()
   await rm(workspace, { force: true, recursive: true })
 })
 
@@ -51,8 +52,9 @@ function databasePath(name = 'conversations.sqlite'): string {
 }
 
 function openRepository(path = databasePath()): SqliteConversationRepository {
-  const repository = new SqliteConversationRepository(path)
-  repositories.push(repository)
+  const database = openDatabase(path)
+  databases.push(database)
+  const repository = new SqliteConversationRepository(database)
   return repository
 }
 
@@ -96,7 +98,7 @@ function storedMessage(
 }
 
 describe('SqliteConversationRepository', () => {
-  it('creates the v2 schema for a fresh database', () => {
+  it('creates the v3 schema for a fresh database', () => {
     const path = databasePath()
     const repository = openRepository(path)
 
@@ -109,7 +111,7 @@ describe('SqliteConversationRepository', () => {
 
     const raw = new Database(path)
     try {
-      expect(raw.pragma('user_version', { simple: true })).toBe(2)
+      expect(raw.pragma('user_version', { simple: true })).toBe(3)
       expect(
         raw
           .prepare(
@@ -263,9 +265,9 @@ describe('SqliteConversationRepository', () => {
   it('rejects databases from a newer schema version', () => {
     const path = databasePath()
     const raw = new Database(path)
-    raw.pragma('user_version = 3')
+    raw.pragma('user_version = 4')
     raw.close()
 
-    expect(() => openRepository(path)).toThrow('Unsupported database schema version: 3')
+    expect(() => openRepository(path)).toThrow('Unsupported database schema version: 4')
   })
 })

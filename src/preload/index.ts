@@ -1,3 +1,12 @@
+import {
+  VOCABULARY_CHANNELS,
+  addVocabularyBatchInputSchema,
+  addVocabularyBatchResultSchema,
+  cancelVocabularyBatchInputSchema,
+  cancelVocabularyBatchResultSchema,
+  listVocabularyInputSchema,
+  listVocabularyResultSchema
+} from '../shared/vocabulary'
 import { contextBridge, ipcRenderer } from 'electron'
 import {
   cancelMessageInputSchema,
@@ -33,6 +42,29 @@ import {
 } from '../shared/preferences'
 
 const api: LingoMateApi = {
+  vocabulary: {
+    async addBatch(raw) {
+      const input = addVocabularyBatchInputSchema.safeParse(raw)
+      if (!input.success) return { status: 'error', error: { code: 'INVALID_INPUT' } }
+      return addVocabularyBatchResultSchema.parse(
+        await ipcRenderer.invoke(VOCABULARY_CHANNELS.addBatch, input.data)
+      )
+    },
+    async cancelBatch(raw) {
+      const input = cancelVocabularyBatchInputSchema.safeParse(raw)
+      if (!input.success) return { status: 'error', error: { code: 'INVALID_INPUT' } }
+      return cancelVocabularyBatchResultSchema.parse(
+        await ipcRenderer.invoke(VOCABULARY_CHANNELS.cancelBatch, input.data)
+      )
+    },
+    async list(raw) {
+      const input = listVocabularyInputSchema.safeParse(raw)
+      if (!input.success) return { status: 'error', error: { code: 'INVALID_INPUT' } }
+      return listVocabularyResultSchema.parse(
+        await ipcRenderer.invoke(VOCABULARY_CHANNELS.list, input.data)
+      )
+    }
+  },
   preferences: {
     async getLocale() {
       const result: unknown = await ipcRenderer.invoke(PREFERENCES_CHANNELS.getLocale)

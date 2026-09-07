@@ -25,6 +25,10 @@
       "practice": {
         "name": "口语练习",
         "description": "围绕一个话题展开对话，练习口头表达。"
+      },
+      "vocabulary": {
+        "name": "收藏词汇",
+        "description": "批量解析并收藏英语单词与短语。"
       }
     }
   }

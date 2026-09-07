@@ -1,3 +1,5 @@
+import vocabularyEn from '../locales/en/vocabulary.json'
+import vocabularyZhCN from '../locales/zh-CN/vocabulary.json'
 import { describe, expect, it } from 'vitest'
 import { SUPPORTED_LOCALES } from '../../../../shared/preferences'
 import { createI18n, I18N_NAMESPACES } from '../index'
@@ -9,8 +11,13 @@ import conversationZhCN from '../locales/zh-CN/conversation.json'
 import errorsZhCN from '../locales/zh-CN/errors.json'
 
 const NAMESPACED_RESOURCES = {
-  'zh-CN': { common: commonZhCN, conversation: conversationZhCN, errors: errorsZhCN },
-  en: { common: commonEn, conversation: conversationEn, errors: errorsEn }
+  'zh-CN': {
+    vocabulary: vocabularyZhCN,
+    common: commonZhCN,
+    conversation: conversationZhCN,
+    errors: errorsZhCN
+  },
+  en: { vocabulary: vocabularyEn, common: commonEn, conversation: conversationEn, errors: errorsEn }
 } as const
 
 function flattenKeys(value: unknown, prefix = ''): string[] {

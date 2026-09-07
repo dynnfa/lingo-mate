@@ -1,0 +1,76 @@
+{
+  "title": "Vocabulary import",
+  "scope": "English vocabulary · IPA and written pronunciation tips",
+  "exit": "Exit vocabulary mode",
+  "inputLabel": "Words or phrases",
+  "placeholder": "apple, banana, orange",
+  "limits": "Separate entries with English or Chinese commas. Up to 20 entries, 100 characters per normalized entry, and 4,000 characters total. Ctrl/⌘ + Enter submits.",
+  "submit": "Analyze and save",
+  "running": "Analyzing…",
+  "cancel": "Cancel batch",
+  "retry": "Retry failed entries",
+  "results": "Batch results",
+  "duplicateOf": "Same as entry {{index}}",
+  "savedList": "Saved vocabulary",
+  "refresh": "Refresh",
+  "generatedNotice": "Meanings and pronunciation are model-generated and may contain errors. No audio is included.",
+  "loading": "Loading vocabulary…",
+  "empty": "No vocabulary saved yet.",
+  "more": "Load more",
+  "explanationLanguage": "Explanation language: {{language}}",
+  "languages": {
+    "en": "English",
+    "zh-CN": "Simplified Chinese"
+  },
+  "accents": {
+    "en-US": "American English",
+    "en-GB": "British English",
+    "unspecified": "Unspecified accent"
+  },
+  "partOfSpeech": {
+    "noun": "Noun",
+    "verb": "Verb",
+    "adjective": "Adjective",
+    "adverb": "Adverb",
+    "pronoun": "Pronoun",
+    "preposition": "Preposition",
+    "conjunction": "Conjunction",
+    "interjection": "Interjection",
+    "determiner": "Determiner",
+    "phrase": "Phrase",
+    "other": "Other"
+  },
+  "status": {
+    "saved": "Saved",
+    "existing": "Already saved",
+    "duplicate": "Duplicate",
+    "failed": "Failed"
+  },
+  "outcome": {
+    "completed": "Batch completed",
+    "partial": "Some entries need attention",
+    "failed": "No entries resolved",
+    "cancelled": "Batch cancelled; no new entries saved"
+  },
+  "cancelNotice": {
+    "cancelled": "Cancelling…",
+    "too_late": "The batch has reached storage. Waiting for its final result."
+  },
+  "errors": {
+    "INVALID_INPUT": "Enter 1–20 nonempty entries (up to 100 characters each and 4,000 total).",
+    "BUSY": "A vocabulary batch is already running.",
+    "UNTRUSTED_SOURCE": "This window cannot access vocabulary.",
+    "REQUEST_NOT_FOUND": "This batch is no longer active in this window.",
+    "MODEL_NOT_CONFIGURED": "Configure a real model in Settings → Models first.",
+    "CREDENTIAL_DECRYPT_FAILED": "The saved model credential could not be read. Update it in Settings → Models.",
+    "MODEL_ERROR": "The model request failed. Check the connection and structured-output support, then retry.",
+    "INVALID_ANALYSIS": "The model returned invalid vocabulary analysis.",
+    "UNRECOGNIZED": "The English term or its pronunciation could not be identified reliably.",
+    "TIMEOUT": "Analysis timed out. You can retry this entry.",
+    "CANCELLED": "Cancelled; this entry was not saved.",
+    "STORAGE_FAILED": "Vocabulary could not be read or saved. No pending entries were saved.",
+    "UNKNOWN_ERROR": "The vocabulary request failed. Please retry."
+  },
+  "summary_one": "{{total}} entry · {{saved}} saved · {{existing}} existing · {{duplicate}} duplicate · {{failed}} failed",
+  "summary_other": "{{total}} entries · {{saved}} saved · {{existing}} existing · {{duplicate}} duplicate · {{failed}} failed"
+}

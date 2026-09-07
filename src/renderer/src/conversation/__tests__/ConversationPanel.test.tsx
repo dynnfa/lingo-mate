@@ -225,7 +225,7 @@ describe('ConversationPanel slash trigger and filtering', () => {
 
     const listbox = screen.getByRole('listbox', { name: '可用行动' })
     expect(listbox).toBeInTheDocument()
-    expect(pickerOptions()).toHaveLength(3)
+    expect(pickerOptions()).toHaveLength(4)
     // 首次打开默认高亮第一项
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-translate')
   })
@@ -292,9 +292,11 @@ describe('ConversationPanel picker keyboard selection', () => {
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-practice')
     fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-vocabulary')
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-translate')
     fireEvent.keyDown(input, { key: 'ArrowUp' })
-    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-practice')
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-vocabulary')
   })
 
   it('selects the highlighted action with Enter without sending and keeps focus in the input', () => {
@@ -444,7 +446,7 @@ describe('ConversationPanel picker closing and reopen suppression', () => {
 
     fireEvent.change(input, { target: { value: '/' } })
     expect(input).toHaveAttribute('aria-expanded', 'true')
-    expect(pickerOptions()).toHaveLength(3)
+    expect(pickerOptions()).toHaveLength(4)
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-translate')
 
     fireEvent.keyDown(input, { key: 'Enter' })
@@ -518,7 +520,7 @@ describe('ConversationPanel picker input method composition', () => {
     fireEvent.change(input, { target: { value: '/翻' } })
 
     // 组合期间不刷新候选
-    expect(pickerOptions()).toHaveLength(3)
+    expect(pickerOptions()).toHaveLength(4)
 
     // 组合确认键不选择候选、不发送
     fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
