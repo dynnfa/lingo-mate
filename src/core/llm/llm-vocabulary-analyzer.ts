@@ -15,9 +15,9 @@ import type {
 import { abortableOperation } from '../learning/vocabulary/abortable-operation'
 import { VOCABULARY_PROMPT_VERSION, vocabularySystemMessage } from '../prompt/vocabulary-analysis'
 import type { RuntimeModelConfig } from './model-config'
-import { createModelClient, classifyModelRequestError } from './remote-language-model'
+import { classifyModelRequestError, type CreateLlmClient } from './llm-client'
 
-// 只校验本适配器消费的协议字段；允许提供方附带 usage 等扩展字段。
+// 只校验本适配器消费的协议字段；允许提供方附带扩展字段。
 const completionSchema = z.object({
   choices: z
     .array(
@@ -58,23 +58,23 @@ export class LlmVocabularyAnalyzer implements VocabularyAnalyzer {
   // timeout policy, keeping a single source for the value.
   constructor(
     private readonly config: RuntimeModelConfig,
-    private readonly timeoutMs: number
+    private readonly timeoutMs: number,
+    private readonly createClient: CreateLlmClient
   ) {}
   async analyze(input: AnalyzeVocabularyInput): Promise<VocabularyAnalysisResult> {
     if (!this.config.configured) throw new VocabularyError('MODEL_NOT_CONFIGURED')
     const config = this.config
     return abortableOperation(input.signal, this.timeoutMs, async (signal) => {
       try {
-        const client = createModelClient(config, this.timeoutMs)
+        const client = this.createClient(config)
         // DeepSeek V4 默认开启思考模式，该模式拒绝 required tool_choice。
         // 使用 auto 兼容思考与工具调用；响应仍须通过单工具与入库参数校验。
         const useDeepSeekThinking =
           new URL(config.baseUrl).hostname === 'api.deepseek.com' &&
           config.modelId.startsWith('deepseek-v4-')
-        const response = await client.chat.completions.create(
+        const response = await client.complete(
           {
             model: config.modelId,
-            stream: false,
             messages: [
               {
                 role: 'system',
@@ -91,7 +91,7 @@ export class LlmVocabularyAnalyzer implements VocabularyAnalyzer {
               ? { thinking: { type: 'enabled' }, reasoning_effort: 'high' as const }
               : {})
           },
-          { signal }
+          { operation: 'vocabulary_analysis', timeoutMs: this.timeoutMs, signal }
         )
         const choice = completionSchema.parse(response).choices?.[0]
         const toolCalls = choice?.message.tool_calls ?? []

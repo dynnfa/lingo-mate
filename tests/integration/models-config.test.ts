@@ -10,6 +10,8 @@ import {
   type ModelsConfigStore
 } from '../../src/core/llm/model-config'
 import { RemoteLanguageModel } from '../../src/core/llm/remote-language-model'
+import { LlmClient, type CreateLlmClient } from '../../src/core/llm/llm-client'
+import { LlmUsageRecorder } from '../../src/core/llm/llm-usage-recorder'
 
 interface RecordedRequest {
   path: string
@@ -132,6 +134,17 @@ interface TestStreamInput {
   signal: AbortSignal
 }
 
+const createClient: CreateLlmClient = (config) =>
+  new LlmClient(
+    config,
+    new LlmUsageRecorder({
+      insertStarted: () => {},
+      finish: () => {},
+      markInterruptedStarted: () => 0,
+      list: () => []
+    })
+  )
+
 const STREAM_INPUT = (signal: AbortSignal, outputLanguage = 'zh-CN'): TestStreamInput => ({
   messages: [{ role: 'user', content: 'Hello' }],
   outputLanguage,
@@ -202,7 +215,7 @@ describe('models integration with a fake OpenAI-compatible service', () => {
       modelId: 'fake-model',
       credential: { action: 'keep' }
     })
-    const model = new ConfiguredLanguageModel(service)
+    const model = new ConfiguredLanguageModel(service, createClient)
 
     const chunks: string[] = []
     for await (const delta of model.streamReply(STREAM_INPUT(new AbortController().signal))) {
@@ -234,7 +247,7 @@ describe('models integration with a fake OpenAI-compatible service', () => {
     if (!snapshot.configured) throw new Error('snapshot should be configured')
     expect(snapshot.apiKey).toBe('sk-secret')
 
-    const tester = new ModelConnectionTester(2_000)
+    const tester = new ModelConnectionTester(2_000, createClient)
     const result = await tester.test(snapshot, new AbortController().signal)
     expect(result).toEqual({ status: 'error', error: { code: 'TEST_AUTH_FAILED' } })
 
@@ -243,7 +256,7 @@ describe('models integration with a fake OpenAI-compatible service', () => {
   })
 
   it('classifies model-unavailable responses from the connection tester', async () => {
-    const tester = new ModelConnectionTester(2_000)
+    const tester = new ModelConnectionTester(2_000, createClient)
     const result = await tester.test(
       {
         configured: true,
@@ -258,7 +271,7 @@ describe('models integration with a fake OpenAI-compatible service', () => {
   })
 
   it('reports timeouts and cancellations distinctly', async () => {
-    const tester = new ModelConnectionTester(150)
+    const tester = new ModelConnectionTester(150, createClient)
 
     // 超时：服务永不响应（流挂起）
     const timeoutResult = await tester.test(
@@ -290,7 +303,7 @@ describe('models integration with a fake OpenAI-compatible service', () => {
   })
 
   it('succeeds when the minimal request returns usable content', async () => {
-    const tester = new ModelConnectionTester(2_000)
+    const tester = new ModelConnectionTester(2_000, createClient)
     const result = await tester.test(
       {
         configured: true,
@@ -316,7 +329,7 @@ describe('models integration with a fake OpenAI-compatible service', () => {
       modelId: 'fake-model',
       credential: { action: 'keep' }
     })
-    const model = new ConfiguredLanguageModel(service)
+    const model = new ConfiguredLanguageModel(service, createClient)
 
     const controller = new AbortController()
     const iterator = model.streamReply(STREAM_INPUT(controller.signal, 'en'))
@@ -346,13 +359,17 @@ describe('models integration with a fake OpenAI-compatible service', () => {
   })
 
   it('aborts an in-flight stream with AbortError semantics', async () => {
-    const model = new RemoteLanguageModel({
-      configured: true,
-      protocol: 'openai-compatible',
-      baseUrl: `${slowServer.baseUrl}/v1`,
-      modelId: 'fake-model',
-      apiKey: undefined
-    })
+    const model = new RemoteLanguageModel(
+      {
+        configured: true,
+        protocol: 'openai-compatible',
+        baseUrl: `${slowServer.baseUrl}/v1`,
+        modelId: 'fake-model',
+        apiKey: undefined
+      },
+      120_000,
+      createClient
+    )
 
     const controller = new AbortController()
     const pending = model.streamReply(STREAM_INPUT(controller.signal)).next()
@@ -363,7 +380,7 @@ describe('models integration with a fake OpenAI-compatible service', () => {
   })
 
   it('fails fast with ModelNotConfiguredError before any network access', async () => {
-    const model = new ConfiguredLanguageModel(serviceFor(memoryStore()))
+    const model = new ConfiguredLanguageModel(serviceFor(memoryStore()), createClient)
     await expect(
       model.streamReply(STREAM_INPUT(new AbortController().signal)).next()
     ).rejects.toBeInstanceOf(ModelNotConfiguredError)

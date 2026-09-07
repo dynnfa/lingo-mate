@@ -1,15 +1,16 @@
 import type { AnalyzeVocabularyInput } from '../../learning/vocabulary/vocabulary-analyzer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LlmVocabularyAnalyzer } from '../llm-vocabulary-analyzer'
+import type { CreateLlmClient, LlmClient } from '../llm-client'
 import type { RuntimeModelConfig } from '../model-config'
 import { VOCABULARY_INSERT_SQL } from '../../learning/vocabulary/vocabulary-insert'
 import { vocabularySystemMessage } from '../../prompt/vocabulary-analysis'
 
-const { create, makeClient } = vi.hoisted(() => ({ create: vi.fn(), makeClient: vi.fn() }))
-vi.mock('../remote-language-model', () => ({
-  createModelClient: makeClient.mockImplementation(() => ({ chat: { completions: { create } } })),
-  classifyModelRequestError: () => 'UNKNOWN'
-}))
+// 通过工厂注入 stub 客户端：适配器测试只验证请求参数与业务校验语义，
+// 不经过真实 SDK；通信与记账由 llm-client 测试覆盖。
+const create = vi.fn()
+const stubClient = { complete: create } as unknown as LlmClient
+const createClient: CreateLlmClient = () => stubClient
 const config: RuntimeModelConfig = {
   configured: true,
   protocol: 'openai-compatible',
@@ -64,7 +65,8 @@ const completionWith = (
 })
 const insertCompletion = (term = 'apple'): Record<string, unknown> =>
   completionWith([functionCall('insert_vocabulary', insertArguments(term))])
-const makeAnalyzer = (): LlmVocabularyAnalyzer => new LlmVocabularyAnalyzer(config, 30_000)
+const makeAnalyzer = (): LlmVocabularyAnalyzer =>
+  new LlmVocabularyAnalyzer(config, 30_000, createClient)
 afterEach(() => {
   vi.clearAllMocks()
   vi.useRealTimers()
@@ -86,7 +88,8 @@ describe('LlmVocabularyAnalyzer', () => {
       expect(result.content.term).toBe(request.term)
       expect(result.content.exampleSentences).toEqual(['I ate an apple after lunch.'])
       const body = create.mock.calls[0][0]
-      expect(body.stream).toBe(false)
+      // 适配器不指定 stream；LlmClient.complete 统一固定非流式。
+      expect(body.stream).toBeUndefined()
       expect(body.tool_choice).toBe('required')
       expect(body.parallel_tool_calls).toBeUndefined()
       expect(body.response_format).toBeUndefined()
@@ -212,7 +215,7 @@ describe('LlmVocabularyAnalyzer', () => {
   })
   it('never creates a fake model when configuration is absent', async () => {
     await expect(
-      new LlmVocabularyAnalyzer({ configured: false }, 30_000).analyze(input())
+      new LlmVocabularyAnalyzer({ configured: false }, 30_000, createClient).analyze(input())
     ).rejects.toThrow('MODEL_NOT_CONFIGURED')
     expect(create).not.toHaveBeenCalled()
   })
@@ -229,7 +232,7 @@ describe('LlmVocabularyAnalyzer', () => {
           complete = resolve
         })
     )
-    const promise = new LlmVocabularyAnalyzer(config, 30).analyze(input())
+    const promise = new LlmVocabularyAnalyzer(config, 30, createClient).analyze(input())
     const assertion = expect(promise).rejects.toThrow('TIMEOUT')
     await vi.advanceTimersByTimeAsync(31)
     await assertion

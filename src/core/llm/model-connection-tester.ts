@@ -2,9 +2,9 @@ import type { ModelsErrorCode, TestModelsConnectionResult } from '../../shared/m
 import type { RuntimeModelConfig } from './model-config'
 import {
   classifyModelRequestError,
-  createModelClient,
+  type CreateLlmClient,
   type ModelRequestErrorKind
-} from './remote-language-model'
+} from './llm-client'
 
 export const CONNECTION_TEST_TIMEOUT_MS = 15_000
 
@@ -22,10 +22,14 @@ const TEST_ERROR_BY_KIND: Record<ModelRequestErrorKind, ModelsErrorCode> = {
 
 type ConfiguredModelConfig = RuntimeModelConfig & { configured: true }
 
-// 连接测试与真实调用共用配置校验（由调用方先 resolveDraftConfig）和客户端构建；
-// 只证明当次最小请求可用，不保证结构化输出等更高阶能力。
+// 连接测试与真实调用共用统一客户端：通信截止时间、取消与用量记账由客户端
+// 负责，测试必须使用传入的草稿配置，不读取已保存设置。只证明当次最小请求
+// 可用，不保证结构化输出等更高阶能力。
 export class ModelConnectionTester {
-  constructor(private readonly timeoutMs: number = CONNECTION_TEST_TIMEOUT_MS) {}
+  constructor(
+    private readonly timeoutMs: number = CONNECTION_TEST_TIMEOUT_MS,
+    private readonly createClient: CreateLlmClient
+  ) {}
 
   async test(
     config: ConfiguredModelConfig,
@@ -34,23 +38,11 @@ export class ModelConnectionTester {
     if (externalSignal.aborted) {
       return { status: 'error', error: { code: 'TEST_CANCELLED' } }
     }
-    const controller = new AbortController()
-    let timedOut = false
-    const deadline = setTimeout(() => {
-      timedOut = true
-      controller.abort()
-    }, this.timeoutMs)
-    const onExternalAbort = (): void => controller.abort()
-    externalSignal.addEventListener('abort', onExternalAbort, { once: true })
-
     try {
-      const client = createModelClient(config, this.timeoutMs)
-      const completion = await client.chat.completions.create(
-        {
-          model: config.modelId,
-          messages: [{ role: 'user', content: TEST_PROMPT }]
-        },
-        { signal: controller.signal }
+      const client = this.createClient(config)
+      const completion = await client.complete(
+        { model: config.modelId, messages: [{ role: 'user', content: TEST_PROMPT }] },
+        { operation: 'connection_test', timeoutMs: this.timeoutMs, signal: externalSignal }
       )
       const content = completion?.choices?.[0]?.message?.content
       if (typeof content !== 'string' || content.length === 0) {
@@ -61,14 +53,8 @@ export class ModelConnectionTester {
       if (externalSignal.aborted) {
         return { status: 'error', error: { code: 'TEST_CANCELLED' } }
       }
-      if (timedOut) {
-        return { status: 'error', error: { code: 'TEST_TIMEOUT' } }
-      }
       const kind = classifyModelRequestError(error)
       return { status: 'error', error: { code: TEST_ERROR_BY_KIND[kind] } }
-    } finally {
-      clearTimeout(deadline)
-      externalSignal.removeEventListener('abort', onExternalAbort)
     }
   }
 }

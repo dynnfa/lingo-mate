@@ -5,8 +5,21 @@ import { SqliteVocabularyRepository } from '../../src/database/sqlite-vocabulary
 import { VocabularyModule } from '../../src/core/learning/vocabulary/vocabulary-module'
 import { VOCABULARY_INSERT_SQL } from '../../src/core/learning/vocabulary/vocabulary-insert'
 import { LlmVocabularyAnalyzer } from '../../src/core/llm/llm-vocabulary-analyzer'
+import { LlmClient, type CreateLlmClient } from '../../src/core/llm/llm-client'
+import { LlmUsageRecorder } from '../../src/core/llm/llm-usage-recorder'
 
 afterEach(() => vi.unstubAllGlobals())
+
+const createClient: CreateLlmClient = (config) =>
+  new LlmClient(
+    config,
+    new LlmUsageRecorder({
+      insertStarted: () => {},
+      finish: () => {},
+      markInterruptedStarted: () => 0,
+      list: () => []
+    })
+  )
 
 describe.each(['tool', 'text'] as const)(
   'vocabulary with DeepSeek V4: %s response',
@@ -105,7 +118,8 @@ describe.each(['tool', 'text'] as const)(
                   modelId,
                   apiKey: undefined
                 },
-                wordMs
+                wordMs,
+                createClient
               )
           )
           const result = await module.addBatch(
