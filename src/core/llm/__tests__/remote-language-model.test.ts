@@ -1,6 +1,8 @@
 import { getEventListeners } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RemoteLanguageModel } from '../remote-language-model'
+import { LlmClient, type CreateLlmClient } from '../llm-client'
+import { LlmUsageRecorder } from '../llm-usage-recorder'
 
 const CONFIG = {
   configured: true as const,
@@ -9,6 +11,17 @@ const CONFIG = {
   modelId: 'test-model',
   apiKey: undefined
 }
+// 适配器测试不关心账本内容；用量记账由 llm-client 与集成测试覆盖。
+const createClient: CreateLlmClient = (config) =>
+  new LlmClient(
+    config,
+    new LlmUsageRecorder({
+      insertStarted: () => {},
+      finish: () => {},
+      markInterruptedStarted: () => 0,
+      list: () => []
+    })
+  )
 const encoder = new TextEncoder()
 const event = (value: unknown): string => `data: ${JSON.stringify(value)}\n\n`
 const chunk = (content: string | null, finishReason: string | null = null): string =>
@@ -17,7 +30,7 @@ const STOP = chunk(null, 'stop')
 const DONE = 'data: [DONE]\n\n'
 
 function reply(signal = new AbortController().signal, timeoutMs = 1_000): AsyncGenerator<string> {
-  return new RemoteLanguageModel(CONFIG, timeoutMs).streamReply({
+  return new RemoteLanguageModel(CONFIG, timeoutMs, createClient).streamReply({
     messages: [{ role: 'user', content: 'Help me practice English.' }],
     outputLanguage: 'zh-CN',
     targetLanguage: 'en',
@@ -117,12 +130,17 @@ describe('RemoteLanguageModel protocol and lifecycle', () => {
     ['truncated stream', chunk('partial'), 'text/event-stream'],
     ['premature sentinel', chunk('partial') + DONE, 'text/event-stream'],
     ['empty response', STOP + DONE, 'text/event-stream'],
-    ['malformed JSON', 'data: {broken}\n\n', 'text/event-stream'],
     ['token limit', chunk('partial') + chunk(null, 'length') + DONE, 'text/event-stream']
   ])('rejects %s instead of completing', async (_name, body, contentType) => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     respond(body, contentType)
     await expect(collect(reply())).rejects.toMatchObject({ kind: 'PROTOCOL' })
+  })
+
+  it('propagates SSE decoding failures without wrapping', async () => {
+    // 传输/解码错误由客户端分类记账后原样抛出，业务层不做二次包装。
+    respond('data: {broken}\n\n')
+    await expect(collect(reply())).rejects.toThrow(SyntaxError)
   })
 
   it('accepts role, content, stop and usage chunks and ignores late content', async () => {
@@ -144,7 +162,7 @@ describe('RemoteLanguageModel protocol and lifecycle', () => {
     async (outputLanguage) => {
       respond(chunk('Hello') + STOP + DONE)
       await collect(
-        new RemoteLanguageModel(CONFIG).streamReply({
+        new RemoteLanguageModel(CONFIG, 1_000, createClient).streamReply({
           messages: [{ role: 'user', content: 'Practice with me' }],
           outputLanguage,
           targetLanguage: 'en',
@@ -167,7 +185,7 @@ describe('RemoteLanguageModel protocol and lifecycle', () => {
   it('sends the word-concept system prompt when promptKind is word-concept', async () => {
     respond(chunk('Hello') + STOP + DONE)
     await collect(
-      new RemoteLanguageModel(CONFIG).streamReply({
+      new RemoteLanguageModel(CONFIG, 1_000, createClient).streamReply({
         messages: [{ role: 'user', content: '/concept pursue' }],
         outputLanguage: 'zh-CN',
         targetLanguage: 'en',

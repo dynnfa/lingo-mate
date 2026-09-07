@@ -49,6 +49,8 @@ export async function startVocabularyServer(): Promise<VocabularyServer> {
       JSON.stringify({
         id: 'fixture',
         object: 'chat.completion',
+        model: 'fixture-model',
+        usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
         choices: [
           {
             index: 0,

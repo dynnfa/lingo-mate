@@ -1,6 +1,8 @@
 import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ModelConnectionTester } from '../../core/llm/model-connection-tester'
+import { LlmClient, type CreateLlmClient } from '../../core/llm/llm-client'
+import { LlmUsageRecorder } from '../../core/llm/llm-usage-recorder'
 import {
   ModelConfigValidationError,
   ModelsWriteError,
@@ -28,6 +30,18 @@ vi.mock('electron', () => ({
 }))
 
 const RENDERER_URL = 'file:///app/renderer/index.html'
+
+// IPC 层测试不发起真实请求；客户端工厂只满足装配形状。
+const createClient: CreateLlmClient = (config) =>
+  new LlmClient(
+    config,
+    new LlmUsageRecorder({
+      insertStarted: () => {},
+      finish: () => {},
+      markInterruptedStarted: () => 0,
+      list: () => []
+    })
+  )
 
 const REQUEST_ID = '3f70b8ae-7ad9-4eab-aaf4-1cae54aa2477'
 
@@ -135,7 +149,7 @@ describe('models IPC', () => {
         apiKeyUndecryptable: false
       })
     })
-    registerModelsIpc(service, new ModelConnectionTester(), RENDERER_URL)
+    registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
 
     const result = registeredHandler(MODELS_CHANNELS.getSettings)(
       { sender: new FakeSender() },
@@ -160,7 +174,7 @@ describe('models IPC', () => {
         throw new Error('EACCES disk')
       }
     })
-    registerModelsIpc(service, new ModelConnectionTester(), RENDERER_URL)
+    registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
 
     const result = registeredHandler(MODELS_CHANNELS.getSettings)(
       { sender: new FakeSender() },
@@ -175,7 +189,7 @@ describe('models IPC', () => {
         throw new ModelsWriteError(new Error('io'))
       }
     })
-    registerModelsIpc(service, new ModelConnectionTester(), RENDERER_URL)
+    registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
 
     const invalid = registeredHandler(MODELS_CHANNELS.saveSettings)(
       { sender: new FakeSender() },
@@ -199,7 +213,7 @@ describe('models IPC', () => {
         throw new ModelConfigValidationError('INVALID_BASE_URL')
       }
     })
-    registerModelsIpc(service, new ModelConnectionTester(), RENDERER_URL)
+    registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
 
     const result = registeredHandler(MODELS_CHANNELS.saveSettings)(
       { sender: new FakeSender() },
@@ -213,7 +227,7 @@ describe('models IPC', () => {
       clear: vi.fn(),
       getSummary: () => ({ configured: false })
     })
-    registerModelsIpc(service, new ModelConnectionTester(), RENDERER_URL)
+    registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
 
     const result = registeredHandler(MODELS_CHANNELS.clearSettings)(
       { sender: new FakeSender() },
@@ -229,7 +243,7 @@ describe('models IPC', () => {
         throw new ModelsWriteError(new Error('io'))
       }
     })
-    registerModelsIpc(failing, new ModelConnectionTester(), RENDERER_URL)
+    registerModelsIpc(failing, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
 
     expect(
       registeredHandler(MODELS_CHANNELS.clearSettings)({ sender: new FakeSender() }, undefined)
@@ -272,7 +286,7 @@ describe('models IPC', () => {
         throw new ModelConfigValidationError('CROSS_ORIGIN_CREDENTIAL', 'apiKey')
       }
     })
-    registerModelsIpc(service, new ModelConnectionTester(), RENDERER_URL)
+    registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
 
     await expect(
       registeredHandler(MODELS_CHANNELS.testConnection)({ sender: new FakeSender() }, TEST_INPUT)

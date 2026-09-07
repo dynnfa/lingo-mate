@@ -165,6 +165,42 @@ export const MIGRATIONS: Migration[] = [
         CREATE INDEX vocabulary_created_at ON vocabulary(created_at DESC, id DESC);
       `)
     }
+  },
+  {
+    // LLM 请求用量账本：独立于会话消息与词条事务，不设级联删除——
+    // 删除业务数据不应抹除已发生的模型调用用量。
+    version: 6,
+    up: (database) =>
+      database.exec(`
+      CREATE TABLE llm_request_usage (
+        id TEXT PRIMARY KEY,
+        operation TEXT NOT NULL CHECK (operation IN (
+          'conversation', 'vocabulary_analysis', 'connection_test'
+        )),
+        model_id TEXT NOT NULL,
+        response_model_id TEXT,
+        started_at INTEGER NOT NULL,
+        finished_at INTEGER,
+        status TEXT NOT NULL CHECK (status IN (
+          'started', 'completed', 'failed', 'cancelled', 'interrupted'
+        )),
+        input_tokens INTEGER CHECK (input_tokens IS NULL OR (
+          typeof(input_tokens) = 'integer' AND input_tokens >= 0 AND input_tokens <= 9007199254740991
+        )),
+        output_tokens INTEGER CHECK (output_tokens IS NULL OR (
+          typeof(output_tokens) = 'integer' AND output_tokens >= 0 AND output_tokens <= 9007199254740991
+        )),
+        total_tokens INTEGER CHECK (total_tokens IS NULL OR (
+          typeof(total_tokens) = 'integer' AND total_tokens >= 0 AND total_tokens <= 9007199254740991
+        )),
+        usage_status TEXT NOT NULL CHECK (usage_status IN (
+          'reported', 'derived', 'partial', 'missing', 'invalid'
+        )),
+        error_code TEXT
+      );
+      CREATE INDEX llm_request_usage_model_started_at
+        ON llm_request_usage (model_id, started_at);
+    `)
   }
 ]
 

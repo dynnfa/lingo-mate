@@ -3,6 +3,8 @@ import type { ConversationEvent } from '../../../shared/conversation'
 import type { LanguageModel, StreamReplyInput } from '../../llm/language-model'
 import { ConfiguredLanguageModel } from '../../llm/configured-language-model'
 import { ModelConfigService } from '../../llm/model-config'
+import { LlmClient, type CreateLlmClient } from '../../llm/llm-client'
+import { LlmUsageRecorder } from '../../llm/llm-usage-recorder'
 import { ConversationModule } from '../conversation-module'
 import {
   ConversationBusyError,
@@ -117,6 +119,18 @@ function untilTerminal(collected: ConversationEvent[]): Promise<ConversationEven
     }, 5)
   })
 }
+
+// 本用例在配置解密阶段失败，不会发起模型请求；工厂只需满足装配形状。
+const unusedCreateClient: CreateLlmClient = (config) =>
+  new LlmClient(
+    config,
+    new LlmUsageRecorder({
+      insertStarted: () => {},
+      finish: () => {},
+      markInterruptedStarted: () => 0,
+      list: () => []
+    })
+  )
 
 describe('ConversationModule', () => {
   describe('conversation lifecycle', () => {
@@ -404,7 +418,10 @@ describe('ConversationModule', () => {
           }
         }
       )
-      const module = new ConversationModule(new ConfiguredLanguageModel(config), repository)
+      const module = new ConversationModule(
+        new ConfiguredLanguageModel(config, unusedCreateClient),
+        repository
+      )
       const { sessionId } = await module.createConversation()
       const events: ConversationEvent[] = []
       await module.sendMessage({ requestId: REQUEST_ID, sessionId, text: 'Hello' }, (event) =>

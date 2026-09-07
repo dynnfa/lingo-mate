@@ -1,8 +1,11 @@
 import type Database from 'better-sqlite3'
 import { openDatabase } from '../database/database'
 import { SqliteVocabularyRepository } from '../database/sqlite-vocabulary-repository'
+import { SqliteLlmUsageRepository } from '../database/sqlite-llm-usage-repository'
 import { VocabularyConversationSkill } from '../core/learning/vocabulary/vocabulary-conversation-skill'
 import { LlmVocabularyAnalyzer } from '../core/llm/llm-vocabulary-analyzer'
+import { LlmClient, type CreateLlmClient } from '../core/llm/llm-client'
+import { LlmUsageRecorder } from '../core/llm/llm-usage-recorder'
 import { createVocabularyFeedbackFormatter } from './vocabulary-feedback'
 import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
@@ -13,7 +16,10 @@ import { ConversationModule } from '../core/conversation/conversation-module'
 import type { SupportedLocale } from '../shared/preferences'
 import { ConfiguredLanguageModel } from '../core/llm/configured-language-model'
 import { LocalLanguageModel } from '../core/llm/local-language-model'
-import { ModelConnectionTester } from '../core/llm/model-connection-tester'
+import {
+  ModelConnectionTester,
+  CONNECTION_TEST_TIMEOUT_MS
+} from '../core/llm/model-connection-tester'
 import { ModelConfigService } from '../core/llm/model-config'
 import type { LanguageModel } from '../core/llm/language-model'
 import { SqliteConversationRepository } from '../database/sqlite-conversation-repository'
@@ -80,19 +86,30 @@ app.whenReady().then(() => {
   database = openDatabase(join(app.getPath('userData'), 'lingo-mate.sqlite'))
   const conversationRepository = new SqliteConversationRepository(database)
 
+  // LLM 用量账本：统一客户端自动记账；重启时把上次进程遗留的 started
+  // 调用标记为 interrupted（真实结束时间未知），不重发请求。
+  const llmUsageRepository = new SqliteLlmUsageRepository(database)
+  llmUsageRepository.markInterruptedStarted()
+  const llmUsageRecorder = new LlmUsageRecorder(llmUsageRepository)
+  const createLlmClient: CreateLlmClient = (config) => new LlmClient(config, llmUsageRecorder)
+
   // 模型配置服务：持久化记录 + 系统安全存储加密密钥；IPC 与对话模型入口共用。
   const modelsService = new ModelConfigService(
     createFileModelsConfigStore(join(app.getPath('userData'), 'models.json')),
     createSafeStorageCredentialVault()
   )
-  registerModelsIpc(modelsService, new ModelConnectionTester(), rendererUrl)
+  registerModelsIpc(
+    modelsService,
+    new ModelConnectionTester(CONNECTION_TEST_TIMEOUT_MS, createLlmClient),
+    rendererUrl
+  )
 
   // 生产对话按请求解析已保存配置快照；LocalLanguageModel 仅作为显式开发/测试
   // 模式（LINGO_MATE_MODEL=local），远程请求失败后不自动回退。
   const conversationModel: LanguageModel =
     process.env['LINGO_MATE_MODEL'] === 'local'
       ? new LocalLanguageModel()
-      : new ConfiguredLanguageModel(modelsService)
+      : new ConfiguredLanguageModel(modelsService, createLlmClient)
 
   // 界面语言来源统一由 Main 解析：跟随系统时按系统偏好顺序匹配支持语言。
   // 偏好存储初始化失败只损失语言记忆（Renderer 回退默认语言），不阻断应用启动。
@@ -117,7 +134,9 @@ app.whenReady().then(() => {
   const vocabularyRepository = new SqliteVocabularyRepository(database)
   const vocabularySkill = new VocabularyConversationSkill(
     vocabularyRepository,
-    () => ({ analyzer: new LlmVocabularyAnalyzer(modelsService.resolveSnapshot(), 30_000) }),
+    () => ({
+      analyzer: new LlmVocabularyAnalyzer(modelsService.resolveSnapshot(), 30_000, createLlmClient)
+    }),
     createVocabularyFeedbackFormatter()
   )
   conversationModule = new ConversationModule(
