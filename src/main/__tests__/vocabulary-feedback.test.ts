@@ -53,18 +53,36 @@ describe('createVocabularyFeedbackFormatter', () => {
       '已处理 5 个词汇：新增 2 个（apple和banana）；已有 1 个（orange）；输入重复 1 个（apple）；失败 1 个（bad）。'
     )
   })
-  it('uses placeholders for empty groups and notes duplicates whose source failed', () => {
+  it('omits empty groups and notes duplicates whose source failed', () => {
     const feedback = createVocabularyFeedbackFormatter()
     const result = batch([
       { inputIndex: 0, term: 'bad', status: 'failed', code: 'MODEL_ERROR' },
       { inputIndex: 1, term: 'bad', status: 'duplicate', sourceInputIndex: 0 }
     ])
     expect(feedback(result, 'en')).toBe(
-      'Processed 2 terms: 0 added (none); 0 already saved (none); ' +
-        '1 repeated in this input (bad); 1 failed (bad).\n' +
+      'Processed 2 terms: 1 repeated in this input (bad); 1 failed (bad).\n' +
         'Repeated items whose source word failed were not saved.'
     )
     expect(feedback(result, 'zh-CN')).toContain('未保存')
+  })
+  it.each([
+    ['saved', '1 added (apple)', '新增 1 个（apple）'],
+    ['existing', '1 already saved (apple)', '已有 1 个（apple）'],
+    ['failed', '1 failed (apple)', '失败 1 个（apple）']
+  ] as const)('reports only the %s group when it is the only result', (status, en, zh) => {
+    const feedback = createVocabularyFeedbackFormatter()
+    const result = batch([
+      status === 'failed'
+        ? { inputIndex: 0, term: 'apple', status, code: 'MODEL_ERROR' }
+        : {
+            inputIndex: 0,
+            term: 'apple',
+            status,
+            entryId: '11111111-1111-4111-8111-111111111111'
+          }
+    ])
+    expect(feedback(result, 'en')).toBe(`Processed 1 terms: ${en}.`)
+    expect(feedback(result, 'zh-CN')).toBe(`已处理 1 个词汇：${zh}。`)
   })
   it('keeps locale resource key sets and placeholders aligned', () => {
     const keys = (value: object): string[] =>

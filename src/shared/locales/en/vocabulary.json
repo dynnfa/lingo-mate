@@ -1,7 +1,11 @@
 {
   "feedback": {
-    "summary": "Processed {{total}} terms: {{saved}} added ({{savedTerms}}); {{existing}} already saved ({{existingTerms}}); {{duplicate}} repeated in this input ({{duplicateTerms}}); {{failed}} failed ({{failedTerms}}).",
-    "emptyList": "none",
+    "summary": "Processed {{total}} terms: {{details}}.",
+    "saved": "{{count}} added ({{terms}})",
+    "existing": "{{count}} already saved ({{terms}})",
+    "duplicate": "{{count}} repeated in this input ({{terms}})",
+    "failed": "{{count}} failed ({{terms}})",
+    "separator": "; ",
     "duplicateSourceFailed": "Repeated items whose source word failed were not saved."
   }
 }

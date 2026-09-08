@@ -1,7 +1,11 @@
 {
   "feedback": {
-    "summary": "已处理 {{total}} 个词汇：新增 {{saved}} 个（{{savedTerms}}）；已有 {{existing}} 个（{{existingTerms}}）；输入重复 {{duplicate}} 个（{{duplicateTerms}}）；失败 {{failed}} 个（{{failedTerms}}）。",
-    "emptyList": "无",
+    "summary": "已处理 {{total}} 个词汇：{{details}}。",
+    "saved": "新增 {{count}} 个（{{terms}}）",
+    "existing": "已有 {{count}} 个（{{terms}}）",
+    "duplicate": "输入重复 {{count}} 个（{{terms}}）",
+    "failed": "失败 {{count}} 个（{{terms}}）",
+    "separator": "；",
     "duplicateSourceFailed": "重复项因其源词失败，未保存。"
   }
 }
