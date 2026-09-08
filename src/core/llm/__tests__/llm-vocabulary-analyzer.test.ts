@@ -28,14 +28,11 @@ const input = (
   signal
 })
 const insertArguments = (term = 'apple'): Record<string, unknown> => ({
-  sql: VOCABULARY_INSERT_SQL,
-  parameters: {
-    term,
-    phonetic: '/ˈæpəl/',
-    meaning: '苹果，一种水果。',
-    concept: '通常指作为食物的苹果果实。',
-    example_sentences: '["I ate an apple after lunch."]'
-  }
+  term,
+  phonetic: '/ˈæpəl/',
+  meaning: '苹果，一种水果。',
+  concept: '通常指作为食物的苹果果实。',
+  example_sentences: ['I ate an apple after lunch.']
 })
 const functionCall = (name: string, args: unknown): Record<string, unknown> => ({
   id: 'call_1',
@@ -82,7 +79,7 @@ describe('LlmVocabularyAnalyzer', () => {
       expect(result).toMatchObject({
         status: 'insert',
         modelId: 'fixture',
-        promptVersion: 'vocabulary-sql-v1'
+        promptVersion: 'vocabulary-tools-v2'
       })
       if (result.status !== 'insert') throw new Error('expected insert')
       expect(result.content.term).toBe(request.term)
@@ -90,7 +87,7 @@ describe('LlmVocabularyAnalyzer', () => {
       const body = create.mock.calls[0][0]
       // 适配器不指定 stream；LlmClient.complete 统一固定非流式。
       expect(body.stream).toBeUndefined()
-      expect(body.tool_choice).toBe('required')
+      expect(body.tool_choice).toBe('auto')
       expect(body.parallel_tool_calls).toBeUndefined()
       expect(body.response_format).toBeUndefined()
       expect(body.tools).toEqual(
@@ -113,7 +110,8 @@ describe('LlmVocabularyAnalyzer', () => {
       const insertTool = body.tools.find(
         (tool: { function: { name: string } }) => tool.function.name === 'insert_vocabulary'
       )
-      expect(insertTool.function.parameters.properties.sql.enum).toEqual([VOCABULARY_INSERT_SQL])
+      expect(insertTool.function.parameters.properties).not.toHaveProperty('sql')
+      expect(JSON.stringify(body)).not.toContain(VOCABULARY_INSERT_SQL)
       expect(insertTool.function.parameters.additionalProperties).toBe(false)
       expect(body.messages[0].content).toBe(vocabularySystemMessage(language))
       expect(body.messages[0].content).toContain(
@@ -167,7 +165,7 @@ describe('LlmVocabularyAnalyzer', () => {
       completionWith([
         functionCall('insert_vocabulary', {
           ...insertArguments(),
-          parameters: { ...(insertArguments().parameters as object), note: 'extra' }
+          note: 'extra'
         })
       ])
     ],

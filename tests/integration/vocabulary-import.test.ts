@@ -114,7 +114,7 @@ describe('real HTTP adapter → batch → SQLite integration', () => {
         'insert_vocabulary',
         'vocabulary_unrecognized'
       ])
-      expect(first.tool_choice).toBe('required')
+      expect(first.tool_choice).toBe('auto')
       expect(first.parallel_tool_calls).toBeUndefined()
       expect(first.tools?.every((tool) => !('strict' in tool.function))).toBe(true)
       expect(first.response_format).toBeUndefined()

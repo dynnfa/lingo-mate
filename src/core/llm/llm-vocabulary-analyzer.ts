@@ -86,7 +86,7 @@ export class LlmVocabularyAnalyzer implements VocabularyAnalyzer {
               }
             ],
             tools: vocabularyInsertTools(),
-            tool_choice: useDeepSeekThinking ? 'auto' : 'required',
+            tool_choice: 'auto',
             ...(useDeepSeekThinking
               ? { thinking: { type: 'enabled' }, reasoning_effort: 'high' as const }
               : {})

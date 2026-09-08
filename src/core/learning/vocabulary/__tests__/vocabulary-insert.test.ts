@@ -15,24 +15,18 @@ import {
 } from '../vocabulary-insert'
 import { content as sampleContent } from './fixtures'
 
-interface InsertArguments {
-  sql: unknown
-  parameters: Record<string, unknown>
-}
+type InsertArguments = Record<string, unknown>
 const insertArguments = (overrides: Record<string, unknown> = {}): InsertArguments => ({
-  sql: VOCABULARY_INSERT_SQL,
-  parameters: {
-    term: 'apple',
-    phonetic: '/ˈæpəl/',
-    meaning: '苹果，一种水果。',
-    concept: '通常指作为食物的苹果果实。',
-    example_sentences: '["I ate an apple after lunch."]'
-  },
+  term: 'apple',
+  phonetic: '/ˈæpəl/',
+  meaning: '苹果，一种水果。',
+  concept: '通常指作为食物的苹果果实。',
+  example_sentences: ['I ate an apple after lunch.'],
   ...overrides
 })
 
 describe('vocabulary insert contract', () => {
-  it('exposes the single insert statement to prompt, tools, and runtime alike', () => {
+  it('exposes only structured learning content to the model', () => {
     const tools = vocabularyInsertTools()
     expect(tools.map((tool) => tool.function.name).sort()).toEqual(
       ['insert_vocabulary', 'vocabulary_unrecognized'].sort()
@@ -40,13 +34,14 @@ describe('vocabulary insert contract', () => {
     const insert = tools.find((tool) => tool.function.name === VOCABULARY_INSERT_TOOL_NAME)!
     expect('strict' in insert.function).toBe(false)
     const schema = insert.function.parameters as {
-      properties: { sql: { enum: string[] } }
+      properties: Record<string, unknown>
       additionalProperties: boolean
       required: string[]
     }
-    expect(schema.properties.sql.enum).toEqual([VOCABULARY_INSERT_SQL])
+    expect(schema.properties).not.toHaveProperty('sql')
+    expect(JSON.stringify(tools)).not.toContain(VOCABULARY_INSERT_SQL)
     expect(schema.additionalProperties).toBe(false)
-    expect(schema.required).toEqual(['sql', 'parameters'])
+    expect(schema.required).toEqual(['term', 'phonetic', 'meaning', 'concept', 'example_sentences'])
     expect(VOCABULARY_INSERT_SQL).toContain('INSERT INTO vocabulary')
     expect(VOCABULARY_INSERT_SQL).not.toContain('ON CONFLICT')
   })
@@ -63,7 +58,7 @@ describe('vocabulary insert contract', () => {
     expect(() =>
       validateInsertArguments(
         insertArguments({
-          parameters: { ...insertArguments().parameters, term: 'banana' }
+          term: 'banana'
         }),
         'apple'
       )
@@ -74,81 +69,69 @@ describe('vocabulary insert contract', () => {
     insertArguments({ sql: 'UPDATE vocabulary SET term = @term' }),
     insertArguments({ sql: VOCABULARY_INSERT_SQL.toUpperCase() }),
     insertArguments({ extra: true }),
-    insertArguments({ parameters: { ...insertArguments().parameters, id: 'model-uuid' } }),
-    insertArguments({ parameters: { ...insertArguments().parameters, model_id: 'model' } }),
-    insertArguments({ parameters: { ...insertArguments().parameters, prompt_version: 'v0' } }),
-    insertArguments({ parameters: { ...insertArguments().parameters, created_at: 'now' } }),
-    insertArguments({ parameters: { ...insertArguments().parameters, phonetic: 'apple' } }),
-    insertArguments({ parameters: { ...insertArguments().parameters, phonetic: '/unknown/' } }),
-    insertArguments({ parameters: { ...insertArguments().parameters, phonetic: '/?/' } }),
+    insertArguments({ id: 'model-uuid' }),
+    insertArguments({ model_id: 'model' }),
+    insertArguments({ prompt_version: 'v0' }),
+    insertArguments({ created_at: 'now' }),
+    insertArguments({ phonetic: 'apple' }),
+    insertArguments({ phonetic: '/unknown/' }),
+    insertArguments({ phonetic: '/?/' }),
     insertArguments({
-      parameters: { ...insertArguments().parameters, phonetic: '/x'.repeat(101) + '/' }
+      phonetic: '/x'.repeat(101) + '/'
     }),
-    insertArguments({ parameters: { ...insertArguments().parameters, meaning: '' } }),
-    insertArguments({ parameters: { ...insertArguments().parameters, meaning: '  ' } }),
-    insertArguments({ parameters: { ...insertArguments().parameters, concept: 'x'.repeat(2001) } }),
+    insertArguments({ meaning: '' }),
+    insertArguments({ meaning: '  ' }),
+    insertArguments({ concept: 'x'.repeat(2001) }),
     insertArguments({
-      parameters: { ...insertArguments().parameters, example_sentences: 'not json' }
-    }),
-    insertArguments({
-      parameters: { ...insertArguments().parameters, example_sentences: '"a sentence"' }
+      example_sentences: 'not json'
     }),
     insertArguments({
-      parameters: { ...insertArguments().parameters, example_sentences: '[]' }
+      example_sentences: '"a sentence"'
     }),
     insertArguments({
-      parameters: {
-        ...insertArguments().parameters,
-        example_sentences: JSON.stringify(Array(4).fill('A sentence.'))
-      }
+      example_sentences: '[]'
     }),
     insertArguments({
-      parameters: {
-        ...insertArguments().parameters,
-        example_sentences: JSON.stringify([''])
-      }
+      example_sentences: Array(4).fill('A sentence.')
     }),
     insertArguments({
-      parameters: {
-        ...insertArguments().parameters,
-        example_sentences: JSON.stringify(['x'.repeat(501)])
-      }
+      example_sentences: ['']
+    }),
+    insertArguments({
+      example_sentences: ['x'.repeat(501)]
     })
   ])('rejects illegal or oversized arguments %#', (value) => {
     expect(() => validateInsertArguments(value, 'apple')).toThrow(VocabularyError)
   })
-  it('keeps the wire schema strict for protocol violations while JSON semantics stay in the domain validator', () => {
+  it('keeps the wire schema strict for protocol violations including array semantics', () => {
     // 工具参数的形状违规（语句、系统字段、额外字段、内容上限）在 schema 层拒绝。
     for (const value of [
       insertArguments({ sql: `${VOCABULARY_INSERT_SQL}; DROP TABLE vocabulary` }),
       insertArguments({ sql: 'UPDATE vocabulary SET term = @term' }),
       insertArguments({ extra: true }),
-      insertArguments({ parameters: { ...insertArguments().parameters, id: 'model-uuid' } }),
-      insertArguments({ parameters: { ...insertArguments().parameters, model_id: 'model' } }),
-      insertArguments({ parameters: { ...insertArguments().parameters, meaning: '' } }),
+      insertArguments({ id: 'model-uuid' }),
+      insertArguments({ model_id: 'model' }),
+      insertArguments({ meaning: '' }),
       insertArguments({
-        parameters: { ...insertArguments().parameters, concept: 'x'.repeat(2001) }
+        concept: 'x'.repeat(2001)
       })
     ]) {
       expect(insertToolArgumentsSchema.safeParse(value).success).toBe(false)
     }
-    // 例句 JSON 编码与条数语义只由领域校验把关。
+    // 例句必须直接提供数组，不能提供 JSON 字符串。
     expect(
       insertToolArgumentsSchema.safeParse(
         insertArguments({
-          parameters: { ...insertArguments().parameters, example_sentences: 'not json' }
+          example_sentences: 'not json'
         })
       ).success
-    ).toBe(true)
+    ).toBe(false)
   })
   it('accepts authentic IPA in brackets and multiple sentences', () => {
     const validated = validateInsertArguments(
       insertArguments({
-        parameters: {
-          ...insertArguments().parameters,
-          phonetic: '[ˈæpəl]',
-          example_sentences: JSON.stringify(['One.', 'Two.'])
-        }
+        phonetic: '[ˈæpəl]',
+        example_sentences: ['One.', 'Two.']
       }),
       'apple'
     )
