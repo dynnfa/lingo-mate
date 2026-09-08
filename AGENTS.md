@@ -116,6 +116,7 @@ React Renderer -> Preload API -> Electron Main -> Agent Engine
 - 流式对话需要支持完成、失败和取消状态，避免 UI 永久停留在生成中。
 - 错误应在产生处保留原因，在进程边界转换为对用户安全、可理解的错误结构。
 - 新增 Agent 能力时，优先扩展 `src/core`，再通过 Main 和 Preload 接入 UI。
+- 完成 `docs/plans/` 下某份 plan 文档中的全部计划工作及相关验证后，必须将该文档的状态更新为“已实施”；若文档尚无状态字段，则补充 `状态：已实施`。
 
 ### 测试文件组织
 
