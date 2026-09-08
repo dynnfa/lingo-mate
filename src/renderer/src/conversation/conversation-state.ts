@@ -2,6 +2,7 @@ import type {
   ConversationEvent,
   ConversationMessage,
   ConversationRequestError,
+  ConversationSkillId,
   ConversationSummary,
   GenerationEventError,
   GenerationStarted
@@ -31,6 +32,8 @@ export type StatusOperation = 'load' | 'list' | 'create' | 'send' | 'runSkill' |
 
 // 状态只保留语义与安全错误信息，不保存翻译后的文案；
 // 组件在每次 render 时按当前界面语言翻译，切换语言即可更新既有提示。
+// 技能相关状态携带 skillId（由 user 消息内容派生），用于按技能选择文案；
+// 无法识别时省略，展示层回退到通用文案。
 export type ConversationStatus =
   | { kind: 'restoring' }
   | { kind: 'switching' }
@@ -38,9 +41,13 @@ export type ConversationStatus =
   | { kind: 'ready' }
   | { kind: 'generating' }
   | { kind: 'generatingTitle' }
-  | { kind: 'skillPhase'; phase: 'analyzing' | 'committing' | 'summarizing' }
+  | {
+      kind: 'skillPhase'
+      phase: 'analyzing' | 'committing' | 'summarizing'
+      skillId?: ConversationSkillId
+    }
   | { kind: 'completed' }
-  | { kind: 'skillDescriptionFailed'; cancelled: boolean }
+  | { kind: 'skillDescriptionFailed'; cancelled: boolean; skillId?: ConversationSkillId }
   | { kind: 'cancelled' }
   | { kind: 'protocolError' }
   | { kind: 'generationError'; error: GenerationEventError }
@@ -134,6 +141,20 @@ export function isGenerating(state: ConversationState): boolean {
   return Object.keys(state.activeRequests).length > 0
 }
 
+// 从活动请求对应的 user 消息内容派生技能身份；命令前缀是 canonical 数据，
+// 不依赖 Renderer 侧的内存标记。
+function skillOfRequest(
+  state: ConversationState,
+  active: ActiveGeneration
+): ConversationSkillId | undefined {
+  const content = state.messages.find(
+    (message) => message.messageId === active.userMessageId
+  )?.content
+  if (content?.startsWith('/phrase ')) return 'phrase'
+  if (content?.startsWith('/vocabulary ')) return 'vocabulary'
+  return undefined
+}
+
 // 加载历史时，最后一条没有 assistant 回复的 user 消息投影为可重试，
 // 应用异常退出后不会出现永久 generating。
 function toDisplayMessages(messages: ConversationMessage[]): DisplayMessage[] {
@@ -203,8 +224,13 @@ function applyEvent(state: ConversationState, event: ConversationEvent): Convers
       return applyGenerationStarted(state, event)
 
     case 'skillPhase': {
-      if (!state.activeRequests[event.requestId]) return state
-      return { ...state, status: { kind: 'skillPhase', phase: event.phase } }
+      const active = state.activeRequests[event.requestId]
+      if (!active) return state
+      const skillId = skillOfRequest(state, active)
+      return {
+        ...state,
+        status: { kind: 'skillPhase', phase: event.phase, ...(skillId ? { skillId } : {}) }
+      }
     }
 
     case 'chunk': {
@@ -230,6 +256,7 @@ function applyEvent(state: ConversationState, event: ConversationEvent): Convers
         return retireInvalidTerminal(state, event.requestId, active)
       }
 
+      const skillId = skillOfRequest(state, active)
       const retired = retireRequest(state, event.requestId)
 
       // 用持久化消息原位对账 draft，canonical key 不变，不产生重复消息。
@@ -256,7 +283,8 @@ function applyEvent(state: ConversationState, event: ConversationEvent): Convers
           event.skillCompletion === 'description_cancelled'
             ? {
                 kind: 'skillDescriptionFailed',
-                cancelled: event.skillCompletion === 'description_cancelled'
+                cancelled: event.skillCompletion === 'description_cancelled',
+                ...(skillId ? { skillId } : {})
               }
             : { kind: 'completed' }
       }

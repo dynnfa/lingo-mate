@@ -1,4 +1,3 @@
-import { z } from 'zod'
 import { VocabularyError } from '../learning/vocabulary/parse-vocabulary-input'
 import {
   validateInsertArguments,
@@ -16,42 +15,7 @@ import { abortableOperation } from '../learning/vocabulary/abortable-operation'
 import { VOCABULARY_PROMPT_VERSION, vocabularySystemMessage } from '../prompt/vocabulary-analysis'
 import type { RuntimeModelConfig } from './model-config'
 import { classifyModelRequestError, type CreateLlmClient } from './llm-client'
-
-// 只校验本适配器消费的协议字段；允许提供方附带扩展字段。
-const completionSchema = z.object({
-  choices: z
-    .array(
-      z.object({
-        finish_reason: z.string().nullable(),
-        message: z.object({
-          content: z.string().nullable().optional(),
-          refusal: z.string().nullable().optional(),
-          tool_calls: z
-            .array(
-              z.object({
-                type: z.literal('function'),
-                function: z.object({ name: z.string(), arguments: z.string() })
-              })
-            )
-            .optional()
-        })
-      })
-    )
-    .optional()
-})
-
-// 只把明确的工具协议能力错误映射为 TOOL_CALL_NOT_SUPPORTED；鉴权、限流、
-// 网络与其他 400 保持原有失败语义，不做文本回退。
-function isUnsupportedToolCall(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false
-  const { status, message } = error as { status?: unknown; message?: unknown }
-  return (
-    status === 400 &&
-    typeof message === 'string' &&
-    /tools?|tool_choice/i.test(message) &&
-    /(?:not supported|unsupported|unavailable|does not support|invalid)/i.test(message)
-  )
-}
+import { isUnsupportedToolCall, toolCompletionResponseSchema } from './tool-protocol'
 
 export class LlmVocabularyAnalyzer implements VocabularyAnalyzer {
   // No default: the caller (VocabularyModule via its factory) owns the word
@@ -93,7 +57,7 @@ export class LlmVocabularyAnalyzer implements VocabularyAnalyzer {
           },
           { operation: 'vocabulary_analysis', timeoutMs: this.timeoutMs, signal }
         )
-        const choice = completionSchema.parse(response).choices?.[0]
+        const choice = toolCompletionResponseSchema.parse(response).choices?.[0]
         const toolCalls = choice?.message.tool_calls ?? []
         // 非空正文、多个工具、未知工具或无工具响应均为协议错误，不提取正文中的 SQL。
         if (

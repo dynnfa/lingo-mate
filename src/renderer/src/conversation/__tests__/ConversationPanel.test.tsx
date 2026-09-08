@@ -41,7 +41,7 @@ function panelElement(props: Partial<Parameters<typeof ConversationPanel>[0]>): 
 
 interface PanelCallbacks {
   onSend: Mock<(text: string) => void>
-  onRunSkill: Mock<(input: { skillId: 'vocabulary'; text: string }) => void>
+  onRunSkill: Mock<(input: { skillId: 'vocabulary' | 'phrase'; text: string }) => void>
   onCancel: Mock<() => void>
   onRetry: Mock<(messageId: string) => void>
 }
@@ -52,7 +52,7 @@ function renderPanel(props: Partial<Parameters<typeof ConversationPanel>[0]> = {
 } {
   const callbacks: PanelCallbacks = {
     onSend: vi.fn<(text: string) => void>(),
-    onRunSkill: vi.fn<(input: { skillId: 'vocabulary'; text: string }) => void>(),
+    onRunSkill: vi.fn<(input: { skillId: 'vocabulary' | 'phrase'; text: string }) => void>(),
     onCancel: vi.fn<() => void>(),
     onRetry: vi.fn<(messageId: string) => void>()
   }
@@ -198,14 +198,14 @@ describe('ConversationPanel retry', () => {
 // ---------- `/` 行动选择器 ----------
 
 // jsdom 中用户输入不会自动带焦点，聚焦后模拟真实键鼠路径。
-function focusComposer(): HTMLInputElement {
+function focusComposer(): HTMLTextAreaElement {
   const input = screen.getByLabelText('练习内容')
-  if (!(input instanceof HTMLInputElement)) throw new Error('Composer input not found')
+  if (!(input instanceof HTMLTextAreaElement)) throw new Error('Composer textarea not found')
   fireEvent.focus(input)
   return input
 }
 
-function typeDraft(value: string): HTMLInputElement {
+function typeDraft(value: string): HTMLTextAreaElement {
   const input = focusComposer()
   fireEvent.change(input, { target: { value } })
   return input
@@ -228,7 +228,7 @@ describe('ConversationPanel slash trigger and filtering', () => {
 
     const listbox = screen.getByRole('listbox', { name: '可用行动' })
     expect(listbox).toBeInTheDocument()
-    expect(pickerOptions()).toHaveLength(5)
+    expect(pickerOptions()).toHaveLength(6)
     // 首次打开默认高亮第一项
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-translate')
   })
@@ -293,13 +293,25 @@ describe('ConversationPanel picker keyboard selection', () => {
       const input = typeDraft(draft)
       expect(input).toHaveAttribute('aria-expanded', 'false')
       expect(screen.getByRole('button', { name: '发送' })).toBeEnabled()
-      // jsdom 不执行 Enter 的默认表单提交，分别验证未拦截和表单提交。
-      expect(fireEvent.keyDown(input, { key: 'Enter' })).toBe(true)
-      fireEvent.submit(input.closest('form') as HTMLFormElement)
+      // 多行输入域的 Enter 由组件显式拦截并提交；默认表单提交不再发生。
+      expect(fireEvent.keyDown(input, { key: 'Enter' })).toBe(false)
       expect(callbacks.onSend).toHaveBeenCalledExactlyOnceWith(draft)
       expect(callbacks.onRunSkill).not.toHaveBeenCalled()
+      // 提交后草稿已清空：重复的表单提交不会再发送。
+      fireEvent.submit(input.closest('form') as HTMLFormElement)
+      expect(callbacks.onSend).toHaveBeenCalledTimes(1)
     }
   )
+
+  it('treats Shift+Enter as a newline instead of submitting', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('line one')
+
+    expect(fireEvent.keyDown(input, { key: 'Enter', shiftKey: true })).toBe(true)
+    expect(fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true })).toBe(true)
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(input).toHaveValue('line one')
+  })
 
   it('closes the picker when typing concept arguments and reopens after deleting them', () => {
     const { callbacks } = renderPanel()
@@ -329,9 +341,11 @@ describe('ConversationPanel picker keyboard selection', () => {
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-vocabulary')
     fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-phrase')
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-translate')
     fireEvent.keyDown(input, { key: 'ArrowUp' })
-    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-vocabulary')
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-phrase')
   })
 
   it('selects the highlighted action with Enter without sending and keeps focus in the input', () => {
@@ -462,6 +476,62 @@ describe('ConversationPanel picker keyboard selection', () => {
     })
     expect(callbacks.onSend).not.toHaveBeenCalled()
     expect(input).toHaveValue('')
+  })
+
+  it('submits a directly typed /phrase command as a skill without the picker', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/phrase look forward to')
+
+    // 完整 /phrase 命令进入参数阶段：弹层关闭，Enter 直接提交为技能请求。
+    expect(input).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(fireEvent.keyDown(input, { key: 'Enter' })).toBe(false)
+
+    expect(callbacks.onRunSkill).toHaveBeenCalledExactlyOnceWith({
+      skillId: 'phrase',
+      text: 'look forward to'
+    })
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(input).toHaveValue('')
+  })
+
+  it('selects phrase from the picker and submits multiline arguments as a skill', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/phr')
+
+    expect(pickerOptions()).toHaveLength(1)
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(input).toHaveValue('/phrase ')
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
+
+    // 多行短语参数：Shift+Enter 换行不提交，行结构与行内空格原样传递。
+    fireEvent.change(input, { target: { value: '/phrase look forward to\n' } })
+    expect(fireEvent.keyDown(input, { key: 'Enter', shiftKey: true })).toBe(true)
+    fireEvent.change(input, {
+      target: { value: '/phrase look forward to\nif anything, at all' }
+    })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(callbacks.onRunSkill).toHaveBeenCalledExactlyOnceWith({
+      skillId: 'phrase',
+      text: 'look forward to\nif anything, at all'
+    })
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(input).toHaveValue('')
+  })
+
+  it('requires phrase arguments before submitting', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/phrase')
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(input).toHaveValue('/phrase ')
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    expect(screen.getByRole('alert')).toHaveTextContent('请在 /phrase 后输入')
+    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
+    expect(input).toHaveValue('/phrase ')
   })
 
   it('requires vocabulary arguments and clears selection when the command is edited', () => {
@@ -689,7 +759,7 @@ describe('ConversationPanel picker closing and reopen suppression', () => {
 
     fireEvent.change(input, { target: { value: '/' } })
     expect(input).toHaveAttribute('aria-expanded', 'true')
-    expect(pickerOptions()).toHaveLength(5)
+    expect(pickerOptions()).toHaveLength(6)
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-translate')
 
     fireEvent.keyDown(input, { key: 'Enter' })
@@ -763,7 +833,7 @@ describe('ConversationPanel picker input method composition', () => {
     fireEvent.change(input, { target: { value: '/翻' } })
 
     // 组合期间不刷新候选
-    expect(pickerOptions()).toHaveLength(5)
+    expect(pickerOptions()).toHaveLength(6)
 
     // 组合确认键不选择候选、不发送
     fireEvent.keyDown(input, { key: 'Enter', isComposing: true })

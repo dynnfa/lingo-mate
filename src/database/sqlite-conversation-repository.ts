@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 import { runConversationSkillInputSchema } from '../shared/conversation'
 import { vocabularyBatchSchema } from '../shared/vocabulary'
+import { phraseBatchSchema } from '../shared/phrase'
 import {
   ConversationPersistenceError,
   type ConversationRepository,
@@ -34,7 +35,7 @@ interface SkillExecutionRow {
   session_id: string
   user_message_id: string
   assistant_message_id: string | null
-  skill_id: 'vocabulary'
+  skill_id: 'vocabulary' | 'phrase'
   arguments_json: string
   explanation_language: 'zh-CN' | 'en'
   phase: ConversationSkillPhase
@@ -256,19 +257,30 @@ function toStoredMessage(row: MessageRow): StoredMessage {
   }
 }
 
+// 报告结构按 skill_id 判别解析；技能与报告不匹配的持久化数据视为损坏。
 function toStoredSkillExecution(row: SkillExecutionRow): StoredConversationSkillExecution {
   const args = runConversationSkillInputSchema.shape.arguments.parse(JSON.parse(row.arguments_json))
-  return {
+  const common = {
     id: row.id,
     sessionId: row.session_id,
     userMessageId: row.user_message_id,
     ...(row.assistant_message_id ? { assistantMessageId: row.assistant_message_id } : {}),
-    skillId: row.skill_id,
     arguments: args,
     explanationLanguage: row.explanation_language,
     phase: row.phase,
-    ...(row.batch_json ? { batch: vocabularyBatchSchema.parse(JSON.parse(row.batch_json)) } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  }
+  if (row.skill_id === 'phrase') {
+    return {
+      ...common,
+      skillId: 'phrase',
+      ...(row.batch_json ? { batch: phraseBatchSchema.parse(JSON.parse(row.batch_json)) } : {})
+    }
+  }
+  return {
+    ...common,
+    skillId: 'vocabulary',
+    ...(row.batch_json ? { batch: vocabularyBatchSchema.parse(JSON.parse(row.batch_json)) } : {})
   }
 }

@@ -1,4 +1,4 @@
-import type { ConversationApi } from '../../../shared/conversation'
+import type { ConversationApi, ConversationSkillId } from '../../../shared/conversation'
 import {
   initialConversationState,
   isGenerating,
@@ -154,7 +154,7 @@ export class ConversationController {
     return true
   }
 
-  async runSkill(input: { skillId: 'vocabulary'; text: string }): Promise<boolean> {
+  async runSkill(input: { skillId: ConversationSkillId; text: string }): Promise<boolean> {
     const sessionId = this.state.sessionId
     if (this.state.phase !== 'ready' || !sessionId || !input.text.trim()) return false
     if (this.state.commandPending || isGenerating(this.state)) return false

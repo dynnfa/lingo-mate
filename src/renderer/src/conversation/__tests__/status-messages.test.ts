@@ -23,6 +23,15 @@ function cases(): ConversationStatus[] {
     { kind: 'generationError', error: { code: 'CREDENTIAL_DECRYPT_FAILED' } },
     { kind: 'generationError', error: { code: 'PERSISTENCE_ERROR' } },
     { kind: 'generationError', error: { code: 'UNKNOWN_ERROR' } },
+    { kind: 'skillPhase', phase: 'analyzing' },
+    { kind: 'skillPhase', phase: 'analyzing', skillId: 'phrase' },
+    { kind: 'skillPhase', phase: 'committing', skillId: 'vocabulary' },
+    { kind: 'skillPhase', phase: 'committing', skillId: 'phrase' },
+    { kind: 'skillPhase', phase: 'summarizing' },
+    { kind: 'skillDescriptionFailed', cancelled: false },
+    { kind: 'skillDescriptionFailed', cancelled: false, skillId: 'phrase' },
+    { kind: 'skillDescriptionFailed', cancelled: true, skillId: 'phrase' },
+    { kind: 'skillDescriptionFailed', cancelled: true, skillId: 'vocabulary' },
     {
       kind: 'requestError',
       operation: 'load',
@@ -60,6 +69,34 @@ describe('conversation status translation', () => {
     // 未翻译的 key 会原样返回，不应看到命名空间前缀
     expect(zhText).not.toMatch(/^(common|conversation|errors):/)
     expect(enText).not.toMatch(/^(common|conversation|errors):/)
+  })
+
+  it('translates skill phases per skill id', () => {
+    const zh = createI18n('zh-CN')
+    const t = zh.t as TFunction<['common', 'conversation', 'errors']>
+    expect(
+      translateConversationStatus(t, { kind: 'skillPhase', phase: 'analyzing', skillId: 'phrase' })
+    ).toBe('正在解析短语…')
+    expect(
+      translateConversationStatus(t, { kind: 'skillPhase', phase: 'committing', skillId: 'phrase' })
+    ).toBe('正在收录短语…')
+    expect(
+      translateConversationStatus(t, {
+        kind: 'skillPhase',
+        phase: 'analyzing',
+        skillId: 'vocabulary'
+      })
+    ).toBe('正在解析词汇…')
+    expect(translateConversationStatus(t, { kind: 'skillPhase', phase: 'analyzing' })).toBe(
+      '正在解析词汇…'
+    )
+    expect(
+      translateConversationStatus(t, {
+        kind: 'skillDescriptionFailed',
+        cancelled: false,
+        skillId: 'phrase'
+      })
+    ).toBe('短语已处理，但结果描述失败。你可以只重试结果描述。')
   })
 
   it('maps every request error code to its dedicated message', () => {

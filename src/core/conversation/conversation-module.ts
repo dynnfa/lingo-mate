@@ -1,9 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import { classifyModelRequestError, ModelRequestError } from '../llm/llm-client'
-import { CONVERSATION_TITLE_MAX_LENGTH, conversationSummarySchema } from '../../shared/conversation'
+import {
+  CONVERSATION_TITLE_MAX_LENGTH,
+  conversationSummarySchema,
+  type ConversationSkillId
+} from '../../shared/conversation'
 import type {
   ConversationEvent,
   ConversationMessage,
+  ConversationSkillReport,
   ConversationSummary,
   GenerationAccepted,
   GenerationEventError,
@@ -18,8 +23,9 @@ import type { SupportedLocale, TargetLanguage } from '../../shared/preferences'
 import type { LanguageModel, ModelMessage, ReplyPromptKind } from '../llm/language-model'
 import { ModelConfigValidationError, ModelNotConfiguredError } from '../llm/model-config'
 import { isWordConceptMessage } from '../prompt/word-concept'
-import { VocabularyConversationSkill } from '../learning/vocabulary/vocabulary-conversation-skill'
 import { VocabularyError } from '../learning/vocabulary/parse-vocabulary-input'
+import { PhraseError } from '../learning/phrase/parse-phrase-input'
+import type { ConversationSkill, ConversationSkillRunInput } from './conversation-skill'
 import type {
   ConversationSkillRepository,
   StoredConversationSkillExecution
@@ -84,7 +90,8 @@ export class ConversationModule {
       outputLanguage: 'zh-CN',
       targetLanguage: 'en'
     }),
-    private readonly vocabularySkill?: VocabularyConversationSkill,
+    // 会话技能按 skillId 注册与分派；新增技能时扩展 ConversationSkill 实现。
+    private readonly skills: ReadonlyMap<ConversationSkillId, ConversationSkill> = new Map(),
     private readonly skillRepository?: ConversationSkillRepository
   ) {}
 
@@ -176,7 +183,8 @@ export class ConversationModule {
     emit: ConversationEventListener
   ): Promise<GenerationAccepted> {
     runConversationSkillInputSchema.parse(input)
-    if (!this.vocabularySkill || !this.skillRepository) {
+    const skill = this.skills.get(input.skillId)
+    if (!skill || !this.skillRepository) {
       throw new Error('Conversation skills are not configured')
     }
     const conversation =
@@ -195,20 +203,24 @@ export class ConversationModule {
       id: randomUUID(),
       sessionId: input.sessionId,
       role: 'user',
-      content: `/vocabulary ${input.arguments.text}`,
+      content: `/${input.skillId} ${input.arguments.text}`,
       createdAt: now
     }
-    const execution: StoredConversationSkillExecution = {
+    // 两个技能分支共享同一基础形状；skillId 字面量决定报告判别类型。
+    const executionBase = {
       id: randomUUID(),
       sessionId: input.sessionId,
       userMessageId: userMessage.id,
-      skillId: 'vocabulary',
       arguments: input.arguments,
       explanationLanguage: languages.outputLanguage,
-      phase: 'started',
+      phase: 'started' as const,
       createdAt: now,
       updatedAt: now
     }
+    const execution: StoredConversationSkillExecution =
+      input.skillId === 'phrase'
+        ? { ...executionBase, skillId: 'phrase' }
+        : { ...executionBase, skillId: 'vocabulary' }
     const assistantMessageId = randomUUID()
     this.registerExecution(input.requestId, {
       controller: new AbortController(),
@@ -245,7 +257,7 @@ export class ConversationModule {
     }
     const active = this.activeRequests.get(input.requestId)
     if (!active) throw new Error('Skill execution is not registered')
-    void this.runVocabularySkill(generation, execution, active, emit)
+    void this.runSkillExecution(generation, execution, skill, active, emit)
     return { accepted: true, generation }
   }
 
@@ -273,7 +285,8 @@ export class ConversationModule {
       : undefined
 
     if (skillExecution) {
-      if (!this.vocabularySkill || skillExecution.phase === 'completed') {
+      const skill = this.skills.get(skillExecution.skillId)
+      if (!skill || skillExecution.phase === 'completed') {
         throw new RetryNotAllowedError('skill execution cannot be retried')
       }
       const assistantMessageId = randomUUID()
@@ -297,15 +310,16 @@ export class ConversationModule {
       const active = this.activeRequests.get(input.requestId)
       if (!active) throw new Error('Skill retry is not registered')
       if (skillExecution.batch) {
-        void this.retryVocabularyReply(
+        void this.retrySkillReply(
           generation,
           skillExecution,
           skillExecution.batch,
+          skill,
           active,
           emit
         )
       } else {
-        void this.runVocabularySkill(generation, skillExecution, active, emit)
+        void this.runSkillExecution(generation, skillExecution, skill, active, emit)
       }
       return { accepted: true, generation }
     }
@@ -519,9 +533,10 @@ export class ConversationModule {
     }
   }
 
-  private async runVocabularySkill(
+  private async runSkillExecution(
     generation: GenerationStarted,
     skillExecution: StoredConversationSkillExecution,
+    skill: ConversationSkill,
     execution: ActiveExecution,
     emit: ConversationEventListener
   ): Promise<void> {
@@ -535,7 +550,7 @@ export class ConversationModule {
         return
       }
 
-      const result = await this.vocabularySkill!.run({
+      const result = await skill.run({
         requestId,
         executionId: skillExecution.id,
         arguments: skillExecution.arguments,
@@ -545,14 +560,14 @@ export class ConversationModule {
           await this.skillRepository!.setExecutionPhase(skillExecution.id, phase)
           emit({ ...eventBase, type: 'skillPhase', phase })
         }
-      })
+      } satisfies ConversationSkillRunInput)
 
-      if (result.batch.outcome === 'cancelled') {
+      if (result.outcome === 'cancelled') {
         await this.skillRepository!.setExecutionPhase(skillExecution.id, 'cancelled')
         emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
         return
       }
-      await this.persistSkillReply(generation, skillExecution, result.batch, emit)
+      await this.persistSkillReply(generation, skillExecution, result.report, skill, emit)
     } catch (error) {
       if (execution.controller.signal.aborted) {
         try {
@@ -584,11 +599,12 @@ export class ConversationModule {
     }
   }
 
-  // 恢复流程只依据已持久化报告生成本地反馈：不再次调用模型，也不再次写词库。
-  private async retryVocabularyReply(
+  // 恢复流程只依据已持久化报告生成本地反馈：不再次调用模型，也不再次写业务表。
+  private async retrySkillReply(
     generation: GenerationStarted,
     skillExecution: StoredConversationSkillExecution,
-    batch: NonNullable<StoredConversationSkillExecution['batch']>,
+    report: ConversationSkillReport,
+    skill: ConversationSkill,
     execution: ActiveExecution,
     emit: ConversationEventListener
   ): Promise<void> {
@@ -603,7 +619,7 @@ export class ConversationModule {
       }
       await this.skillRepository!.setExecutionPhase(skillExecution.id, 'summarizing')
       emit({ ...eventBase, type: 'skillPhase', phase: 'summarizing' })
-      await this.persistSkillReply(generation, skillExecution, batch, emit)
+      await this.persistSkillReply(generation, skillExecution, report, skill, emit)
     } catch (error) {
       emit({
         ...eventBase,
@@ -619,10 +635,11 @@ export class ConversationModule {
   private async persistSkillReply(
     generation: GenerationStarted,
     skillExecution: StoredConversationSkillExecution,
-    batch: NonNullable<StoredConversationSkillExecution['batch']>,
+    report: ConversationSkillReport,
+    skill: ConversationSkill,
     emit: ConversationEventListener
   ): Promise<void> {
-    const feedback = this.vocabularySkill!.feedback(batch, skillExecution.explanationLanguage)
+    const feedback = skill.feedback(report, skillExecution.explanationLanguage)
     const assistantMessage: StoredMessage = {
       id: generation.assistantMessageId,
       sessionId: generation.sessionId,
@@ -677,6 +694,14 @@ export class ConversationModule {
     }
 
     if (error instanceof VocabularyError && error.code === 'TOOL_CALL_NOT_SUPPORTED') {
+      return { code: 'TOOL_CALL_NOT_SUPPORTED' }
+    }
+
+    if (error instanceof PhraseError && error.code === 'STORAGE_FAILED') {
+      return { code: 'PERSISTENCE_ERROR' }
+    }
+
+    if (error instanceof PhraseError && error.code === 'TOOL_CALL_NOT_SUPPORTED') {
       return { code: 'TOOL_CALL_NOT_SUPPORTED' }
     }
 

@@ -6,18 +6,24 @@
     "creating": "正在创建会话…",
     "ready": "准备就绪",
     "generating": "正在生成…",
-    "analyzing": "正在解析词汇…",
-    "committing": "正在保存词汇…",
+    "analyzingVocabulary": "正在解析词汇…",
+    "committingVocabulary": "正在保存词汇…",
+    "analyzingPhrase": "正在解析短语…",
+    "committingPhrase": "正在收录短语…",
     "summarizing": "正在整理结果…",
     "completed": "回复完成",
-    "descriptionFailed": "词汇已处理，但结果描述失败。你可以只重试结果描述。",
-    "descriptionCancelled": "词汇已保存，但结果描述已取消。你可以只重试结果描述。",
+    "descriptionFailedVocabulary": "词汇已处理，但结果描述失败。你可以只重试结果描述。",
+    "descriptionCancelledVocabulary": "词汇已保存，但结果描述已取消。你可以只重试结果描述。",
+    "descriptionFailedPhrase": "短语已处理，但结果描述失败。你可以只重试结果描述。",
+    "descriptionCancelledPhrase": "短语已保存，但结果描述已取消。你可以只重试结果描述。",
     "cancelled": "已取消，可重试。",
     "protocolError": "会话协议异常，已忽略一条身份不一致的消息。",
     "generatingTitle": "正在生成对话标题…"
   },
   "composer": {
-    "vocabularyRequired": "请在 /vocabulary 后输入一个或多个英语单词或短语。"
+    "vocabularyRequired": "请在 /vocabulary 后输入一个或多个英语单词或短语。",
+    "phraseRequired": "请在 /phrase 后输入一个或多个英语短语。",
+    "phraseHint": "每行一个短语，可批量收录；短语内部可包含空格与标点。"
   },
   "actionPicker": {
     "listLabel": "可用行动",
@@ -42,6 +48,10 @@
       "vocabulary": {
         "name": "收藏词汇",
         "description": "批量解析并收藏英语单词与短语。"
+      },
+      "phrase": {
+        "name": "收录短语",
+        "description": "批量解析并收录英语短语与习惯表达，每行一个。"
       }
     }
   }

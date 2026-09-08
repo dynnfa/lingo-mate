@@ -66,7 +66,7 @@ describe('vocabulary conversation integration', () => {
       unusedConversationModel,
       conversationRepository,
       () => ({ outputLanguage: 'en' as const, targetLanguage: 'en' as const }),
-      skill,
+      new Map([[skill.skillId, skill]]),
       conversationRepository
     )
     const { sessionId } = await module.createConversation()
@@ -118,7 +118,7 @@ describe('vocabulary conversation integration', () => {
       unusedConversationModel,
       conversationRepository,
       () => ({ outputLanguage: 'en' as const, targetLanguage: 'en' as const }),
-      skill,
+      new Map([[skill.skillId, skill]]),
       conversationRepository
     )
     const { sessionId } = await module.createConversation()
@@ -173,7 +173,7 @@ describe('vocabulary conversation integration', () => {
       unusedConversationModel,
       conversationRepository,
       () => ({ outputLanguage: 'en' as const, targetLanguage: 'en' as const }),
-      skill,
+      new Map([[skill.skillId, skill]]),
       conversationRepository
     )
     const { sessionId } = await module.createConversation()
@@ -221,7 +221,7 @@ describe('vocabulary conversation integration', () => {
       unusedConversationModel,
       conversationRepository,
       () => ({ outputLanguage: 'en', targetLanguage: 'ja' }) as unknown as ConversationLanguages,
-      skill,
+      new Map([[skill.skillId, skill]]),
       conversationRepository
     )
     const { sessionId } = await module.createConversation()

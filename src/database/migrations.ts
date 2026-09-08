@@ -222,6 +222,108 @@ export const MIGRATIONS: Migration[] = [
       ALTER TABLE conversations ADD COLUMN title TEXT NOT NULL
         CHECK (length(trim(title)) BETWEEN 1 AND 80);
     `)
+  },
+  {
+    // /phrase 短语收录：新表 + 放宽技能 ID 与用量 operation 的 CHECK 约束。
+    // 列级 CHECK 无法直接修改，两张含约束的表需整表重建并保留全部历史行。
+    version: 9,
+    up: (database) => {
+      // 短语表只有需求指定的三列；空白与超长由 CHECK 拒绝，主键按大小写敏感比较。
+      database.exec(`
+        CREATE TABLE phrase (
+          phrase TEXT PRIMARY KEY NOT NULL CHECK (
+            typeof(phrase) = 'text'
+            AND length(phrase) <= 200
+            AND length(trim(phrase)) BETWEEN 1 AND 200
+          ),
+          explantation TEXT NOT NULL CHECK (
+            typeof(explantation) = 'text'
+            AND length(explantation) <= 2000
+            AND length(trim(explantation)) BETWEEN 1 AND 2000
+          ),
+          example TEXT NOT NULL CHECK (
+            typeof(example) = 'text'
+            AND length(example) <= 1000
+            AND length(trim(example)) BETWEEN 1 AND 1000
+          )
+        );
+      `)
+
+      database.exec(`
+        CREATE TABLE conversation_skill_executions_v9 (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          user_message_id TEXT NOT NULL UNIQUE,
+          assistant_message_id TEXT,
+          skill_id TEXT NOT NULL CHECK(skill_id IN ('vocabulary', 'phrase')),
+          arguments_json TEXT NOT NULL CHECK(json_valid(arguments_json)),
+          explanation_language TEXT NOT NULL CHECK(explanation_language IN ('zh-CN', 'en')),
+          phase TEXT NOT NULL CHECK(phase IN (
+            'started', 'analyzing', 'committing', 'summarizing', 'completed',
+            'cancelled', 'failed', 'description_failed', 'description_cancelled'
+          )),
+          batch_json TEXT CHECK(batch_json IS NULL OR json_valid(batch_json)),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (session_id) REFERENCES conversations (id),
+          FOREIGN KEY (user_message_id) REFERENCES conversation_messages (id),
+          FOREIGN KEY (assistant_message_id) REFERENCES conversation_messages (id)
+        );
+        INSERT INTO conversation_skill_executions_v9
+          (id, session_id, user_message_id, assistant_message_id, skill_id, arguments_json,
+           explanation_language, phase, batch_json, created_at, updated_at)
+        SELECT id, session_id, user_message_id, assistant_message_id, skill_id, arguments_json,
+               explanation_language, phase, batch_json, created_at, updated_at
+        FROM conversation_skill_executions
+        ORDER BY rowid;
+      `)
+      copyCountCheck(database, 'conversation_skill_executions', 'conversation_skill_executions_v9')
+      database.exec(`
+        DROP TABLE conversation_skill_executions;
+        ALTER TABLE conversation_skill_executions_v9 RENAME TO conversation_skill_executions;
+        CREATE INDEX conversation_skill_executions_session
+          ON conversation_skill_executions (session_id, created_at);
+      `)
+
+      database.exec(`
+        CREATE TABLE llm_request_usage_v9 (
+          id TEXT PRIMARY KEY,
+          operation TEXT NOT NULL CHECK (operation IN (
+            'conversation', 'vocabulary_analysis', 'phrase_analysis', 'connection_test'
+          )),
+          model_id TEXT NOT NULL,
+          response_model_id TEXT,
+          started_at INTEGER NOT NULL,
+          finished_at INTEGER,
+          status TEXT NOT NULL CHECK (status IN (
+            'started', 'completed', 'failed', 'cancelled', 'interrupted'
+          )),
+          input_tokens INTEGER CHECK (input_tokens IS NULL OR (
+            typeof(input_tokens) = 'integer' AND input_tokens >= 0 AND input_tokens <= 9007199254740991
+          )),
+          output_tokens INTEGER CHECK (output_tokens IS NULL OR (
+            typeof(output_tokens) = 'integer' AND output_tokens >= 0 AND output_tokens <= 9007199254740991
+          )),
+          total_tokens INTEGER CHECK (total_tokens IS NULL OR (
+            typeof(total_tokens) = 'integer' AND total_tokens >= 0 AND total_tokens <= 9007199254740991
+          )),
+          usage_status TEXT NOT NULL CHECK (usage_status IN (
+            'reported', 'derived', 'partial', 'missing', 'invalid'
+          )),
+          error_code TEXT
+        );
+        INSERT INTO llm_request_usage_v9
+          SELECT * FROM llm_request_usage ORDER BY rowid;
+      `)
+      copyCountCheck(database, 'llm_request_usage', 'llm_request_usage_v9')
+      database.exec(`
+        DROP TABLE llm_request_usage;
+        ALTER TABLE llm_request_usage_v9 RENAME TO llm_request_usage;
+        CREATE INDEX llm_request_usage_model_started_at
+          ON llm_request_usage (model_id, started_at);
+        CREATE INDEX llm_request_usage_started_at ON llm_request_usage (started_at);
+      `)
+    }
   }
 ]
 
@@ -242,4 +344,15 @@ export function migrateDatabase(database: Database.Database): void {
 function countRows(database: Database.Database, table: string): number {
   return (database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number })
     .count
+}
+
+// 整表重建的行数守卫：目标行数必须与源一致，否则回滚整个迁移。
+function copyCountCheck(database: Database.Database, source: string, target: string): void {
+  const sourceCount = countRows(database, source)
+  const targetCount = countRows(database, target)
+  if (targetCount !== sourceCount) {
+    throw new Error(
+      `Migration row count mismatch: copied ${targetCount} of ${sourceCount} rows from ${source}`
+    )
+  }
 }

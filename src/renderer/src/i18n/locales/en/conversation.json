@@ -6,18 +6,24 @@
     "creating": "Creating a conversation…",
     "ready": "Ready",
     "generating": "Generating…",
-    "analyzing": "Analyzing vocabulary…",
-    "committing": "Saving vocabulary…",
+    "analyzingVocabulary": "Analyzing vocabulary…",
+    "committingVocabulary": "Saving vocabulary…",
+    "analyzingPhrase": "Analyzing phrases…",
+    "committingPhrase": "Saving phrases…",
     "summarizing": "Preparing the result…",
     "completed": "Reply complete",
-    "descriptionFailed": "Vocabulary was processed, but the result description failed. You can retry the description.",
-    "descriptionCancelled": "Vocabulary was saved, but the result description was cancelled. You can retry the description.",
+    "descriptionFailedVocabulary": "Vocabulary was processed, but the result description failed. You can retry the description.",
+    "descriptionCancelledVocabulary": "Vocabulary was saved, but the result description was cancelled. You can retry the description.",
+    "descriptionFailedPhrase": "Phrases were processed, but the result description failed. You can retry the description.",
+    "descriptionCancelledPhrase": "Phrases were saved, but the result description was cancelled. You can retry the description.",
     "cancelled": "Cancelled. You can retry.",
     "protocolError": "Conversation protocol error: ignored a message with mismatched identity.",
     "generatingTitle": "Generating conversation title…"
   },
   "composer": {
-    "vocabularyRequired": "Enter one or more English words or phrases after /vocabulary."
+    "vocabularyRequired": "Enter one or more English words or phrases after /vocabulary.",
+    "phraseRequired": "Enter one or more English phrases after /phrase.",
+    "phraseHint": "One phrase per line; batch input is supported. Spaces and punctuation inside a phrase are kept."
   },
   "actionPicker": {
     "listLabel": "Available actions",
@@ -42,6 +48,10 @@
       "vocabulary": {
         "name": "Vocabulary",
         "description": "Analyze and save English words and phrases in a batch."
+      },
+      "phrase": {
+        "name": "Phrase",
+        "description": "Analyze and save English phrases and idioms in a batch, one per line."
       }
     }
   }

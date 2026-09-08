@@ -52,7 +52,7 @@ describe('llm_request_usage migrations and repository', () => {
         migration.up(upgraded)
       upgraded.pragma('user_version = 5')
       expect(() => migrateDatabase(upgraded)).not.toThrow()
-      expect(upgraded.pragma('user_version', { simple: true })).toBe(8)
+      expect(upgraded.pragma('user_version', { simple: true })).toBe(9)
       expect(hasIndex(upgraded, 'llm_request_usage_started_at')).toBe(true)
     } finally {
       upgraded.close()
@@ -94,7 +94,7 @@ describe('llm_request_usage migrations and repository', () => {
       `)
       upgraded.pragma('user_version = 6')
       migrateDatabase(upgraded)
-      expect(upgraded.pragma('user_version', { simple: true })).toBe(8)
+      expect(upgraded.pragma('user_version', { simple: true })).toBe(9)
       expect(hasIndex(upgraded, 'llm_request_usage_started_at')).toBe(true)
       const rows = upgraded.prepare('SELECT COUNT(*) AS count FROM llm_request_usage').get() as {
         count: number
@@ -115,7 +115,19 @@ describe('llm_request_usage migrations and repository', () => {
           id TEXT PRIMARY KEY, session_id TEXT NOT NULL, role TEXT NOT NULL,
           content TEXT NOT NULL, created_at TEXT NOT NULL
         );
-        CREATE TABLE conversation_skill_executions (id TEXT PRIMARY KEY);
+        CREATE TABLE conversation_skill_executions (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          user_message_id TEXT NOT NULL UNIQUE,
+          assistant_message_id TEXT,
+          skill_id TEXT NOT NULL CHECK(skill_id = 'vocabulary'),
+          arguments_json TEXT NOT NULL CHECK(json_valid(arguments_json)),
+          explanation_language TEXT NOT NULL CHECK(explanation_language IN ('zh-CN', 'en')),
+          phase TEXT NOT NULL,
+          batch_json TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
         CREATE TABLE vocabulary (
           id TEXT PRIMARY KEY, term TEXT NOT NULL, phonetic TEXT, meaning TEXT,
           concept TEXT, example_sentences TEXT, model_id TEXT NOT NULL,

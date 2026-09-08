@@ -1,0 +1,12 @@
+{
+  "feedback": {
+    "summary": "已处理 {{total}} 个短语：{{details}}。",
+    "saved": "新增 {{count}} 个（{{terms}}）",
+    "existing": "已有 {{count}} 个（{{terms}}）",
+    "duplicate": "输入重复 {{count}} 个（{{terms}}）",
+    "unrecognized": "{{count}} 个无法识别为英语短语（{{terms}}）",
+    "failed": "{{count}} 个失败（{{terms}}）",
+    "separator": "；",
+    "duplicateSourceFailed": "重复项因其源短语失败，未保存。"
+  }
+}

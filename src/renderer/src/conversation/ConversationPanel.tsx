@@ -4,10 +4,11 @@ import { translateConversationStatus } from './status-messages'
 import { ACTION_PICKER_ID, ConversationActionPicker } from './ConversationActionPicker'
 import {
   CONVERSATION_ACTIONS,
-  extractVocabularyDraft,
+  extractSkillDraft,
   filterConversationActions,
   isSelectedSkillDraft,
   parseSlashTrigger,
+  resolveSkillSubmission,
   type ConversationActionMeta,
   type SelectedConversationSkillId
 } from './conversation-actions'
@@ -20,7 +21,7 @@ interface ConversationPanelProps {
   composerLocked: boolean
   onSend: (text: string) => boolean | void | Promise<boolean | void>
   onRunSkill?: (input: {
-    skillId: 'vocabulary'
+    skillId: SelectedConversationSkillId
     text: string
   }) => boolean | void | Promise<boolean | void>
   onCancel: () => void
@@ -53,13 +54,17 @@ export function ConversationPanel({
   const [inputFocused, setInputFocused] = useState(false)
   const [dismissal, setDismissal] = useState<PickerDismissal>('none')
   const [highlightedActionId, setHighlightedActionId] = useState<string | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   const triggerQuery = parseSlashTrigger(draft)
   const filterQuery = composing ? compositionQuery : triggerQuery
 
   const pickerOpen =
     triggerQuery !== undefined && inputFocused && !composerLocked && dismissal === 'none'
+
+  // 技能命令（选择器选择或完整输入 /phrase）激活时显示对应提示；
+  // 短语提示说明多行输入规则。
+  const activeSkillId = resolveSkillSubmission(draft, selectedSkillId)
 
   const filteredActions =
     pickerOpen && filterQuery !== undefined
@@ -80,9 +85,9 @@ export function ConversationPanel({
   // 首版行动契约：选择仅填入命令模板进入待输入状态，不发送；
   // 替换后的草稿仍以 `/` 开头，用锁定抑制避免完成后立即弹回。
   const selectAction = (action: ConversationActionMeta): void => {
-    if (action.id === 'vocabulary') {
-      setSelectedSkillId('vocabulary')
-      setDraft('/vocabulary ')
+    if (action.id === 'vocabulary' || action.id === 'phrase') {
+      setSelectedSkillId(action.id)
+      setDraft(`/${action.command} `)
       setComposerError(null)
       closePicker('latched')
       inputRef.current?.focus()
@@ -109,10 +114,23 @@ export function ConversationPanel({
     }
   }
 
-  const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
     // 输入法组合期间不拦截按键：确认键属于组合输入，不选择候选也不发送。
     if (composing || event.nativeEvent.isComposing) return
-    if (!pickerOpen) return
+    // 弹层关闭时 Enter 发送（Shift+Enter 换行，服务短语多行输入）。
+    if (!pickerOpen) {
+      if (
+        event.key === 'Enter' &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.metaKey
+      ) {
+        event.preventDefault()
+        submitComposer()
+      }
+      return
+    }
 
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
@@ -157,19 +175,26 @@ export function ConversationPanel({
     }
   }
 
-  const sendMessage = (formEvent: SyntheticEvent): void => {
-    formEvent.preventDefault()
+  const submitComposer = (): void => {
     // 弹层打开或输入法组合期间不发送；不能只依赖按钮禁用或键盘事件。
     if (pickerOpen || composing) return
     if (composerLocked || !draft.trim()) return
 
-    if (selectedSkillId === 'vocabulary') {
-      const parsed = extractVocabularyDraft(draft, selectedSkillId)
+    // 技能命令（选择器选择或直接输入 /phrase）：转换为类型化技能请求，
+    // 不作为普通聊天发送。
+    if (activeSkillId) {
+      const parsed = extractSkillDraft(draft, activeSkillId)
       if (parsed.status !== 'ok') {
-        setComposerError(t('conversation:composer.vocabularyRequired'))
+        setComposerError(
+          t(
+            activeSkillId === 'phrase'
+              ? 'conversation:composer.phraseRequired'
+              : 'conversation:composer.vocabularyRequired'
+          )
+        )
         return
       }
-      const submission = onRunSkill?.({ skillId: 'vocabulary', text: parsed.text })
+      const submission = onRunSkill?.({ skillId: activeSkillId, text: parsed.text })
       const clearAcceptedSkill = (accepted: boolean | void): void => {
         if (accepted === false) return
         setSelectedSkillId(null)
@@ -187,6 +212,11 @@ export function ConversationPanel({
         if (accepted !== false) updateDraft('')
       })
     } else if (submission !== false) updateDraft('')
+  }
+
+  const sendMessage = (formEvent: SyntheticEvent): void => {
+    formEvent.preventDefault()
+    submitComposer()
   }
 
   return (
@@ -243,7 +273,7 @@ export function ConversationPanel({
               onSelect={selectAction}
             />
           ) : null}
-          <input
+          <textarea
             aria-activedescendant={
               pickerOpen && highlightedId
                 ? `conversation-action-option-${highlightedId}`
@@ -270,9 +300,14 @@ export function ConversationPanel({
               if (dismissal === 'soft') setDismissal('none')
             }}
             onKeyDown={handleInputKeyDown}
-            placeholder={t('common:composer.placeholder')}
+            placeholder={
+              activeSkillId === 'phrase'
+                ? t('conversation:composer.phraseHint')
+                : t('common:composer.placeholder')
+            }
             ref={inputRef}
             role="combobox"
+            rows={1}
             value={draft}
           />
           {generating ? (

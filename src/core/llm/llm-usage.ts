@@ -2,7 +2,8 @@
 // 通信状态表达 SDK 请求与响应消费的结果，与业务校验成败分离；
 // usage 以提供方返回为准，缺失值用 NULL 表达未知，不伪造计费用量。
 
-export type LlmRequestOperation = 'conversation' | 'vocabulary_analysis' | 'connection_test'
+export type LlmRequestOperation =
+  'conversation' | 'vocabulary_analysis' | 'phrase_analysis' | 'connection_test'
 
 export type LlmRequestStatus = 'started' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
 
