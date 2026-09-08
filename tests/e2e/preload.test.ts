@@ -17,14 +17,18 @@ test('exposes the conversation skill and preferences interfaces from the sandbox
         )
         .toBe('function')
 
-      // 偏好窄接口：只暴露 getLocale/setLocale，不暴露通用 invoke 或原始 IPC
+      // 偏好窄接口：只暴露语言设置读写，不暴露通用 invoke 或原始 IPC
       const exposedPreferencesKeys = await window.evaluate(() =>
         Object.keys(
           (globalThis as typeof globalThis & { api?: { preferences?: object } }).api?.preferences ??
             {}
         ).sort()
       )
-      expect(exposedPreferencesKeys).toEqual(['getLocale', 'setLocale'])
+      expect(exposedPreferencesKeys).toEqual([
+        'getLanguageSettings',
+        'setTargetLanguage',
+        'setUiLanguage'
+      ])
 
       const exposedApiKeys = await window.evaluate(() =>
         Object.keys((globalThis as typeof globalThis & { api?: object }).api ?? {}).sort()
@@ -50,15 +54,15 @@ test('exposes the conversation skill and preferences interfaces from the sandbox
       )
       expect(conversationKeys).toContain('runSkill')
 
-      const locale = await window.evaluate(async () => {
+      const settings = await window.evaluate(async () => {
         const preferences = (
           globalThis as typeof globalThis & {
-            api: { preferences: { getLocale(): Promise<unknown> } }
+            api: { preferences: { getLanguageSettings(): Promise<unknown> } }
           }
         ).api.preferences
-        return preferences.getLocale()
+        return preferences.getLanguageSettings()
       })
-      expect(locale).toMatchObject({ status: 'ok' })
+      expect(settings).toMatchObject({ status: 'ok' })
     } finally {
       await electronApp.close()
     }

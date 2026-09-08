@@ -13,8 +13,10 @@ import { join } from 'path'
 import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { ConversationModule } from '../core/conversation/conversation-module'
-import type { SupportedLocale } from '../shared/preferences'
+import {
+  ConversationModule,
+  type ConversationLanguages
+} from '../core/conversation/conversation-module'
 import { ConfiguredLanguageModel } from '../core/llm/configured-language-model'
 import { LocalLanguageModel } from '../core/llm/local-language-model'
 import {
@@ -135,16 +137,24 @@ app.whenReady().then(() => {
     )
     registerPreferencesIpc(preferencesService)
   } catch (error) {
-    console.error('Failed to initialize locale preferences', error)
+    console.error('Failed to initialize language preferences', error)
   }
 
-  // 对话解释使用 Main 解析的当前界面语言，并在每次请求开始时显式传给模型。
-  const resolveOutputLanguage = (): SupportedLocale => {
+  // 解释语言跟随界面语言，目标语言来自独立配置；Core 不读取 electron-store，
+  // 每次执行开始时从这里取一份快照，设置变更不影响在途请求。
+  const resolveLanguages = (): ConversationLanguages => {
     try {
-      return preferencesService?.getLocale().resolvedLocale ?? 'zh-CN'
+      const settings = preferencesService?.getLanguageSettings()
+      if (settings) {
+        return {
+          outputLanguage: settings.resolvedUiLanguage,
+          targetLanguage: settings.targetLanguage
+        }
+      }
     } catch {
-      return 'zh-CN'
+      // 读取失败沿用默认语言，不阻断对话。
     }
+    return { outputLanguage: 'zh-CN', targetLanguage: 'en' }
   }
   const vocabularyRepository = new SqliteVocabularyRepository(database)
   const vocabularySkill = new VocabularyConversationSkill(
@@ -157,7 +167,7 @@ app.whenReady().then(() => {
   conversationModule = new ConversationModule(
     conversationModel,
     conversationRepository,
-    resolveOutputLanguage,
+    resolveLanguages,
     vocabularySkill,
     conversationRepository
   )

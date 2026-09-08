@@ -12,9 +12,12 @@ export interface StartupLocale {
 // 打包的 zh-CN 资源继续启动，不阻塞、不白屏；过期响应直接忽略。
 export async function loadStartupLocale(): Promise<StartupLocale> {
   try {
-    const result = await withTimeout(window.api.preferences.getLocale(), STARTUP_TIMEOUT_MS)
+    const result = await withTimeout(
+      window.api.preferences.getLanguageSettings(),
+      STARTUP_TIMEOUT_MS
+    )
     if (result.status === 'ok') {
-      return { locale: normalizeI18nLocale(result.settings.resolvedLocale), failed: false }
+      return { locale: normalizeI18nLocale(result.settings.resolvedUiLanguage), failed: false }
     }
   } catch {
     // 读取失败或超时：回退默认语言并提示

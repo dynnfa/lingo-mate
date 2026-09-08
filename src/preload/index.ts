@@ -34,10 +34,12 @@ import {
   updateModelConfigResultSchema
 } from '../shared/models'
 import {
-  getLocaleResultSchema,
+  getLanguageSettingsResultSchema,
   PREFERENCES_CHANNELS,
-  setLocaleInputSchema,
-  setLocaleResultSchema
+  setTargetLanguageInputSchema,
+  setTargetLanguageResultSchema,
+  setUiLanguageInputSchema,
+  setUiLanguageResultSchema
 } from '../shared/preferences'
 import {
   USAGE_CHANNELS,
@@ -47,14 +49,22 @@ import {
 
 const api: LingoMateApi = {
   preferences: {
-    async getLocale() {
-      const result: unknown = await ipcRenderer.invoke(PREFERENCES_CHANNELS.getLocale)
-      return getLocaleResultSchema.parse(result)
+    async getLanguageSettings() {
+      const result: unknown = await ipcRenderer.invoke(PREFERENCES_CHANNELS.getLanguageSettings)
+      return getLanguageSettingsResultSchema.parse(result)
     },
-    async setLocale(rawInput) {
-      const input = setLocaleInputSchema.parse(rawInput)
-      const result: unknown = await ipcRenderer.invoke(PREFERENCES_CHANNELS.setLocale, input)
-      return setLocaleResultSchema.parse(result)
+    async setUiLanguage(rawInput) {
+      const input = setUiLanguageInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(PREFERENCES_CHANNELS.setUiLanguage, input)
+      return setUiLanguageResultSchema.parse(result)
+    },
+    async setTargetLanguage(rawInput) {
+      const input = setTargetLanguageInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(
+        PREFERENCES_CHANNELS.setTargetLanguage,
+        input
+      )
+      return setTargetLanguageResultSchema.parse(result)
     }
   },
   models: {

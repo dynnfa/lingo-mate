@@ -18,12 +18,15 @@
     "title": "设置",
     "back": "返回",
     "menuLabel": "设置菜单",
-    "language": "界面语言",
+    "uiLanguage": "界面语言",
+    "targetLanguage": "目标学习语言",
     "sections": {
-      "language": "语言",
+      "uiLanguage": "界面语言",
+      "targetLanguage": "目标学习语言",
       "models": "模型",
       "usage": "用量"
     },
+    "targetLanguageNote": "目前仅支持学习英语。",
     "models": {
       "description": "配置语言学习使用的大语言模型。保存后将用于后续对话及词汇解析。",
       "loading": "正在读取模型配置…",

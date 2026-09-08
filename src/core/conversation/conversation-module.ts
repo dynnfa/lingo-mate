@@ -12,6 +12,7 @@ import type {
   SendMessageInput
 } from '../../shared/conversation'
 import { runConversationSkillInputSchema } from '../../shared/conversation'
+import type { SupportedLocale, TargetLanguage } from '../../shared/preferences'
 import type { LanguageModel, ModelMessage, ReplyPromptKind } from '../llm/language-model'
 import { ModelConfigValidationError, ModelNotConfiguredError } from '../llm/model-config'
 import { isWordConceptMessage } from '../prompt/word-concept'
@@ -36,6 +37,25 @@ import {
 
 export type ConversationEventListener = (event: ConversationEvent) => void
 
+// 一次执行的语言快照：解释语言跟随界面语言，目标语言来自独立配置。
+// 在执行开始时解析一次，同一次执行内的模型调用、工具分析与反馈保持一致。
+export interface ConversationLanguages {
+  outputLanguage: SupportedLocale
+  targetLanguage: TargetLanguage
+}
+
+// 客户端技能参数携带的 wordLanguage 与当前目标语言快照不一致：拒绝执行，
+// 避免 Renderer 旧值与已生效设置冲突。
+export class SkillLanguageMismatchError extends Error {
+  constructor(
+    readonly wordLanguage: string,
+    readonly targetLanguage: string
+  ) {
+    super(`Skill word language ${wordLanguage} does not match target language ${targetLanguage}`)
+    this.name = 'SkillLanguageMismatchError'
+  }
+}
+
 // 一次运行期请求的全部身份：requestId 只用于事件关联与取消，
 // user/assistant messageId 是消息在事件、Renderer 与 SQLite 中的唯一身份。
 interface ActiveExecution {
@@ -43,6 +63,7 @@ interface ActiveExecution {
   sessionId: string
   userMessageId: string
   assistantMessageId: string
+  languages: ConversationLanguages
 }
 
 export class ConversationModule {
@@ -52,8 +73,11 @@ export class ConversationModule {
   constructor(
     private readonly model: LanguageModel,
     private readonly repository: ConversationRepository,
-    // 每次生成开始时解析当前界面语言并显式传给模型，语言切换不重建本模块。
-    private readonly resolveOutputLanguage: () => 'zh-CN' | 'en' = () => 'zh-CN',
+    // 每次生成开始时解析当前语言配置并显式传给模型，语言切换不重建本模块。
+    private readonly resolveLanguages: () => ConversationLanguages = () => ({
+      outputLanguage: 'zh-CN',
+      targetLanguage: 'en'
+    }),
     private readonly vocabularySkill?: VocabularyConversationSkill,
     private readonly skillRepository?: ConversationSkillRepository
   ) {}
@@ -101,7 +125,8 @@ export class ConversationModule {
       controller: new AbortController(),
       sessionId: input.sessionId,
       userMessageId: userMessage.id,
-      assistantMessageId
+      assistantMessageId,
+      languages: this.snapshotLanguages()
     })
 
     try {
@@ -138,6 +163,12 @@ export class ConversationModule {
     const conversation = await this.withPersistence(() => this.repository.find(input.sessionId))
     if (!conversation) throw new ConversationNotFoundError(input.sessionId)
 
+    // 技能执行的 wordLanguage 来源于目标语言快照；客户端传值与当前设置
+    // 不一致时明确拒绝，不接受旧值静默执行。
+    const languages = this.snapshotLanguages()
+    if (input.arguments.wordLanguage !== languages.targetLanguage) {
+      throw new SkillLanguageMismatchError(input.arguments.wordLanguage, languages.targetLanguage)
+    }
     const now = new Date().toISOString()
     const userMessage: StoredMessage = {
       id: randomUUID(),
@@ -152,7 +183,7 @@ export class ConversationModule {
       userMessageId: userMessage.id,
       skillId: 'vocabulary',
       arguments: input.arguments,
-      explanationLanguage: this.resolveOutputLanguage(),
+      explanationLanguage: languages.outputLanguage,
       phase: 'started',
       createdAt: now,
       updatedAt: now
@@ -162,7 +193,8 @@ export class ConversationModule {
       controller: new AbortController(),
       sessionId: input.sessionId,
       userMessageId: userMessage.id,
-      assistantMessageId
+      assistantMessageId,
+      languages
     })
 
     try {
@@ -220,11 +252,16 @@ export class ConversationModule {
         throw new RetryNotAllowedError('skill execution cannot be retried')
       }
       const assistantMessageId = randomUUID()
+      // 已持久化的技能重试沿用原执行参数和解释语言；不读取当前设置。
       this.registerExecution(input.requestId, {
         controller: new AbortController(),
         sessionId: input.sessionId,
         userMessageId: userMessage.id,
-        assistantMessageId
+        assistantMessageId,
+        languages: {
+          outputLanguage: skillExecution.explanationLanguage,
+          targetLanguage: skillExecution.arguments.wordLanguage
+        }
       })
       const generation: GenerationStarted = {
         requestId: input.requestId,
@@ -254,11 +291,13 @@ export class ConversationModule {
     }
 
     const assistantMessageId = randomUUID()
+    // 普通回复重试视为新执行，读取当前语言设置。
     this.registerExecution(input.requestId, {
       controller: new AbortController(),
       sessionId: input.sessionId,
       userMessageId: userMessage.id,
-      assistantMessageId
+      assistantMessageId,
+      languages: this.snapshotLanguages()
     })
 
     const generation: GenerationStarted = {
@@ -276,6 +315,13 @@ export class ConversationModule {
       throw new RequestNotFoundError(requestId)
     }
     execution.controller.abort()
+  }
+
+  // 快照只拷贝原始值，不持有 resolver 返回的对象：执行期间设置源变化
+  // 不会泄漏进已建立的快照。
+  private snapshotLanguages(): ConversationLanguages {
+    const { outputLanguage, targetLanguage } = this.resolveLanguages()
+    return { outputLanguage, targetLanguage }
   }
 
   private registerExecution(requestId: string, execution: ActiveExecution): void {
@@ -341,9 +387,9 @@ export class ConversationModule {
 
       for await (const delta of this.model.streamReply({
         messages: modelMessages,
-        outputLanguage: this.resolveOutputLanguage(),
-        // 首版默认英语练习；学习语言不随界面语言切换。
-        targetLanguage: 'en',
+        outputLanguage: execution.languages.outputLanguage,
+        // 目标语言来自执行开始时的配置快照，不随界面语言切换。
+        targetLanguage: execution.languages.targetLanguage,
         promptKind,
         signal: execution.controller.signal
       })) {

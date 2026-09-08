@@ -18,12 +18,15 @@
     "title": "Settings",
     "back": "Back",
     "menuLabel": "Settings menu",
-    "language": "Display language",
+    "uiLanguage": "Display language",
+    "targetLanguage": "Target language",
     "sections": {
-      "language": "Language",
+      "uiLanguage": "Display language",
+      "targetLanguage": "Target language",
       "models": "Models",
       "usage": "Usage"
     },
+    "targetLanguageNote": "Only English is supported for now.",
     "models": {
       "description": "Configure the LLMs used for language learning. Saved configurations apply to subsequent conversations and vocabulary analysis.",
       "loading": "Loading model configurations…",

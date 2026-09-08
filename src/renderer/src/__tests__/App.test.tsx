@@ -15,7 +15,11 @@ import type {
   RetryMessageInput,
   SendMessageInput
 } from '../../../shared/conversation'
-import type { PreferencesApi, SetLocaleInput, SetLocaleResult } from '../../../shared/preferences'
+import type {
+  PreferencesApi,
+  SetUiLanguageInput,
+  SetUiLanguageResult
+} from '../../../shared/preferences'
 import type { ModelsApi } from '../../../shared/models'
 import type { UsageApi } from '../../../shared/usage'
 import App from '../App'
@@ -104,15 +108,15 @@ interface ApiMock {
     send: SendMessageInput[]
     retry: RetryMessageInput[]
     cancel: string[]
-    setLocale: SetLocaleInput[]
+    setUiLanguage: SetUiLanguageInput[]
   }
   generations: GenerationStarted[]
   emit(event: ConversationEvent): void
-  failNextSetLocale(): void
+  failNextSetUiLanguage(): void
 }
 
 interface ApiMockOptions {
-  setLocale?: (input: SetLocaleInput) => SetLocaleResult
+  setUiLanguage?: (input: SetUiLanguageInput) => SetUiLanguageResult
 }
 
 function installApiMock(
@@ -133,30 +137,46 @@ function installApiMock(
   const generations: GenerationStarted[] = []
   const userContent = new Map<string, string>()
   const mock: ApiMock = {
-    calls: { create: 0, list: 0, load: [], send: [], retry: [], cancel: [], setLocale: [] },
+    calls: { create: 0, list: 0, load: [], send: [], retry: [], cancel: [], setUiLanguage: [] },
     generations,
     emit(event) {
       for (const listener of listeners) listener(event)
     },
-    failNextSetLocale(): void {
-      failNextSetLocale = true
+    failNextSetUiLanguage(): void {
+      failNextSetUiLanguage = true
     }
   }
-  let failNextSetLocale = false
+  let failNextSetUiLanguage = false
 
   const preferences: PreferencesApi = {
-    async getLocale() {
-      return { status: 'ok', settings: { preference: 'system', resolvedLocale: 'zh-CN' } }
+    async getLanguageSettings() {
+      return {
+        status: 'ok',
+        settings: { uiLanguage: 'system', resolvedUiLanguage: 'zh-CN', targetLanguage: 'en' }
+      }
     },
-    async setLocale(input) {
-      mock.calls.setLocale.push(input)
-      if (failNextSetLocale) {
-        failNextSetLocale = false
+    async setUiLanguage(input) {
+      mock.calls.setUiLanguage.push(input)
+      if (failNextSetUiLanguage) {
+        failNextSetUiLanguage = false
         return { status: 'error', error: { code: 'PREFERENCES_WRITE_FAILED' } }
       }
-      if (setup.setLocale) return setup.setLocale(input)
-      const resolvedLocale = input.preference === 'system' ? 'zh-CN' : input.preference
-      return { status: 'ok', settings: { preference: input.preference, resolvedLocale } }
+      if (setup.setUiLanguage) return setup.setUiLanguage(input)
+      const resolvedUiLanguage = input.uiLanguage === 'system' ? 'zh-CN' : input.uiLanguage
+      return {
+        status: 'ok',
+        settings: { uiLanguage: input.uiLanguage, resolvedUiLanguage, targetLanguage: 'en' }
+      }
+    },
+    async setTargetLanguage(input) {
+      return {
+        status: 'ok',
+        settings: {
+          uiLanguage: 'system',
+          resolvedUiLanguage: 'zh-CN',
+          targetLanguage: input.targetLanguage
+        }
+      }
     }
   }
 
@@ -972,16 +992,16 @@ describe('App language settings', () => {
     fireEvent.change(screen.getByLabelText('练习内容'), { target: { value: 'kept draft' } })
     fireEvent.click(screen.getByRole('button', { name: '设置' }))
 
-    // 设置页替换对话视图：语言区块可见，对话视图隐藏但保持挂载
-    expect(screen.getByRole('heading', { name: '语言' })).toBeInTheDocument()
+    // 设置页替换对话视图：界面语言区块可见，对话视图隐藏但保持挂载
+    expect(screen.getByRole('heading', { name: '界面语言' })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: '跟随系统 / System' })).toBeChecked()
     expect(screen.getByRole('button', { name: '发送', hidden: true })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('radio', { name: 'English' }))
 
-    // 保存成功后按返回的 resolvedLocale 切换界面语言
+    // 保存成功后按返回的 resolvedUiLanguage 切换界面语言
     await waitFor(() => {
-      expect(mock.calls.setLocale).toEqual([{ preference: 'en' }])
+      expect(mock.calls.setUiLanguage).toEqual([{ uiLanguage: 'en' }])
     })
     expect(await screen.findByRole('button', { name: 'Back' })).toBeInTheDocument()
 
@@ -1026,7 +1046,7 @@ describe('App language settings', () => {
         messages: []
       })
     })
-    mock.failNextSetLocale()
+    mock.failNextSetUiLanguage()
     await renderReady(mock)
 
     fireEvent.click(screen.getByRole('button', { name: '设置' }))

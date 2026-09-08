@@ -5,7 +5,7 @@ import { ConfiguredLanguageModel } from '../../llm/configured-language-model'
 import { ModelConfigService } from '../../llm/model-config'
 import { LlmClient, type CreateLlmClient } from '../../llm/llm-client'
 import { LlmUsageRecorder } from '../../llm/llm-usage-recorder'
-import { ConversationModule } from '../conversation-module'
+import { ConversationModule, type ConversationLanguages } from '../conversation-module'
 import {
   ConversationBusyError,
   ConversationNotFoundError,
@@ -975,6 +975,164 @@ describe('ConversationModule', () => {
         'word-concept',
         'word-concept'
       ])
+    })
+  })
+
+  describe('language settings snapshot', () => {
+    class RecordingModel implements LanguageModel {
+      readonly inputs: StreamReplyInput[] = []
+
+      async *streamReply(input: StreamReplyInput): AsyncIterable<string> {
+        this.inputs.push(input)
+        yield 'Hi'
+      }
+    }
+
+    // 第一次调用产出首个 chunk 后挂起直到被取消；重试调用正常完成。
+    class RecordingBlockingOnceModel implements LanguageModel {
+      readonly inputs: StreamReplyInput[] = []
+      private calls = 0
+
+      async *streamReply(input: StreamReplyInput): AsyncIterable<string> {
+        this.inputs.push(input)
+        this.calls += 1
+        if (this.calls === 1) {
+          yield 'partial'
+          await abortOnSignal(input.signal)
+          return
+        }
+        yield 'retried'
+      }
+    }
+
+    // history() 在放行前挂起：在快照已建立、模型尚未调用之间制造可观察窗口。
+    class GatedHistoryRepository extends MemoryConversationRepository {
+      release?: () => void
+      private readonly gate = new Promise<void>((resolve) => {
+        this.release = resolve
+      })
+
+      async history(sessionId: string): Promise<StoredMessage[]> {
+        await this.gate
+        return super.history(sessionId)
+      }
+    }
+
+    async function sendUntilTerminal(
+      module: ConversationModule,
+      sessionId: string,
+      text: string
+    ): Promise<void> {
+      await new Promise<void>((resolve) => {
+        void module
+          .sendMessage({ requestId: REQUEST_ID, sessionId, text }, (event) => {
+            if (
+              event.type === 'completed' ||
+              event.type === 'failed' ||
+              event.type === 'cancelled'
+            ) {
+              resolve()
+            }
+          })
+          .then(() => undefined)
+      })
+    }
+
+    it('sends the resolved output and target languages to the model', async () => {
+      const repository = new MemoryConversationRepository()
+      const model = new RecordingModel()
+      const settings: ConversationLanguages = {
+        outputLanguage: 'zh-CN',
+        targetLanguage: 'en'
+      }
+      const module = new ConversationModule(model, repository, () => settings)
+      const { sessionId } = await module.createConversation()
+
+      await sendUntilTerminal(module, sessionId, 'Hello')
+      expect(model.inputs[0]).toMatchObject({
+        outputLanguage: 'zh-CN',
+        targetLanguage: 'en'
+      })
+
+      // 界面语言变化只影响解释语言，目标语言保持来自同一份设置
+      settings.outputLanguage = 'en'
+      await sendUntilTerminal(module, sessionId, 'Again')
+      expect(model.inputs[1]).toMatchObject({
+        outputLanguage: 'en',
+        targetLanguage: 'en'
+      })
+    })
+
+    it('keeps the snapshot for an in-flight execution when settings change', async () => {
+      const repository = new GatedHistoryRepository()
+      const model = new RecordingModel()
+      const settings: ConversationLanguages = {
+        outputLanguage: 'zh-CN',
+        targetLanguage: 'en'
+      }
+      const module = new ConversationModule(model, repository, () => settings)
+      const { sessionId } = await module.createConversation()
+
+      const terminal = new Promise<void>((resolve) => {
+        void module
+          .sendMessage({ requestId: REQUEST_ID, sessionId, text: 'Hello' }, (event) => {
+            if (event.type === 'completed' || event.type === 'failed') resolve()
+          })
+          .then(() => undefined)
+      })
+      // user 消息落库即代表快照已建立（registerExecution 先于 appendMessage）；
+      // 此时 runGeneration 挂起在尚未放行的 history() 上。
+      await new Promise<void>((resolve) => {
+        const timer = setInterval(() => {
+          if (repository.messages.some((message) => message.role === 'user')) {
+            clearInterval(timer)
+            resolve()
+          }
+        }, 5)
+      })
+      settings.outputLanguage = 'en'
+      repository.release?.()
+
+      await terminal
+      // 设置变更不影响在途请求：模型仍收到执行开始时的语言快照
+      expect(model.inputs[0]).toMatchObject({ outputLanguage: 'zh-CN' })
+    })
+
+    it('re-reads the current settings when an ordinary reply is retried', async () => {
+      const repository = new MemoryConversationRepository()
+      const model = new RecordingBlockingOnceModel()
+      const settings: ConversationLanguages = {
+        outputLanguage: 'zh-CN',
+        targetLanguage: 'en'
+      }
+      const module = new ConversationModule(model, repository, () => settings)
+      const { sessionId } = await module.createConversation()
+
+      await new Promise<void>((resolve) => {
+        void module
+          .sendMessage({ requestId: REQUEST_ID, sessionId, text: 'Hello' }, (event) => {
+            if (event.type === 'chunk') module.cancelMessage(REQUEST_ID)
+            if (event.type === 'cancelled') resolve()
+          })
+          .then(() => undefined)
+      })
+      const user = repository.messages.find((message) => message.role === 'user')!
+
+      settings.outputLanguage = 'en'
+      await new Promise<void>((resolve) => {
+        void module
+          .retryMessage(
+            { requestId: OTHER_REQUEST_ID, sessionId, userMessageId: user.id },
+            (event) => {
+              if (event.type === 'completed' || event.type === 'failed') resolve()
+            }
+          )
+          .then(() => undefined)
+      })
+
+      // 普通回复重试作为新执行读取当前设置
+      expect(model.inputs[0]).toMatchObject({ outputLanguage: 'zh-CN' })
+      expect(model.inputs[1]).toMatchObject({ outputLanguage: 'en' })
     })
   })
 })

@@ -3,38 +3,47 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import { I18nextProvider } from 'react-i18next'
-import type { PreferencesApi, SetLocaleResult } from '../../../../shared/preferences'
+import type { PreferencesApi, SetUiLanguageResult } from '../../../../shared/preferences'
 import { createI18n } from '../../i18n'
-import { LanguagePreferenceSection } from '../LanguagePreferenceSection'
+import { UiLanguageSection } from '../UiLanguageSection'
 
 function preferencesStub(
   overrides: Partial<{
-    getLocale: PreferencesApi['getLocale']
-    setLocale: PreferencesApi['setLocale']
+    getLanguageSettings: PreferencesApi['getLanguageSettings']
+    setUiLanguage: PreferencesApi['setUiLanguage']
   }> = {}
-): { api: PreferencesApi; setLocaleCalls: unknown[] } {
-  const setLocaleCalls: unknown[] = []
+): { api: PreferencesApi; setUiLanguageCalls: unknown[] } {
+  const setUiLanguageCalls: unknown[] = []
   const api: PreferencesApi = {
-    async getLocale() {
-      return overrides.getLocale
-        ? overrides.getLocale()
-        : { status: 'ok', settings: { preference: 'system', resolvedLocale: 'zh-CN' } }
+    async getLanguageSettings() {
+      return (
+        overrides.getLanguageSettings?.() ?? {
+          status: 'ok',
+          settings: { uiLanguage: 'system', resolvedUiLanguage: 'zh-CN', targetLanguage: 'en' }
+        }
+      )
     },
-    async setLocale(input) {
-      setLocaleCalls.push(input)
-      if (overrides.setLocale) return overrides.setLocale(input)
-      const resolvedLocale = input.preference === 'system' ? 'zh-CN' : input.preference
-      return { status: 'ok', settings: { preference: input.preference, resolvedLocale } }
+    async setUiLanguage(input) {
+      setUiLanguageCalls.push(input)
+      if (overrides.setUiLanguage) return overrides.setUiLanguage(input)
+      const resolvedUiLanguage = input.uiLanguage === 'system' ? 'zh-CN' : input.uiLanguage
+      return {
+        status: 'ok',
+        settings: { uiLanguage: input.uiLanguage, resolvedUiLanguage, targetLanguage: 'en' }
+      }
+    },
+    async setTargetLanguage() {
+      throw new Error('unexpected setTargetLanguage call')
     }
   }
-  return { api, setLocaleCalls }
+  return { api, setUiLanguageCalls }
 }
 
 function renderSection(locale: 'zh-CN' | 'en' = 'zh-CN'): ReturnType<typeof createI18n> {
   const i18n = createI18n(locale)
   render(
     <I18nextProvider i18n={i18n}>
-      <LanguagePreferenceSection />
+      <UiLanguageSection />
     </I18nextProvider>
   )
   return i18n
@@ -45,7 +54,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('LanguagePreferenceSection', () => {
+describe('UiLanguageSection', () => {
   it('shows fixed language names and the current preference', async () => {
     const { api } = preferencesStub()
     vi.stubGlobal('api', { preferences: api })
@@ -59,9 +68,9 @@ describe('LanguagePreferenceSection', () => {
 
   it('renders English chrome with fixed language names', async () => {
     const { api } = preferencesStub({
-      getLocale: async () => ({
+      getLanguageSettings: async () => ({
         status: 'ok',
-        settings: { preference: 'en', resolvedLocale: 'en' }
+        settings: { uiLanguage: 'en', resolvedUiLanguage: 'en', targetLanguage: 'en' }
       })
     })
     vi.stubGlobal('api', { preferences: api })
@@ -73,50 +82,53 @@ describe('LanguagePreferenceSection', () => {
     })
   })
 
-  it('saves the preference and switches the i18n language to the resolved locale', async () => {
-    const { api, setLocaleCalls } = preferencesStub()
+  it('saves the preference and switches the i18n language to the resolved ui language', async () => {
+    const { api, setUiLanguageCalls } = preferencesStub()
     vi.stubGlobal('api', { preferences: api })
     const i18n = renderSection()
 
     fireEvent.click(screen.getByRole('radio', { name: 'English' }))
 
     await waitFor(() => {
-      expect(setLocaleCalls).toEqual([{ preference: 'en' }])
+      expect(setUiLanguageCalls).toEqual([{ uiLanguage: 'en' }])
     })
     expect(screen.getByRole('radio', { name: 'English' })).toBeChecked()
-    // i18n 实例随 resolvedLocale 切换
+    // i18n 实例随 resolvedUiLanguage 切换
     await waitFor(() => {
       expect(i18n.resolvedLanguage).toBe('en')
     })
   })
 
   it('blocks duplicate submissions while a save is pending', async () => {
-    let releaseSave!: (result: SetLocaleResult) => void
-    const pending = new Promise<SetLocaleResult>((resolve) => {
+    let releaseSave!: (result: SetUiLanguageResult) => void
+    const pending = new Promise<SetUiLanguageResult>((resolve) => {
       releaseSave = resolve
     })
-    const { api, setLocaleCalls } = preferencesStub({
-      setLocale: () => pending
+    const { api, setUiLanguageCalls } = preferencesStub({
+      setUiLanguage: () => pending
     })
     vi.stubGlobal('api', { preferences: api })
     renderSection()
 
     fireEvent.click(screen.getByRole('radio', { name: 'English' }))
-    await waitFor(() => expect(setLocaleCalls).toHaveLength(1))
+    await waitFor(() => expect(setUiLanguageCalls).toHaveLength(1))
 
     // 保存未完成时选项禁用，重复点击不会再次提交
     expect(screen.getByRole('radio', { name: 'English' })).toBeDisabled()
     fireEvent.click(screen.getByRole('radio', { name: '中文' }))
-    expect(setLocaleCalls).toHaveLength(1)
+    expect(setUiLanguageCalls).toHaveLength(1)
 
-    releaseSave({ status: 'ok', settings: { preference: 'en', resolvedLocale: 'en' } })
+    releaseSave({
+      status: 'ok',
+      settings: { uiLanguage: 'en', resolvedUiLanguage: 'en', targetLanguage: 'en' }
+    })
     await waitFor(() => expect(screen.getByRole('radio', { name: 'English' })).toBeEnabled())
     expect(screen.getByRole('radio', { name: 'English' })).toBeChecked()
   })
 
   it('keeps the previous language and selection when saving fails', async () => {
     const { api } = preferencesStub({
-      setLocale: async () => ({ status: 'error', error: { code: 'PREFERENCES_WRITE_FAILED' } })
+      setUiLanguage: async () => ({ status: 'error', error: { code: 'PREFERENCES_WRITE_FAILED' } })
     })
     vi.stubGlobal('api', { preferences: api })
     const i18n = renderSection()
@@ -131,7 +143,10 @@ describe('LanguagePreferenceSection', () => {
 
   it('surfaces a read failure without blocking the section', async () => {
     const { api } = preferencesStub({
-      getLocale: async () => ({ status: 'error', error: { code: 'PREFERENCES_READ_FAILED' } })
+      getLanguageSettings: async () => ({
+        status: 'error',
+        error: { code: 'PREFERENCES_READ_FAILED' }
+      })
     })
     vi.stubGlobal('api', { preferences: api })
     renderSection()
@@ -142,7 +157,7 @@ describe('LanguagePreferenceSection', () => {
 
   it('reports a rejected IPC call as a write failure', async () => {
     const { api } = preferencesStub({
-      setLocale: () => Promise.reject(new Error('ipc unavailable'))
+      setUiLanguage: () => Promise.reject(new Error('ipc unavailable'))
     })
     vi.stubGlobal('api', { preferences: api })
     renderSection()

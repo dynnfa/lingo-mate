@@ -1,22 +1,32 @@
-import { localePreferenceSchema } from '../shared/preferences'
-import type { LocalePreference, LocaleSettings, SupportedLocale } from '../shared/preferences'
+import {
+  targetLanguageSchema,
+  uiLanguagePreferenceSchema,
+  type LanguageSettings,
+  type SupportedLocale,
+  type TargetLanguage,
+  type UiLanguagePreference
+} from '../shared/preferences'
 
 // 存储依赖可注入，测试隔离真实用户数据目录。
 export interface PreferenceStore {
-  readLocalePreference(): unknown
-  writeLocalePreference(preference: LocalePreference): void
+  readUiLanguagePreference(): unknown
+  writeUiLanguagePreference(preference: UiLanguagePreference): void
+  readTargetLanguage(): unknown
+  writeTargetLanguage(language: TargetLanguage): void
+  // 旧版本只保存 localePreference；读取迁移时使用，不再写入。
+  readLegacyLocalePreference(): unknown
 }
 
 export class PreferencesReadError extends Error {
   constructor(cause: unknown) {
-    super('Failed to read locale preference', { cause })
+    super('Failed to read language preferences', { cause })
     this.name = 'PreferencesReadError'
   }
 }
 
 export class PreferencesWriteError extends Error {
   constructor(cause: unknown) {
-    super('Failed to write locale preference', { cause })
+    super('Failed to write language preferences', { cause })
     this.name = 'PreferencesWriteError'
   }
 }
@@ -56,34 +66,77 @@ export class PreferencesService {
     private readonly systemLanguages: () => readonly string[]
   ) {}
 
-  getLocale(): LocaleSettings {
-    const preference = this.readStoredPreference()
-    return { preference, resolvedLocale: this.resolve(preference) }
+  getLanguageSettings(): LanguageSettings {
+    const uiLanguage = this.readStoredUiLanguage()
+    return {
+      uiLanguage,
+      resolvedUiLanguage: this.resolve(uiLanguage),
+      targetLanguage: this.readStoredTargetLanguage()
+    }
   }
 
-  setLocale(preference: LocalePreference): LocaleSettings {
+  setUiLanguage(preference: UiLanguagePreference): LanguageSettings {
+    // 先读取另一项设置再写入：读失败时不落盘，避免“已写入却报错”造成
+    // 界面与已生效设置不一致；写入成功后返回完整已生效设置。
+    const targetLanguage = this.readStoredTargetLanguage()
     try {
-      this.store.writeLocalePreference(preference)
+      this.store.writeUiLanguagePreference(preference)
     } catch (error) {
       throw new PreferencesWriteError(error)
     }
-    return { preference, resolvedLocale: this.resolve(preference) }
+    return {
+      uiLanguage: preference,
+      resolvedUiLanguage: this.resolve(preference),
+      targetLanguage
+    }
   }
 
-  private resolve(preference: LocalePreference): SupportedLocale {
+  setTargetLanguage(language: TargetLanguage): LanguageSettings {
+    const uiLanguage = this.readStoredUiLanguage()
+    try {
+      this.store.writeTargetLanguage(language)
+    } catch (error) {
+      throw new PreferencesWriteError(error)
+    }
+    return {
+      uiLanguage,
+      resolvedUiLanguage: this.resolve(uiLanguage),
+      targetLanguage: language
+    }
+  }
+
+  private resolve(preference: UiLanguagePreference): SupportedLocale {
     return preference === 'system' ? resolveSystemLocale(this.systemLanguages()) : preference
   }
 
-  private readStoredPreference(): LocalePreference {
-    let raw: unknown
+  // 优先读取合法的新 uiLanguage 字段；没有合法新值时从旧 localePreference
+  // 迁移；两者都不可用时采用 system。旧字段保留不删，读取迁移不产生写入，
+  // 因此重复启动不会覆盖已保存的新设置，迁移也不会丢失旧偏好。
+  private readStoredUiLanguage(): UiLanguagePreference {
+    const stored = uiLanguagePreferenceSchema.safeParse(
+      this.readStore(() => this.store.readUiLanguagePreference())
+    )
+    if (stored.success) return stored.data
+    const legacy = uiLanguagePreferenceSchema.safeParse(
+      this.readStore(() => this.store.readLegacyLocalePreference())
+    )
+    return legacy.success ? legacy.data : 'system'
+  }
+
+  // 存储中缺失或非法的目标语言回退 en；来自 IPC 的非法更新在边界被拒绝，
+  // 不进入这里。
+  private readStoredTargetLanguage(): TargetLanguage {
+    const parsed = targetLanguageSchema.safeParse(
+      this.readStore(() => this.store.readTargetLanguage())
+    )
+    return parsed.success ? parsed.data : 'en'
+  }
+
+  private readStore(read: () => unknown): unknown {
     try {
-      raw = this.store.readLocalePreference()
+      return read()
     } catch (error) {
       throw new PreferencesReadError(error)
     }
-    const parsed = localePreferenceSchema.safeParse(raw)
-    // 未保存偏好或读到非法字段都等同于 system；只持久化 preference，
-    // 不持久化系统解析结果。
-    return parsed.success ? parsed.data : 'system'
   }
 }

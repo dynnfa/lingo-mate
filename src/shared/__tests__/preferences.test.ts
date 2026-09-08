@@ -1,52 +1,79 @@
 import { describe, expect, it } from 'vitest'
 import {
-  getLocaleResultSchema,
-  localePreferenceSchema,
-  localeSettingsSchema,
-  setLocaleInputSchema,
-  setLocaleResultSchema
+  getLanguageSettingsResultSchema,
+  languageSettingsSchema,
+  setTargetLanguageInputSchema,
+  setTargetLanguageResultSchema,
+  setUiLanguageInputSchema,
+  setUiLanguageResultSchema,
+  targetLanguageSchema,
+  uiLanguagePreferenceSchema
 } from '../preferences'
 
 describe('preferences protocol schemas', () => {
-  it('accepts system and the supported locales as preferences', () => {
+  it('accepts system and the supported locales as ui language preferences', () => {
     for (const preference of ['system', 'zh-CN', 'en']) {
-      expect(localePreferenceSchema.parse(preference)).toBe(preference)
+      expect(uiLanguagePreferenceSchema.parse(preference)).toBe(preference)
     }
-    expect(localePreferenceSchema.safeParse('zh-TW').success).toBe(false)
-    expect(localePreferenceSchema.safeParse('en-US').success).toBe(false)
-    expect(localePreferenceSchema.safeParse(undefined).success).toBe(false)
+    expect(uiLanguagePreferenceSchema.safeParse('zh-TW').success).toBe(false)
+    expect(uiLanguagePreferenceSchema.safeParse('en-US').success).toBe(false)
+    expect(uiLanguagePreferenceSchema.safeParse(undefined).success).toBe(false)
   })
 
-  it('requires the resolved locale to be a supported locale', () => {
-    expect(localeSettingsSchema.parse({ preference: 'system', resolvedLocale: 'zh-CN' })).toEqual({
-      preference: 'system',
-      resolvedLocale: 'zh-CN'
-    })
+  it('restricts target languages to the supported learning capability', () => {
+    expect(targetLanguageSchema.parse('en')).toBe('en')
+    expect(targetLanguageSchema.safeParse('ja').success).toBe(false)
+    expect(targetLanguageSchema.safeParse('zh-CN').success).toBe(false)
+    expect(targetLanguageSchema.safeParse(undefined).success).toBe(false)
+  })
+
+  it('requires the resolved ui language to be a supported locale', () => {
     expect(
-      localeSettingsSchema.safeParse({ preference: 'system', resolvedLocale: 'en-US' }).success
+      languageSettingsSchema.parse({
+        uiLanguage: 'system',
+        resolvedUiLanguage: 'zh-CN',
+        targetLanguage: 'en'
+      })
+    ).toEqual({ uiLanguage: 'system', resolvedUiLanguage: 'zh-CN', targetLanguage: 'en' })
+    expect(
+      languageSettingsSchema.safeParse({
+        uiLanguage: 'system',
+        resolvedUiLanguage: 'en-US',
+        targetLanguage: 'en'
+      }).success
     ).toBe(false)
   })
 
-  it('validates setLocale input shape', () => {
-    expect(setLocaleInputSchema.parse({ preference: 'en' })).toEqual({ preference: 'en' })
-    expect(setLocaleInputSchema.safeParse({ preference: 'en', extra: 1 }).success).toBe(true)
-    expect(setLocaleInputSchema.safeParse({}).success).toBe(false)
-    expect(setLocaleInputSchema.safeParse({ preference: null }).success).toBe(false)
+  it('validates independent update inputs', () => {
+    expect(setUiLanguageInputSchema.parse({ uiLanguage: 'en' })).toEqual({ uiLanguage: 'en' })
+    expect(setUiLanguageInputSchema.safeParse({ uiLanguage: 'klingon' }).success).toBe(false)
+    expect(setUiLanguageInputSchema.safeParse({}).success).toBe(false)
+
+    expect(setTargetLanguageInputSchema.parse({ targetLanguage: 'en' })).toEqual({
+      targetLanguage: 'en'
+    })
+    expect(setTargetLanguageInputSchema.safeParse({ targetLanguage: 'fr' }).success).toBe(false)
+    expect(setTargetLanguageInputSchema.safeParse({}).success).toBe(false)
   })
 
   it('maps ok and error results with a closed error code set', () => {
-    expect(
-      getLocaleResultSchema.parse({
-        status: 'ok',
-        settings: { preference: 'en', resolvedLocale: 'en' }
-      })
-    ).toEqual({ status: 'ok', settings: { preference: 'en', resolvedLocale: 'en' } })
+    const settings = { uiLanguage: 'en', resolvedUiLanguage: 'en', targetLanguage: 'en' }
+    expect(getLanguageSettingsResultSchema.parse({ status: 'ok', settings })).toEqual({
+      status: 'ok',
+      settings
+    })
+    expect(setUiLanguageResultSchema.parse({ status: 'ok', settings })).toMatchObject({
+      status: 'ok'
+    })
+    expect(setTargetLanguageResultSchema.parse({ status: 'ok', settings })).toMatchObject({
+      status: 'ok'
+    })
 
-    expect(
-      getLocaleResultSchema.parse({ status: 'error', error: { code: 'PREFERENCES_READ_FAILED' } })
-    ).toEqual({ status: 'error', error: { code: 'PREFERENCES_READ_FAILED' } })
-
-    for (const schema of [getLocaleResultSchema, setLocaleResultSchema]) {
+    for (const schema of [
+      getLanguageSettingsResultSchema,
+      setUiLanguageResultSchema,
+      setTargetLanguageResultSchema
+    ]) {
       expect(schema.safeParse({ status: 'error', error: { code: 'SQLITE_ERROR' } }).success).toBe(
         false
       )
@@ -57,5 +84,16 @@ describe('preferences protocol schemas', () => {
         }).success
       ).toBe(true)
     }
+
+    // 非法语言更新使用各自的错误码，不落入通用读写下失败。
+    expect(
+      setUiLanguageResultSchema.parse({ status: 'error', error: { code: 'INVALID_UI_LANGUAGE' } })
+    ).toMatchObject({ status: 'error' })
+    expect(
+      setTargetLanguageResultSchema.parse({
+        status: 'error',
+        error: { code: 'INVALID_TARGET_LANGUAGE' }
+      })
+    ).toMatchObject({ status: 'error' })
   })
 })

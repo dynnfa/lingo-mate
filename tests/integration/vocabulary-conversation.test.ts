@@ -2,7 +2,11 @@ import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ConversationEvent } from '../../src/shared/conversation'
 import type { LanguageModel } from '../../src/core/llm/language-model'
-import { ConversationModule } from '../../src/core/conversation/conversation-module'
+import {
+  ConversationModule,
+  SkillLanguageMismatchError,
+  type ConversationLanguages
+} from '../../src/core/conversation/conversation-module'
 import { VocabularyConversationSkill } from '../../src/core/learning/vocabulary/vocabulary-conversation-skill'
 import type { VocabularyAnalyzer } from '../../src/core/learning/vocabulary/vocabulary-analyzer'
 import { VocabularyError } from '../../src/core/learning/vocabulary/parse-vocabulary-input'
@@ -61,7 +65,7 @@ describe('vocabulary conversation integration', () => {
     const module = new ConversationModule(
       unusedConversationModel,
       conversationRepository,
-      () => 'en',
+      () => ({ outputLanguage: 'en' as const, targetLanguage: 'en' as const }),
       skill,
       conversationRepository
     )
@@ -116,7 +120,7 @@ describe('vocabulary conversation integration', () => {
     const module = new ConversationModule(
       unusedConversationModel,
       conversationRepository,
-      () => 'en',
+      () => ({ outputLanguage: 'en' as const, targetLanguage: 'en' as const }),
       skill,
       conversationRepository
     )
@@ -171,7 +175,7 @@ describe('vocabulary conversation integration', () => {
     const module = new ConversationModule(
       unusedConversationModel,
       conversationRepository,
-      () => 'en',
+      () => ({ outputLanguage: 'en' as const, targetLanguage: 'en' as const }),
       skill,
       conversationRepository
     )
@@ -204,6 +208,41 @@ describe('vocabulary conversation integration', () => {
     )
     expect(execution).toMatchObject({ phase: 'failed' })
     expect(execution?.batch).toBeUndefined()
+  })
+
+  it('rejects a skill invocation whose word language mismatches the configured target language', async () => {
+    const database = openDatabase(':memory:')
+    databases.push(database)
+    const conversationRepository = new SqliteConversationRepository(database)
+    const vocabularyRepository = new SqliteVocabularyRepository(database)
+    const analyze = vi.fn(async () => insertResult())
+    const skill = makeSkill(vocabularyRepository, analyze)
+    // 首版 TargetLanguage 只有 'en'；用断言模拟未来扩展后客户端旧值与设置冲突的场景
+    const module = new ConversationModule(
+      unusedConversationModel,
+      conversationRepository,
+      () => ({ outputLanguage: 'en', targetLanguage: 'ja' }) as unknown as ConversationLanguages,
+      skill,
+      conversationRepository
+    )
+    const { sessionId } = await module.createConversation()
+
+    await expect(
+      module.runSkill(
+        {
+          requestId: randomUUID(),
+          sessionId,
+          skillId: 'vocabulary',
+          arguments: { text: 'apple', wordLanguage: 'en' }
+        },
+        () => undefined
+      )
+    ).rejects.toThrow(SkillLanguageMismatchError)
+    // 拒绝发生在持久化之前：不产生 user 消息、技能执行或词库写入
+    expect(analyze).not.toHaveBeenCalled()
+    expect(vocabularyRepository.list({}).entries).toHaveLength(0)
+    const history = await module.loadConversation(sessionId)
+    expect(history.messages).toHaveLength(0)
   })
 })
 
