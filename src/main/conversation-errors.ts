@@ -1,3 +1,5 @@
+import { ModelConfigValidationError, ModelNotConfiguredError } from '../core/llm/model-config'
+import { ModelRequestError } from '../core/llm/llm-client'
 import {
   ConversationBusyError,
   ConversationNotFoundError,
@@ -45,5 +47,11 @@ export function toSafeRequestError(error: unknown): ConversationRequestError {
     return { code: 'PERSISTENCE_ERROR' }
   }
 
+  if (error instanceof ModelNotConfiguredError) return { code: 'MODEL_NOT_CONFIGURED' }
+  if (error instanceof ModelConfigValidationError && error.code === 'CREDENTIAL_DECRYPT_FAILED') {
+    return { code: 'CREDENTIAL_DECRYPT_FAILED' }
+  }
+  if (error instanceof ModelRequestError) return { code: 'MODEL_ERROR' }
+  if (error instanceof Error && error.name === 'AbortError') return { code: 'CANCELLED' }
   return { code: 'UNKNOWN_ERROR' }
 }

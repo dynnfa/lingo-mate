@@ -15,6 +15,7 @@ export class ConversationController {
   private state: ConversationState = initialConversationState
   private readonly listeners = new Set<() => void>()
   private transitionId = 0
+  private pendingRequestId: string | undefined
   private detachEvents: (() => void) | undefined
 
   constructor(private readonly api: ConversationApi) {}
@@ -32,8 +33,8 @@ export class ConversationController {
   attach(): () => void {
     this.detachEvents = this.api.onEvent((event) => {
       this.dispatch({ type: 'generationEvent', event })
-      // 完成后会话 updatedAt 变化，刷新列表排序
-      if (event.type === 'completed') {
+      // 首次落库后显示标题；回复完成后刷新 updatedAt 排序。
+      if (event.type === 'started' || event.type === 'completed') {
         void this.refreshConversations()
       }
     })
@@ -78,7 +79,6 @@ export class ConversationController {
         return
       }
 
-      this.dispatch({ type: 'conversationsListed', conversations: [created.conversation] })
       await this.openSession(created.conversation.sessionId, transitionId)
     } catch {
       if (this.isCurrentTransition(transitionId)) {
@@ -119,10 +119,6 @@ export class ConversationController {
         return
       }
 
-      this.dispatch({
-        type: 'conversationsListed',
-        conversations: [created.conversation, ...this.state.conversations]
-      })
       await this.openSession(created.conversation.sessionId, transitionId, false)
     } catch {
       if (this.isCurrentTransition(transitionId)) {
@@ -138,6 +134,7 @@ export class ConversationController {
     if (this.state.commandPending || isGenerating(this.state)) return false
 
     const requestId = crypto.randomUUID()
+    this.pendingRequestId = requestId
     this.dispatch({ type: 'commandStarted' })
     try {
       const result = await this.api.send({ requestId, sessionId, text: trimmed })
@@ -163,6 +160,7 @@ export class ConversationController {
     if (this.state.commandPending || isGenerating(this.state)) return false
 
     const requestId = crypto.randomUUID()
+    this.pendingRequestId = requestId
     this.dispatch({ type: 'commandStarted' })
     try {
       const result = await this.api.runSkill({
@@ -191,11 +189,13 @@ export class ConversationController {
   }
 
   async cancel(): Promise<void> {
-    const active = this.activeRequest()
-    if (!active) return
+    const requestId = this.state.commandPending
+      ? this.pendingRequestId
+      : this.activeRequest()?.requestId
+    if (!requestId) return
 
     try {
-      const result = await this.api.cancel({ requestId: active.requestId })
+      const result = await this.api.cancel({ requestId })
       if (result.status === 'error') {
         this.dispatch({
           type: 'statusChanged',
@@ -215,6 +215,7 @@ export class ConversationController {
     if (!target?.retryable) return
 
     const requestId = crypto.randomUUID()
+    this.pendingRequestId = requestId
     this.dispatch({ type: 'commandStarted' })
     try {
       const result = await this.api.retry({ requestId, sessionId, userMessageId })
@@ -309,6 +310,8 @@ export class ConversationController {
   }
 
   private dispatch(action: ConversationAction): void {
+    if (action.type === 'commandSettled' || action.type === 'commandFailed')
+      this.pendingRequestId = undefined
     this.state = reduceConversation(this.state, action)
     for (const listener of this.listeners) {
       listener()

@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto'
+import { classifyModelRequestError, ModelRequestError } from '../llm/llm-client'
+import { conversationSummarySchema } from '../../shared/conversation'
 import type {
   ConversationEvent,
   ConversationMessage,
@@ -66,7 +68,10 @@ interface ActiveExecution {
   languages: ConversationLanguages
 }
 
+type DraftConversation = Omit<StoredConversation, 'title'> & { title: null }
+
 export class ConversationModule {
+  private readonly drafts = new Map<string, DraftConversation>()
   private readonly activeRequests = new Map<string, ActiveExecution>()
   private readonly sessionRequests = new Map<string, string>()
 
@@ -84,8 +89,13 @@ export class ConversationModule {
 
   async createConversation(): Promise<ConversationSummary> {
     const now = new Date().toISOString()
-    const conversation: StoredConversation = { id: randomUUID(), createdAt: now, updatedAt: now }
-    await this.withPersistence(() => this.repository.create(conversation))
+    const conversation: DraftConversation = {
+      id: randomUUID(),
+      title: null,
+      createdAt: now,
+      updatedAt: now
+    }
+    this.drafts.set(conversation.id, conversation)
     return toSummary(conversation)
   }
 
@@ -95,7 +105,9 @@ export class ConversationModule {
   }
 
   async loadConversation(sessionId: string): Promise<LoadedConversation> {
-    const conversation = await this.withPersistence(() => this.repository.find(sessionId))
+    const conversation =
+      this.drafts.get(sessionId) ??
+      (await this.withPersistence(() => this.repository.find(sessionId)))
     if (!conversation) {
       throw new ConversationNotFoundError(sessionId)
     }
@@ -108,7 +120,9 @@ export class ConversationModule {
     input: SendMessageInput,
     emit: ConversationEventListener
   ): Promise<GenerationAccepted> {
-    const conversation = await this.withPersistence(() => this.repository.find(input.sessionId))
+    const conversation =
+      this.drafts.get(input.sessionId) ??
+      (await this.withPersistence(() => this.repository.find(input.sessionId)))
     if (!conversation) {
       throw new ConversationNotFoundError(input.sessionId)
     }
@@ -130,7 +144,10 @@ export class ConversationModule {
     })
 
     try {
-      await this.withPersistence(() => this.repository.appendMessage(userMessage))
+      const titled = await this.prepareConversation(input.requestId, userMessage)
+      if (titled) this.activeRequests.get(input.requestId)!.controller.signal.throwIfAborted()
+      await this.withPersistence(() => this.repository.appendMessage(userMessage, titled))
+      this.drafts.delete(input.sessionId)
     } catch (error) {
       // user 消息未持久化：不得发 started，也不得让 UI 出现伪消息。
       this.releaseExecution(input.requestId)
@@ -160,7 +177,9 @@ export class ConversationModule {
     if (!this.vocabularySkill || !this.skillRepository) {
       throw new Error('Conversation skills are not configured')
     }
-    const conversation = await this.withPersistence(() => this.repository.find(input.sessionId))
+    const conversation =
+      this.drafts.get(input.sessionId) ??
+      (await this.withPersistence(() => this.repository.find(input.sessionId)))
     if (!conversation) throw new ConversationNotFoundError(input.sessionId)
 
     // 技能执行的 wordLanguage 来源于目标语言快照；客户端传值与当前设置
@@ -198,9 +217,12 @@ export class ConversationModule {
     })
 
     try {
+      const titled = await this.prepareConversation(input.requestId, userMessage)
+      if (titled) this.activeRequests.get(input.requestId)!.controller.signal.throwIfAborted()
       await this.withPersistence(() =>
-        this.skillRepository!.createExecution(execution, userMessage)
+        this.skillRepository!.createExecution(execution, userMessage, titled)
       )
+      this.drafts.delete(input.sessionId)
     } catch (error) {
       this.releaseExecution(input.requestId)
       emit({
@@ -317,6 +339,51 @@ export class ConversationModule {
     execution.controller.abort()
   }
 
+  // 标题完整生成并校验后才把会话交给仓库；仓库与首条消息原子提交。
+  private async prepareConversation(
+    requestId: string,
+    message: StoredMessage
+  ): Promise<StoredConversation | undefined> {
+    const draft = this.drafts.get(message.sessionId)
+    if (!draft) return undefined
+    const active = this.activeRequests.get(requestId)!
+    const signal = active.controller.signal
+    let title = ''
+    try {
+      for await (const delta of this.model.streamReply({
+        messages: [{ role: 'user', content: message.content }],
+        ...active.languages,
+        promptKind: 'conversation-title',
+        signal
+      })) {
+        signal.throwIfAborted()
+        title += delta
+        if (title.length > 160)
+          throw new ModelRequestError('PROTOCOL', new Error('Title is too long'))
+      }
+    } catch (error) {
+      signal.throwIfAborted()
+      if (
+        error instanceof ModelNotConfiguredError ||
+        error instanceof ModelConfigValidationError ||
+        error instanceof ModelRequestError
+      )
+        throw error
+      throw new ModelRequestError(classifyModelRequestError(error), error)
+    }
+    signal.throwIfAborted()
+    const parsed = conversationSummarySchema.shape.title.unwrap().safeParse(title)
+    if (!parsed.success || /[\r\n]/.test(parsed.data)) {
+      throw new ModelRequestError('PROTOCOL', new Error('Invalid conversation title'))
+    }
+    return {
+      ...draft,
+      title: parsed.data,
+      createdAt: message.createdAt,
+      updatedAt: message.createdAt
+    }
+  }
+
   // 快照只拷贝原始值，不持有 resolver 返回的对象：执行期间设置源变化
   // 不会泄漏进已建立的快照。
   private snapshotLanguages(): ConversationLanguages {
@@ -353,6 +420,7 @@ export class ConversationModule {
 
   dispose(): void {
     for (const execution of this.activeRequests.values()) execution.controller.abort()
+    this.drafts.clear()
   }
 
   private async runGeneration(
@@ -606,9 +674,10 @@ export class ConversationModule {
   }
 }
 
-function toSummary(conversation: StoredConversation): ConversationSummary {
+function toSummary(conversation: StoredConversation | DraftConversation): ConversationSummary {
   return {
     sessionId: conversation.id,
+    title: conversation.title,
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt
   }

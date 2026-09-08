@@ -1,6 +1,7 @@
 import type { ModelRole } from '../llm/language-model'
 
 export interface StoredConversation {
+  title: string
   id: string
   createdAt: string
   updatedAt: string
@@ -20,7 +21,7 @@ export interface ConversationRepository {
   list(): Promise<StoredConversation[]>
   find(sessionId: string): Promise<StoredConversation | undefined>
   history(sessionId: string): Promise<StoredMessage[]>
-  appendMessage(message: StoredMessage): Promise<void>
+  appendMessage(message: StoredMessage, conversation?: StoredConversation): Promise<void>
 }
 
 export class ConversationPersistenceError extends Error {}

@@ -44,7 +44,7 @@ const V1_MESSAGES = [
   }
 ]
 
-test('upgrades a v1 database and keeps history readable', async () => {
+test('upgrades a v1 database and clears legacy conversations', async () => {
   const userDataPath = await mkdtemp(join(tmpdir(), 'lingo-mate-v1-upgrade-'))
 
   try {
@@ -83,42 +83,20 @@ test('upgrades a v1 database and keeps history readable', async () => {
 
     expect(upgraded.listed.status).toBe('ok')
     if (upgraded.listed.status === 'ok') {
-      // v1 的每个 session_id 都回填出会话，且不新建额外会话
-      expect(upgraded.listed.conversations.map((item) => item.sessionId)).toEqual([
-        SESSION_B,
-        SESSION_A
-      ])
+      expect(upgraded.listed.conversations).toEqual([])
     }
-
-    expect(upgraded.loadedA.status).toBe('ok')
-    if (upgraded.loadedA.status === 'ok') {
-      expect(upgraded.loadedA.messages).toEqual([
-        {
-          messageId: '11111111-1111-4111-8111-111111111111',
-          sessionId: SESSION_A,
-          role: 'user',
-          content: 'Hello',
-          createdAt: '2026-09-01T10:00:00.000Z'
-        },
-        {
-          messageId: '22222222-2222-4222-8222-222222222222',
-          sessionId: SESSION_A,
-          role: 'assistant',
-          content: 'Hi',
-          createdAt: '2026-09-01T10:00:01.000Z'
-        }
-      ])
-    }
-
-    // Renderer 打开的是回填后最近的会话（SESSION_B）
-    await expect(window.locator('.message.user')).toContainText('Bonjour')
+    expect(upgraded.loadedA).toEqual({
+      status: 'error',
+      error: { code: 'NOT_FOUND', resource: 'conversation' }
+    })
+    await expect(window.locator('.message')).toHaveCount(0)
 
     await app.close()
 
-    // 升级后的数据库结构达到当前 schema 版本（v7 用量时间索引）
+    // 升级后的数据库结构达到当前 schema 版本（v8 会话标题）
     const raw = new Database(join(userDataPath, 'lingo-mate.sqlite'))
     try {
-      expect(raw.pragma('user_version', { simple: true })).toBe(7)
+      expect(raw.pragma('user_version', { simple: true })).toBe(8)
       expect(
         (
           raw

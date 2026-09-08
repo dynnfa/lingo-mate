@@ -22,8 +22,13 @@ const delay = (milliseconds: number, signal: AbortSignal): Promise<void> =>
   })
 
 export class LocalLanguageModel implements LanguageModel {
-  async *streamReply({ messages, signal }: StreamReplyInput): AsyncIterable<string> {
+  async *streamReply({ messages, signal, promptKind }: StreamReplyInput): AsyncIterable<string> {
     const latestMessage = messages.at(-1)?.content ?? ''
+    if (promptKind === 'conversation-title') {
+      signal.throwIfAborted()
+      yield latestMessage.replace(/\s+/g, ' ').trim().slice(0, 40)
+      return
+    }
     const reply = `收到：“${latestMessage}”。这是本地开发模型的回复；下一步可通过 LanguageModel 接口接入真实模型。`
 
     for (const character of reply) {

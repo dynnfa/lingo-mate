@@ -10,6 +10,7 @@ import {
   type StoredMessage
 } from '../../core/conversation/conversation-repository'
 import { SqliteConversationRepository } from '../sqlite-conversation-repository'
+import { MIGRATIONS, migrateDatabase } from '../migrations'
 
 const V1_SCHEMA = `
   CREATE TABLE conversation_messages (
@@ -84,7 +85,7 @@ function createV1Database(
 }
 
 function storedConversation(id: string, createdAt: string, updatedAt: string): StoredConversation {
-  return { id, createdAt, updatedAt }
+  return { id, title: 'Test title', createdAt, updatedAt }
 }
 
 function storedMessage(
@@ -98,6 +99,43 @@ function storedMessage(
 }
 
 describe('SqliteConversationRepository', () => {
+  it('clears skill executions before messages and applies the title migration only once', async () => {
+    const database = new Database(':memory:')
+    databases.push(database)
+    database.pragma('foreign_keys = ON')
+    for (const migration of MIGRATIONS.filter(({ version }) => version <= 7)) migration.up(database)
+    database.pragma('user_version = 7')
+    database.exec(`
+      INSERT INTO conversations VALUES ('session', '2026-09-01', '2026-09-01');
+      INSERT INTO conversation_messages VALUES ('message', 'session', 'user', '/vocabulary apple', '2026-09-01');
+      INSERT INTO conversation_skill_executions
+        (id, session_id, user_message_id, skill_id, arguments_json, explanation_language, phase, created_at, updated_at)
+        VALUES ('execution', 'session', 'message', 'vocabulary', '{}', 'en', 'started', '2026-09-01', '2026-09-01');
+    `)
+    migrateDatabase(database)
+    for (const table of [
+      'conversations',
+      'conversation_messages',
+      'conversation_skill_executions'
+    ]) {
+      expect(database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get()).toEqual({ count: 0 })
+    }
+    expect(database.pragma('foreign_key_check')).toEqual([])
+    const repository = new SqliteConversationRepository(database)
+    const conversation = storedConversation(
+      SESSION_A,
+      '2026-09-08T10:00:00.000Z',
+      '2026-09-08T10:00:00.000Z'
+    )
+    await repository.appendMessage(
+      storedMessage('new', SESSION_A, 'user', 'Hello', conversation.createdAt),
+      conversation
+    )
+    migrateDatabase(database)
+    expect(await repository.find(SESSION_A)).toEqual(conversation)
+    expect(await repository.history(SESSION_A)).toHaveLength(1)
+  })
+
   it('creates the latest schema for a fresh database', () => {
     const path = databasePath()
     const repository = openRepository(path)
@@ -111,7 +149,7 @@ describe('SqliteConversationRepository', () => {
 
     const raw = new Database(path)
     try {
-      expect(raw.pragma('user_version', { simple: true })).toBe(7)
+      expect(raw.pragma('user_version', { simple: true })).toBe(8)
       expect(
         raw
           .prepare(
@@ -124,7 +162,7 @@ describe('SqliteConversationRepository', () => {
     }
   })
 
-  it('backfills conversations and preserves history when upgrading a v1 database', async () => {
+  it('clears legacy conversations and history when upgrading a v1 database', async () => {
     const path = databasePath()
     createV1Database(path, [
       {
@@ -152,14 +190,8 @@ describe('SqliteConversationRepository', () => {
 
     const repository = openRepository(path)
 
-    expect(await repository.list()).toEqual([
-      storedConversation(SESSION_B, '2026-09-02T08:30:00.000Z', '2026-09-02T08:30:00.000Z'),
-      storedConversation(SESSION_A, '2026-09-01T10:00:00.000Z', '2026-09-01T10:00:01.000Z')
-    ])
-    expect(await repository.history(SESSION_A)).toEqual([
-      storedMessage('a1', SESSION_A, 'user', 'Hello', '2026-09-01T10:00:00.000Z'),
-      storedMessage('a2', SESSION_A, 'assistant', 'Hi', '2026-09-01T10:00:01.000Z')
-    ])
+    expect(await repository.list()).toEqual([])
+    expect(await repository.history(SESSION_A)).toEqual([])
   })
 
   it('enforces the foreign key when appending to an unknown conversation', async () => {
@@ -265,9 +297,9 @@ describe('SqliteConversationRepository', () => {
   it('rejects databases from a newer schema version', () => {
     const path = databasePath()
     const raw = new Database(path)
-    raw.pragma('user_version = 8')
+    raw.pragma('user_version = 9')
     raw.close()
 
-    expect(() => openRepository(path)).toThrow('Unsupported database schema version: 8')
+    expect(() => openRepository(path)).toThrow('Unsupported database schema version: 9')
   })
 })

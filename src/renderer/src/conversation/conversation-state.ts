@@ -37,6 +37,7 @@ export type ConversationStatus =
   | { kind: 'creating' }
   | { kind: 'ready' }
   | { kind: 'generating' }
+  | { kind: 'generatingTitle' }
   | { kind: 'skillPhase'; phase: 'analyzing' | 'committing' | 'summarizing' }
   | { kind: 'completed' }
   | { kind: 'skillDescriptionFailed'; cancelled: boolean }
@@ -115,7 +116,11 @@ export function reduceConversation(
     case 'generationEvent':
       return applyEvent(state, action.event)
     case 'commandStarted':
-      return { ...state, commandPending: true }
+      return {
+        ...state,
+        commandPending: true,
+        status: state.messages.length === 0 ? { kind: 'generatingTitle' } : state.status
+      }
     case 'commandSettled':
       return { ...state, commandPending: false }
     case 'commandFailed':

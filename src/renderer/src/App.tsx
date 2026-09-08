@@ -20,6 +20,7 @@ function formatConversationLabel(
   locale: string,
   conversation: ConversationSummary
 ): string {
+  if (conversation.title) return conversation.title
   const dateTime = formatDateTime(normalizeI18nLocale(locale), conversation.updatedAt)
   return t('conversation:listItemLabel', { dateTime })
 }
@@ -158,7 +159,7 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
         <ConversationPanel
           messages={state.messages}
           status={state.status}
-          generating={generating}
+          generating={generating || state.commandPending}
           composerLocked={composerLocked}
           onSend={(text) => controller.send(text)}
           onRunSkill={(input) => controller.runSkill(input)}

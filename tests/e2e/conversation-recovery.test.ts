@@ -12,6 +12,12 @@ test('restores the same conversation and history after relaunch', async () => {
     // 等待 Renderer 完成启动恢复（空库自动创建会话）
     await firstWindow.waitForSelector('main[data-phase="ready"]')
 
+    const empty = await firstWindow.evaluate(async () => {
+      const api = (globalThis as typeof globalThis & { api: LingoMateApi }).api.conversation
+      return api.list()
+    })
+    expect(empty).toEqual({ status: 'ok', conversations: [] })
+
     // 通过 UI 发送一条消息，等待本地模型完成生成（completed 事件将状态置为"回复完成"）
     await firstWindow.fill('#message', 'Hello')
     await expect(firstWindow.locator('#message')).toHaveValue('Hello')
@@ -45,6 +51,7 @@ test('restores the same conversation and history after relaunch', async () => {
     expect(restored.listed.status).toBe('ok')
     if (restored.listed.status === 'ok') {
       expect(restored.listed.conversations[0].sessionId).toBe(sessionId)
+      expect(restored.listed.conversations[0].title).toBe('Hello')
     }
     expect(restored.loaded.status).toBe('ok')
     if (restored.loaded.status === 'ok') {

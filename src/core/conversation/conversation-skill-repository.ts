@@ -1,7 +1,7 @@
 import type { SupportedLocale } from '../../shared/preferences'
 import type { RunConversationSkillInput } from '../../shared/conversation'
 import type { VocabularyBatch } from '../../shared/vocabulary'
-import type { StoredMessage } from './conversation-repository'
+import type { StoredConversation, StoredMessage } from './conversation-repository'
 
 export type ConversationSkillPhase =
   | 'started'
@@ -32,7 +32,8 @@ export interface ConversationSkillRepository {
   // The visible user message and its typed invocation are one durable fact.
   createExecution(
     execution: StoredConversationSkillExecution,
-    userMessage: StoredMessage
+    userMessage: StoredMessage,
+    conversation?: StoredConversation
   ): Promise<void>
   findExecutionByUserMessage(
     sessionId: string,

@@ -44,7 +44,7 @@ function columns(database: Database.Database): string[] {
 }
 
 describe('vocabulary migrations', () => {
-  it('upgrades v2 without altering conversations and is idempotent', () => {
+  it('upgrades v2, clears legacy conversations and is idempotent', () => {
     const database = new Database(':memory:')
     databases.push(database)
     for (const migration of MIGRATIONS.slice(0, 2)) migration.up(database)
@@ -54,8 +54,8 @@ describe('vocabulary migrations', () => {
       .run('session', 'before', 'before')
     migrateDatabase(database)
     migrateDatabase(database)
-    expect(database.pragma('user_version', { simple: true })).toBe(7)
-    expect(database.prepare('SELECT id FROM conversations').all()).toEqual([{ id: 'session' }])
+    expect(database.pragma('user_version', { simple: true })).toBe(8)
+    expect(database.prepare('SELECT id FROM conversations').all()).toEqual([])
     expect(new SqliteVocabularyRepository(database).list({})).toEqual({ entries: [] })
   })
   it('rolls back v3 if index creation fails after creating the table', () => {
@@ -87,7 +87,7 @@ describe('vocabulary migrations', () => {
     `)
     migrateDatabase(database)
     migrateDatabase(database)
-    expect(database.pragma('user_version', { simple: true })).toBe(7)
+    expect(database.pragma('user_version', { simple: true })).toBe(8)
     expect(columns(database)).toEqual(V5_COLUMNS)
     // 迁移保留身份与排序信息；四个内容字段按约定置 NULL，可读、可查重。
     const rows = database
@@ -266,7 +266,9 @@ describe('vocabulary repository on the v5 schema', () => {
     const messageId = randomUUID()
     const executionId = randomUUID()
     const stamp = new Date().toISOString()
-    database.prepare('INSERT INTO conversations VALUES (?, ?, ?)').run(sessionId, stamp, stamp)
+    database
+      .prepare('INSERT INTO conversations VALUES (?, ?, ?, ?)')
+      .run(sessionId, stamp, stamp, 'Test title')
     database
       .prepare('INSERT INTO conversation_messages VALUES (?, ?, ?, ?, ?)')
       .run(messageId, sessionId, 'user', '/vocabulary apple', stamp)

@@ -210,6 +210,18 @@ export const MIGRATIONS: Migration[] = [
       database.exec(`
       CREATE INDEX llm_request_usage_started_at ON llm_request_usage (started_at);
     `)
+  },
+  {
+    version: 8,
+    // 用户确认清空旧会话；按外键依赖顺序删除，不影响词库和用量账本。
+    up: (database) =>
+      database.exec(`
+      DELETE FROM conversation_skill_executions;
+      DELETE FROM conversation_messages;
+      DELETE FROM conversations;
+      ALTER TABLE conversations ADD COLUMN title TEXT NOT NULL
+        CHECK (length(trim(title)) BETWEEN 1 AND 80);
+    `)
   }
 ]
 

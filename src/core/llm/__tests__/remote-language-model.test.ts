@@ -202,6 +202,28 @@ describe('RemoteLanguageModel protocol and lifecycle', () => {
     expect(prompt).not.toContain('You are Lingo Mate')
   })
 
+  it.each(['zh-CN', 'en'])(
+    'requests only a title in the configured language %s',
+    async (outputLanguage) => {
+      respond(chunk('Coffee practice') + STOP + DONE)
+      await collect(
+        new RemoteLanguageModel(CONFIG, 1_000, createClient).streamReply({
+          messages: [{ role: 'user', content: '/concept coffee' }],
+          outputLanguage,
+          targetLanguage: 'en',
+          promptKind: 'conversation-title',
+          signal: new AbortController().signal
+        })
+      )
+      const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string)
+      expect(body.messages[0].content).toContain(
+        `Write the title in ${outputLanguage === 'en' ? 'English (en)' : 'Simplified Chinese (zh-CN)'}`
+      )
+      expect(body.messages[0].content).toContain('Return only the title')
+      expect(body.messages[1]).toEqual({ role: 'user', content: '/concept coffee' })
+    }
+  )
+
   it('does not contact the service for an already cancelled request', async () => {
     respond(STOP + DONE)
     const controller = new AbortController()
