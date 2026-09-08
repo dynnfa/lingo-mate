@@ -130,11 +130,23 @@ function usageApiStub(initial: UsageOverviewResult): UsageApiStub {
 
 function preferencesStub(): PreferencesApi {
   return {
-    async getLocale() {
-      return { status: 'ok', settings: { preference: 'system', resolvedLocale: 'zh-CN' } }
+    async getLanguageSettings() {
+      return {
+        status: 'ok',
+        settings: { uiLanguage: 'system', resolvedUiLanguage: 'zh-CN', targetLanguage: 'en' }
+      }
     },
-    async setLocale() {
-      return { status: 'ok', settings: { preference: 'system', resolvedLocale: 'zh-CN' } }
+    async setUiLanguage() {
+      return {
+        status: 'ok',
+        settings: { uiLanguage: 'system', resolvedUiLanguage: 'zh-CN', targetLanguage: 'en' }
+      }
+    },
+    async setTargetLanguage() {
+      return {
+        status: 'ok',
+        settings: { uiLanguage: 'system', resolvedUiLanguage: 'zh-CN', targetLanguage: 'en' }
+      }
     }
   }
 }
@@ -204,8 +216,15 @@ describe('UsageSettings', () => {
 
     const menuItems = screen
       .getAllByRole('button')
-      .filter((button) => ['语言', '模型', '用量'].includes(button.textContent ?? ''))
-    expect(menuItems.map((button) => button.textContent)).toEqual(['语言', '模型', '用量'])
+      .filter((button) =>
+        ['界面语言', '目标学习语言', '模型', '用量'].includes(button.textContent ?? '')
+      )
+    expect(menuItems.map((button) => button.textContent)).toEqual([
+      '界面语言',
+      '目标学习语言',
+      '模型',
+      '用量'
+    ])
 
     await openUsage()
     expect(screen.getByRole('button', { name: '用量' })).toHaveAttribute('aria-current', 'true')
@@ -385,7 +404,7 @@ describe('UsageSettings', () => {
     await openUsage()
 
     // 首次读取挂起：切走再切回触发的第二次读取先返回，迟到的首次响应不覆盖
-    fireEvent.click(screen.getByRole('button', { name: '语言' }))
+    fireEvent.click(screen.getByRole('button', { name: '界面语言' }))
     fireEvent.click(screen.getByRole('button', { name: '用量' }))
     const withData = buildOverview({
       today: { requestCount: 1, totalTokens: 777, inputTokens: 700, outputTokens: 77 }
@@ -411,7 +430,7 @@ describe('UsageSettings', () => {
     await screen.findByText('最近 8 周用量')
     // 切走再切回：重新读取，仍处于周维度
     stub.respond({ status: 'ok', overview: buildOverview() })
-    fireEvent.click(screen.getByRole('button', { name: '语言' }))
+    fireEvent.click(screen.getByRole('button', { name: '界面语言' }))
     await openUsage()
     await screen.findByText('最近 8 周用量')
     expect(stub.calls.overviews).toBeGreaterThanOrEqual(3)

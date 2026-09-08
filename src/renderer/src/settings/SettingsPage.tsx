@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { LanguagePreferenceSection } from '../preferences/LanguagePreferenceSection'
+import { TargetLanguageSection } from '../preferences/TargetLanguageSection'
+import { UiLanguageSection } from '../preferences/UiLanguageSection'
 import { ModelsSettings } from './ModelsSettings'
 import { useModelsSettings } from './useModelsSettings'
 import { UsageSettings } from './UsageSettings'
@@ -10,8 +11,12 @@ import { useUsageStatistics } from './useUsageStatistics'
 // 详情区各区块保持挂载并用 hidden 隐藏，模型草稿在菜单切换间不丢失。
 const SETTINGS_SECTIONS = [
   {
-    id: 'language',
-    labelKey: 'common:settings.sections.language'
+    id: 'uiLanguage',
+    labelKey: 'common:settings.sections.uiLanguage'
+  },
+  {
+    id: 'targetLanguage',
+    labelKey: 'common:settings.sections.targetLanguage'
   },
   {
     id: 'models',
@@ -136,13 +141,27 @@ export function SettingsPage({ onExit }: SettingsPageProps): React.JSX.Element {
       </aside>
       <section className="settings-detail">
         <div
-          aria-labelledby="settings-section-title-language"
+          aria-labelledby="settings-section-title-ui-language"
           className="settings-detail-pane"
-          hidden={activeSectionId !== 'language'}
+          hidden={activeSectionId !== 'uiLanguage'}
         >
-          <h2 id="settings-section-title-language">{t('common:settings.sections.language')}</h2>
+          <h2 id="settings-section-title-ui-language">
+            {t('common:settings.sections.uiLanguage')}
+          </h2>
           <div className="settings-section-body">
-            <LanguagePreferenceSection />
+            <UiLanguageSection />
+          </div>
+        </div>
+        <div
+          aria-labelledby="settings-section-title-target-language"
+          className="settings-detail-pane"
+          hidden={activeSectionId !== 'targetLanguage'}
+        >
+          <h2 id="settings-section-title-target-language">
+            {t('common:settings.sections.targetLanguage')}
+          </h2>
+          <div className="settings-section-body">
+            <TargetLanguageSection />
           </div>
         </div>
         <div

@@ -51,11 +51,23 @@ const BROKEN_KEY = config({
 
 function preferencesStub(): PreferencesApi {
   return {
-    async getLocale() {
-      return { status: 'ok', settings: { preference: 'system', resolvedLocale: 'zh-CN' } }
+    async getLanguageSettings() {
+      return {
+        status: 'ok',
+        settings: { uiLanguage: 'system', resolvedUiLanguage: 'zh-CN', targetLanguage: 'en' }
+      }
     },
-    async setLocale() {
-      return { status: 'ok', settings: { preference: 'system', resolvedLocale: 'zh-CN' } }
+    async setUiLanguage() {
+      return {
+        status: 'ok',
+        settings: { uiLanguage: 'system', resolvedUiLanguage: 'zh-CN', targetLanguage: 'en' }
+      }
+    },
+    async setTargetLanguage() {
+      return {
+        status: 'ok',
+        settings: { uiLanguage: 'system', resolvedUiLanguage: 'zh-CN', targetLanguage: 'en' }
+      }
     }
   }
 }
@@ -252,27 +264,41 @@ afterEach(() => {
 })
 
 describe('SettingsPage', () => {
-  it('renders the menu with the language section active and its detail', () => {
+  it('renders the menu with the ui language section active and its detail', () => {
     installApi(modelsApiStub().api)
     renderPage()
 
     expect(screen.getByRole('heading', { name: '设置' })).toBeInTheDocument()
-    const menuItem = screen.getByRole('button', { name: '语言' })
+    const menuItem = screen.getByRole('button', { name: '界面语言' })
     expect(menuItem).toHaveAttribute('aria-current', 'true')
     expect(screen.getByRole('navigation', { name: '设置菜单' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: '语言' })).toBeInTheDocument()
-    expect(screen.getByText('界面语言')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '界面语言' })).toBeInTheDocument()
+    // 字段组以区块标题命名；菜单、标题与图例同名但角色各异
+    expect(screen.getByRole('group', { name: '界面语言' })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: '跟随系统 / System' })).toBeInTheDocument()
   })
 
-  it('registers the models section after language and shows an empty state with an add entry', async () => {
+  it('registers ui language, target language, and models sections in order', async () => {
     installApi(modelsApiStub().api)
     renderPage()
 
     const menuItems = screen
       .getAllByRole('button')
-      .filter((button) => ['语言', '模型'].includes(button.textContent ?? ''))
-    expect(menuItems.map((button) => button.textContent)).toEqual(['语言', '模型'])
+      .filter((button) => ['界面语言', '目标学习语言', '模型'].includes(button.textContent ?? ''))
+    expect(menuItems.map((button) => button.textContent)).toEqual([
+      '界面语言',
+      '目标学习语言',
+      '模型'
+    ])
+
+    // 目标学习语言区块默认未选中，可切换并显示首版能力说明
+    fireEvent.click(screen.getByRole('button', { name: '目标学习语言' }))
+    expect(screen.getByRole('button', { name: '目标学习语言' })).toHaveAttribute(
+      'aria-current',
+      'true'
+    )
+    expect(screen.getByRole('heading', { name: '目标学习语言' })).toBeInTheDocument()
+    expect(screen.getByText('目前仅支持学习英语。')).toBeInTheDocument()
 
     await openModels()
 
@@ -729,7 +755,7 @@ describe('SettingsPage', () => {
     expect(within(otherRow).getByRole('button', { name: '编辑' })).toBeEnabled()
 
     // 切到 Language：中止测试但不弹放弃确认
-    fireEvent.click(screen.getByRole('button', { name: '语言' }))
+    fireEvent.click(screen.getByRole('button', { name: '界面语言' }))
     await waitFor(() => {
       expect(calls.cancel).toHaveLength(1)
     })
@@ -832,7 +858,7 @@ describe('SettingsPage', () => {
     await openModels()
     fireEvent.click(screen.getByRole('button', { name: '新增模型' }))
     fillForm('https://api.example.com/v1', 'draft-model')
-    fireEvent.click(screen.getByRole('button', { name: '语言' }))
+    fireEvent.click(screen.getByRole('button', { name: '界面语言' }))
 
     fireEvent.keyDown(screen.getByRole('main', { name: '设置' }), { key: 'Escape' })
     const dialog = screen.getByRole('dialog', { name: '有未保存的修改' })
@@ -845,7 +871,7 @@ describe('SettingsPage', () => {
     await openModels()
     expect(screen.getByLabelText('Model ID')).toHaveValue('draft-model')
 
-    fireEvent.click(screen.getByRole('button', { name: '语言' }))
+    fireEvent.click(screen.getByRole('button', { name: '界面语言' }))
     fireEvent.keyDown(screen.getByRole('main', { name: '设置' }), { key: 'Escape' })
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '放弃修改' }))
     expect(onExit).toHaveBeenCalledTimes(1)
@@ -916,7 +942,7 @@ describe('SettingsPage', () => {
     await openModels()
     fireEvent.click(screen.getByRole('button', { name: '新增模型' }))
     fillForm('https://api.example.com/v1', 'gpt-test')
-    fireEvent.click(screen.getByRole('button', { name: '语言' }))
+    fireEvent.click(screen.getByRole('button', { name: '界面语言' }))
     await openModels()
 
     expect(screen.getByRole('heading', { name: '新增模型' })).toBeInTheDocument()

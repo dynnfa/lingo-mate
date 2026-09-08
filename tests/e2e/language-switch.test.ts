@@ -13,14 +13,14 @@ import {
 async function readStoredPreference(window: Page): Promise<unknown> {
   return window.evaluate(async () => {
     const api = (globalThis as typeof globalThis & { api: LingoMateApi }).api.preferences
-    const result = await api.getLocale()
+    const result = await api.getLanguageSettings()
     return result.status === 'ok' ? result.settings : result
   })
 }
 
 test('starts in the saved language, keeps user content across a restart and switching back', async () => {
   await withTempUserData(async (userDataPath) => {
-    // 预写英文偏好：启动即为英文界面
+    // 预写旧版英文偏好：启动即为英文界面，同时验证 legacy 字段读取迁移
     await writeLocalePreference(userDataPath, 'en')
     const firstLaunch = await launchApp(userDataPath)
     const window = await firstLaunch.firstWindow()
@@ -54,7 +54,7 @@ test('starts in the saved language, keeps user content across a restart and swit
     expect(await secondWindow.evaluate(() => document.documentElement.lang)).toBe('en')
     await expect(secondWindow.locator('.message.user')).toContainText('Hello')
     const restored = await readStoredPreference(secondWindow)
-    expect(restored).toEqual({ preference: 'en', resolvedLocale: 'en' })
+    expect(restored).toEqual({ uiLanguage: 'en', resolvedUiLanguage: 'en', targetLanguage: 'en' })
 
     // 运行中切回中文：面板语言名称固定，draft 与历史保持
     await secondWindow.fill('#message', 'kept draft')
@@ -63,8 +63,9 @@ test('starts in the saved language, keeps user content across a restart and swit
     await expect(secondWindow.locator('.status')).toHaveText('准备就绪')
     await expect(secondWindow.locator('.message.user')).toContainText('Hello')
     expect(await readStoredPreference(secondWindow)).toEqual({
-      preference: 'zh-CN',
-      resolvedLocale: 'zh-CN'
+      uiLanguage: 'zh-CN',
+      resolvedUiLanguage: 'zh-CN',
+      targetLanguage: 'en'
     })
 
     await secondLaunch.close()
@@ -96,7 +97,11 @@ test('follows the saved system preference and persists an explicit choice made a
     await expect(window.getByRole('heading', { level: 1 })).toHaveText(
       'Language Learning Companion'
     )
-    expect(await readStoredPreference(window)).toEqual({ preference: 'en', resolvedLocale: 'en' })
+    expect(await readStoredPreference(window)).toEqual({
+      uiLanguage: 'en',
+      resolvedUiLanguage: 'en',
+      targetLanguage: 'en'
+    })
 
     await app.close()
 

@@ -113,6 +113,7 @@ React Renderer -> Preload API -> Electron Main -> Agent Engine
 - 保持模块职责单一；组件、IPC handler 和 Agent 工具不应承担多个领域职责。
 - IPC channel 使用稳定、可读的领域命名，并集中定义，避免散落的字符串常量。
 - LLM API Key、用户数据和学习记忆不得发送到 Renderer 或写入日志。
+- 如果涉及数据库迁移或持久化数据变更，必须先询问用户，再根据用户意见决定是否执行迁移或变更操作。
 - 流式对话需要支持完成、失败和取消状态，避免 UI 永久停留在生成中。
 - 错误应在产生处保留原因，在进程边界转换为对用户安全、可理解的错误结构。
 - 新增 Agent 能力时，优先扩展 `src/core`，再通过 Main 和 Preload 接入 UI。

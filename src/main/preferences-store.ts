@@ -1,8 +1,10 @@
 import * as electronStore from 'electron-store'
-import type { LocalePreference } from '../shared/preferences'
 import type { PreferenceStore } from './preferences'
+import type { TargetLanguage, UiLanguagePreference } from '../shared/preferences'
 
-const LOCALE_PREFERENCE_KEY = 'localePreference'
+const UI_LANGUAGE_KEY = 'uiLanguage'
+const TARGET_LANGUAGE_KEY = 'targetLanguage'
+const LEGACY_LOCALE_PREFERENCE_KEY = 'localePreference'
 
 // electron-store v11 是纯 ESM 包，而主进程产物是 CJS，default 导出的位置取决于加载方式：
 // - ESM/vitest 直接加载：`ns.default` 即构造函数；
@@ -35,9 +37,15 @@ export function createElectronPreferenceStore(): PreferenceStore {
   const StoreCtor = resolveStoreConstructor()
   const store = new StoreCtor({ name: 'preferences' })
   return {
-    readLocalePreference: () => store.get(LOCALE_PREFERENCE_KEY),
-    writeLocalePreference: (preference: LocalePreference): void => {
-      store.set(LOCALE_PREFERENCE_KEY, preference)
-    }
+    readUiLanguagePreference: () => store.get(UI_LANGUAGE_KEY),
+    writeUiLanguagePreference: (preference: UiLanguagePreference): void => {
+      store.set(UI_LANGUAGE_KEY, preference)
+    },
+    readTargetLanguage: () => store.get(TARGET_LANGUAGE_KEY),
+    writeTargetLanguage: (language: TargetLanguage): void => {
+      store.set(TARGET_LANGUAGE_KEY, language)
+    },
+    // 旧字段只读：升级后不再写入，读取迁移失败也不影响旧值保留在文件中。
+    readLegacyLocalePreference: () => store.get(LEGACY_LOCALE_PREFERENCE_KEY)
   }
 }
