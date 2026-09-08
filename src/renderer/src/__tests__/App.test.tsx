@@ -1056,3 +1056,108 @@ describe('App language settings', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })
+
+describe('App recorded page navigation', () => {
+  const loadedWithHistory = (sessionId: string): LoadConversationResult => ({
+    status: 'ok',
+    conversation: summary(sessionId, NOW),
+    messages: [
+      {
+        messageId: '3f70a8ae-7ad9-4eab-aaf4-1cae54a99708',
+        sessionId,
+        role: 'user',
+        content: 'Hello',
+        createdAt: NOW
+      }
+    ]
+  })
+
+  it('opens the recorded page, hides the conversation view and restores focus on exit', async () => {
+    const mock = installApiMock({
+      list: { status: 'ok', conversations: [summary(SESSION_A, NOW)] },
+      load: () => loadedWithHistory(SESSION_A)
+    })
+    await renderReady(mock)
+    expect(await screen.findByText('Hello')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '已记录词汇' }))
+
+    // 已记录页替换对话视图；对话视图保持挂载但隐藏
+    expect(screen.getByRole('main', { name: '已记录词汇' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '返回' })).toHaveFocus()
+    expect(document.querySelector('.chat-shell')).toHaveAttribute('hidden')
+    expect(screen.getByLabelText('练习内容')).not.toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: '返回' }))
+
+    expect(screen.queryByRole('main', { name: '已记录词汇' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '已记录词汇' })).toHaveFocus()
+    expect(screen.getByLabelText('练习内容')).toBeVisible()
+  })
+
+  it('exits the recorded page with Escape', async () => {
+    const mock = installApiMock({
+      list: { status: 'ok', conversations: [summary(SESSION_A, NOW)] },
+      load: () => loadedWithHistory(SESSION_A)
+    })
+    await renderReady(mock)
+
+    fireEvent.click(screen.getByRole('button', { name: '已记录词汇' }))
+    fireEvent.keyDown(screen.getByRole('main', { name: '已记录词汇' }), { key: 'Escape' })
+
+    expect(screen.queryByRole('main', { name: '已记录词汇' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '已记录词汇' })).toHaveFocus()
+  })
+
+  it('keeps the conversation, history and unsent draft across a recorded page round trip', async () => {
+    const mock = installApiMock({
+      list: { status: 'ok', conversations: [summary(SESSION_A, NOW)] },
+      load: () => loadedWithHistory(SESSION_A)
+    })
+    await renderReady(mock)
+    fireEvent.change(screen.getByLabelText('练习内容'), { target: { value: 'unsent draft' } })
+
+    fireEvent.click(screen.getByRole('button', { name: '已记录词汇' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回' }))
+
+    expect(await screen.findByText('Hello')).toBeInTheDocument()
+    expect(screen.getByLabelText('练习内容')).toHaveValue('unsent draft')
+    expect(sessionButton(SESSION_A)).toHaveAttribute('aria-pressed', 'true')
+    // 骨架阶段不发起任何词汇数据请求，也不重复读取会话
+    expect(mock.calls.list).toBe(1)
+    expect(mock.calls.load).toEqual([SESSION_A])
+  })
+
+  it('does not reload data when the entry is clicked repeatedly', async () => {
+    const mock = installApiMock({
+      list: { status: 'ok', conversations: [summary(SESSION_A, NOW)] },
+      load: () => loadedWithHistory(SESSION_A)
+    })
+    await renderReady(mock)
+
+    fireEvent.click(screen.getByRole('button', { name: '已记录词汇' }))
+    // 已记录页打开期间侧栏入口处于隐藏视图内，需要显式包含隐藏元素
+    fireEvent.click(screen.getByRole('button', { name: '已记录词汇', hidden: true }))
+
+    expect(screen.getByRole('main', { name: '已记录词汇' })).toBeInTheDocument()
+    expect(mock.calls.list).toBe(1)
+    expect(mock.calls.load).toEqual([SESSION_A])
+  })
+
+  it('keeps settings navigation restoring focus to its own entry', async () => {
+    const mock = installApiMock({
+      list: { status: 'ok', conversations: [summary(SESSION_A, NOW)] },
+      load: () => loadedWithHistory(SESSION_A)
+    })
+    await renderReady(mock)
+
+    // 已记录与设置两个入口的焦点恢复互不干扰
+    fireEvent.click(screen.getByRole('button', { name: '已记录词汇' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回' }))
+    expect(screen.getByRole('button', { name: '已记录词汇' })).toHaveFocus()
+
+    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    fireEvent.click(screen.getByRole('button', { name: '返回' }))
+    expect(screen.getByRole('button', { name: '设置' })).toHaveFocus()
+  })
+})

@@ -5,7 +5,7 @@
   "sidebar": {
     "label": "会话侧栏",
     "menuLabel": "学习菜单",
-    "menuRecorded": "已记录",
+    "menuRecorded": "已记录词汇",
     "menuPractice": "开始练习",
     "sessionsHeading": "会话",
     "newSession": "新会话",
@@ -132,6 +132,14 @@
       "emptyTitle": "尚无用量记录",
       "emptyBody": "开始对话或解析词汇后，这里会显示模型的 token 用量。",
       "emptyTimeline": "时间轴范围：{{start}} 至 {{end}}"
+    }
+  },
+  "recorded": {
+    "title": "已记录词汇",
+    "back": "返回",
+    "menuLabel": "已记录词汇菜单",
+    "sections": {
+      "vocabulary": "词汇"
     }
   },
   "preferences": {

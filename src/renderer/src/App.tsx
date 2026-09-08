@@ -6,12 +6,13 @@ import { isGenerating } from './conversation/conversation-state'
 import { ConversationPanel } from './conversation/ConversationPanel'
 import { formatDateTime } from './i18n/formatters'
 import { normalizeI18nLocale } from './i18n'
+import { RecordedPage } from './recorded/RecordedPage'
 import { SettingsPage } from './settings/SettingsPage'
 import type { ConversationSummary } from '../../shared/conversation'
 
 type AppTFunction = TFunction<['common', 'conversation', 'errors']>
 
-type AppView = 'conversation' | 'settings'
+type AppView = 'conversation' | 'settings' | 'recorded'
 
 // 翻译完整模板并显式传入当前界面 locale 格式化的时间，不拼接词语。
 function formatConversationLabel(
@@ -37,6 +38,7 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
   const [activeView, setActiveView] = useState<AppView>('conversation')
   const [preferenceNoticeVisible, setPreferenceNoticeVisible] = useState(initialPreferenceError)
   const settingsButtonRef = useRef<HTMLButtonElement>(null)
+  const recordedButtonRef = useRef<HTMLButtonElement>(null)
   const previousViewRef = useRef<AppView>('conversation')
 
   useEffect(() => {
@@ -45,10 +47,15 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
     return detach
   }, [controller])
 
-  // 从设置页返回时把焦点还给设置按钮；初次挂载不抢焦点。
+  // 从设置页或已记录页返回时把焦点还给对应入口按钮；初次挂载不抢焦点。
   useEffect(() => {
-    if (previousViewRef.current === 'settings' && activeView === 'conversation') {
-      settingsButtonRef.current?.focus()
+    if (activeView === 'conversation') {
+      const previousView = previousViewRef.current
+      if (previousView === 'settings') {
+        settingsButtonRef.current?.focus()
+      } else if (previousView === 'recorded') {
+        recordedButtonRef.current?.focus()
+      }
     }
     previousViewRef.current = activeView
   }, [activeView])
@@ -58,8 +65,8 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
 
   return (
     <>
-      {/* 设置页期间保持对话视图挂载并隐藏，未发送草稿与滚动状态不丢失 */}
-      <main className="chat-shell" data-phase={state.phase} hidden={activeView === 'settings'}>
+      {/* 设置页/已记录页期间保持对话视图挂载并隐藏，未发送草稿与滚动状态不丢失 */}
+      <main className="chat-shell" data-phase={state.phase} hidden={activeView !== 'conversation'}>
         {preferenceNoticeVisible ? (
           <div className="preference-notice" role="alert">
             <p>{t('common:preferences.startupError')}</p>
@@ -70,7 +77,12 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
         ) : null}
         <aside className="session-sidebar" aria-label={t('common:sidebar.label')}>
           <nav className="sidebar-menu" aria-label={t('common:sidebar.menuLabel')}>
-            <button className="sidebar-menu-item" type="button">
+            <button
+              className="sidebar-menu-item"
+              onClick={() => setActiveView('recorded')}
+              ref={recordedButtonRef}
+              type="button"
+            >
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M6 4h12v17l-6-4-6 4V4Z" />
               </svg>
@@ -157,6 +169,9 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
 
       {activeView === 'settings' ? (
         <SettingsPage onExit={() => setActiveView('conversation')} />
+      ) : null}
+      {activeView === 'recorded' ? (
+        <RecordedPage onExit={() => setActiveView('conversation')} />
       ) : null}
     </>
   )
