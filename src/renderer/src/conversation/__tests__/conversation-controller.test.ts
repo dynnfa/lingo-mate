@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { ConversationController } from '../conversation-controller'
 import type {
   ConversationApi,
@@ -58,6 +58,28 @@ function apiStub(overrides: Partial<ConversationApi>): ConversationApi {
 }
 
 describe('ConversationController transitions', () => {
+  it('refreshes the list when a background title arrives without changing generation state', async () => {
+    let listener!: (event: ConversationEvent) => void
+    let title = 'User input'
+    const controller = new ConversationController(
+      apiStub({
+        list: async () => ({ status: 'ok', conversations: [{ ...summary(SESSION_A), title }] }),
+        load: async () => loaded(SESSION_A, []),
+        onEvent: (callback) => {
+          listener = callback
+          return () => {}
+        }
+      })
+    )
+    controller.attach()
+    await controller.initialize()
+    const status = controller.getState().status
+    title = 'Summarized title'
+    listener({ type: 'titleUpdated', sessionId: SESSION_A, requestId: SESSION_B })
+    await vi.waitFor(() => expect(controller.getState().conversations[0].title).toBe(title))
+    expect(controller.getState().status).toEqual(status)
+  })
+
   it('commits only the latest selection when an earlier load resolves late', async () => {
     const loadB = deferred<LoadConversationResult>()
     const loadC = deferred<LoadConversationResult>()

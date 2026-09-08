@@ -34,7 +34,7 @@ export class ConversationController {
     this.detachEvents = this.api.onEvent((event) => {
       this.dispatch({ type: 'generationEvent', event })
       // 首次落库后显示标题；回复完成后刷新 updatedAt 排序。
-      if (event.type === 'started' || event.type === 'completed') {
+      if (event.type === 'started' || event.type === 'completed' || event.type === 'titleUpdated') {
         void this.refreshConversations()
       }
     })

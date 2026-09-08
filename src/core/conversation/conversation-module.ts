@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { classifyModelRequestError, ModelRequestError } from '../llm/llm-client'
-import { conversationSummarySchema } from '../../shared/conversation'
+import { CONVERSATION_TITLE_MAX_LENGTH, conversationSummarySchema } from '../../shared/conversation'
 import type {
   ConversationEvent,
   ConversationMessage,
@@ -71,6 +71,7 @@ interface ActiveExecution {
 type DraftConversation = Omit<StoredConversation, 'title'> & { title: null }
 
 export class ConversationModule {
+  private readonly titleControllers = new Set<AbortController>()
   private readonly drafts = new Map<string, DraftConversation>()
   private readonly activeRequests = new Map<string, ActiveExecution>()
   private readonly sessionRequests = new Map<string, string>()
@@ -143,9 +144,8 @@ export class ConversationModule {
       languages: this.snapshotLanguages()
     })
 
+    const titled = this.prepareConversation(userMessage)
     try {
-      const titled = await this.prepareConversation(input.requestId, userMessage)
-      if (titled) this.activeRequests.get(input.requestId)!.controller.signal.throwIfAborted()
       await this.withPersistence(() => this.repository.appendMessage(userMessage, titled))
       this.drafts.delete(input.sessionId)
     } catch (error) {
@@ -159,6 +159,8 @@ export class ConversationModule {
       })
       throw error
     }
+
+    if (titled) void this.updateTitle(input.requestId, userMessage, emit)
 
     const generation: GenerationStarted = {
       requestId: input.requestId,
@@ -216,9 +218,8 @@ export class ConversationModule {
       languages
     })
 
+    const titled = this.prepareConversation(userMessage)
     try {
-      const titled = await this.prepareConversation(input.requestId, userMessage)
-      if (titled) this.activeRequests.get(input.requestId)!.controller.signal.throwIfAborted()
       await this.withPersistence(() =>
         this.skillRepository!.createExecution(execution, userMessage, titled)
       )
@@ -233,6 +234,8 @@ export class ConversationModule {
       })
       throw error
     }
+
+    if (titled) void this.updateTitle(input.requestId, userMessage, emit)
 
     const generation: GenerationStarted = {
       requestId: input.requestId,
@@ -339,14 +342,37 @@ export class ConversationModule {
     execution.controller.abort()
   }
 
-  // 标题完整生成并校验后才把会话交给仓库；仓库与首条消息原子提交。
-  private async prepareConversation(
-    requestId: string,
-    message: StoredMessage
-  ): Promise<StoredConversation | undefined> {
+  private prepareConversation(message: StoredMessage): StoredConversation | undefined {
     const draft = this.drafts.get(message.sessionId)
     if (!draft) return undefined
+    return {
+      ...draft,
+      title: message.content.trim().slice(0, CONVERSATION_TITLE_MAX_LENGTH).trim(),
+      createdAt: message.createdAt,
+      updatedAt: message.createdAt
+    }
+  }
+
+  // 标题是独立的后台任务；失败保留输入标题，不改变回复的终态。
+  private async updateTitle(
+    requestId: string,
+    message: StoredMessage,
+    emit: ConversationEventListener
+  ): Promise<void> {
     const active = this.activeRequests.get(requestId)!
+    this.titleControllers.add(active.controller)
+    try {
+      const title = await this.generateTitle(message, active)
+      await this.withPersistence(() => this.repository.updateTitle(message.sessionId, title))
+      emit({ type: 'titleUpdated', requestId, sessionId: message.sessionId })
+    } catch {
+      // 摘要或持久化失败时，已保存的原文标题仍可使用。
+    } finally {
+      this.titleControllers.delete(active.controller)
+    }
+  }
+
+  private async generateTitle(message: StoredMessage, active: ActiveExecution): Promise<string> {
     const signal = active.controller.signal
     let title = ''
     try {
@@ -358,7 +384,7 @@ export class ConversationModule {
       })) {
         signal.throwIfAborted()
         title += delta
-        if (title.length > 160)
+        if (title.length > CONVERSATION_TITLE_MAX_LENGTH * 2)
           throw new ModelRequestError('PROTOCOL', new Error('Title is too long'))
       }
     } catch (error) {
@@ -376,12 +402,7 @@ export class ConversationModule {
     if (!parsed.success || /[\r\n]/.test(parsed.data)) {
       throw new ModelRequestError('PROTOCOL', new Error('Invalid conversation title'))
     }
-    return {
-      ...draft,
-      title: parsed.data,
-      createdAt: message.createdAt,
-      updatedAt: message.createdAt
-    }
+    return parsed.data
   }
 
   // 快照只拷贝原始值，不持有 resolver 返回的对象：执行期间设置源变化
@@ -419,6 +440,7 @@ export class ConversationModule {
   }
 
   dispose(): void {
+    for (const controller of this.titleControllers) controller.abort()
     for (const execution of this.activeRequests.values()) execution.controller.abort()
     this.drafts.clear()
   }
@@ -677,7 +699,7 @@ export class ConversationModule {
 function toSummary(conversation: StoredConversation | DraftConversation): ConversationSummary {
   return {
     sessionId: conversation.id,
-    title: conversation.title,
+    title: conversation.title?.slice(0, CONVERSATION_TITLE_MAX_LENGTH).trim() ?? null,
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt
   }

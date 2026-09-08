@@ -17,9 +17,11 @@ export const CONVERSATION_CHANNELS = {
 const identifierSchema = z.string().uuid()
 const timestampSchema = z.iso.datetime()
 
+export const CONVERSATION_TITLE_MAX_LENGTH = 40
+
 export const conversationSummarySchema = z.object({
   sessionId: identifierSchema,
-  title: z.string().trim().min(1).max(80).nullable(),
+  title: z.string().trim().min(1).max(CONVERSATION_TITLE_MAX_LENGTH).nullable(),
   createdAt: timestampSchema,
   updatedAt: timestampSchema
 })
@@ -145,6 +147,7 @@ const eventBaseSchema = z.object({
 })
 
 export const conversationEventSchema = z.discriminatedUnion('type', [
+  eventBaseSchema.extend({ type: z.literal('titleUpdated') }),
   eventBaseSchema.extend({
     type: z.literal('started'),
     userMessage: conversationMessageSchema,

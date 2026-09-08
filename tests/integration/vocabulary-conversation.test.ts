@@ -83,13 +83,9 @@ describe('vocabulary conversation integration', () => {
       )
     )
 
-    expect(events.map((event) => event.type)).toEqual([
-      'started',
-      'skillPhase',
-      'skillPhase',
-      'skillPhase',
-      'completed'
-    ])
+    expect(
+      events.filter((event) => event.type !== 'titleUpdated').map((event) => event.type)
+    ).toEqual(['started', 'skillPhase', 'skillPhase', 'skillPhase', 'completed'])
     const completed = events.at(-1)
     expect(completed).toMatchObject({ type: 'completed', skillCompletion: 'complete' })
     expect(vocabularyRepository.list({}).entries).toHaveLength(2)
@@ -194,7 +190,9 @@ describe('vocabulary conversation integration', () => {
       )
     )
 
-    expect(events.map((event) => event.type)).toEqual(['started', 'skillPhase', 'failed'])
+    expect(
+      events.filter((event) => event.type !== 'titleUpdated').map((event) => event.type)
+    ).toEqual(['started', 'skillPhase', 'failed'])
     expect(events.at(-1)).toMatchObject({
       type: 'failed',
       error: { code: 'TOOL_CALL_NOT_SUPPORTED' }

@@ -197,6 +197,8 @@ function applyEvent(state: ConversationState, event: ConversationEvent): Convers
   if (state.finishedRequests[event.requestId]) return state
 
   switch (event.type) {
+    case 'titleUpdated':
+      return state
     case 'started':
       return applyGenerationStarted(state, event)
 
