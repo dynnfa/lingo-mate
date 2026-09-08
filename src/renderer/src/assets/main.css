@@ -149,6 +149,11 @@ body {
   max-width: 480px;
 }
 
+/* 模型区块单独放宽以容纳表格；语言设置区块保持原宽度。 */
+.models-section-body {
+  max-width: 760px;
+}
+
 .language-fieldset {
   display: flex;
   flex-direction: column;
@@ -345,6 +350,169 @@ textarea:focus-visible {
 
 .models-status p {
   margin: 0;
+}
+
+.models-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.models-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px;
+  border: 1px dashed var(--color-border-message);
+  border-radius: 10px;
+}
+
+.models-empty-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.models-empty-body {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.models-current {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 480px;
+}
+
+.models-current select {
+  padding: 7px 10px;
+  border: 1px solid var(--color-border-message);
+  border-radius: 10px;
+  background: var(--color-surface);
+  font-size: 14px;
+}
+
+.models-current-hint {
+  margin: 0;
+  color: var(--color-text-status);
+  font-size: 12px;
+}
+
+.models-add-button {
+  align-self: flex-start;
+  padding: 6px 14px;
+  border-radius: 10px;
+  background: var(--color-surface-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.models-add-button:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.models-form-title {
+  margin: 0 0 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border-divider);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* 表格容器横向滚动；最右操作列 sticky 保持可达，不让设置页整体溢出。 */
+.models-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-border-message);
+  border-radius: 10px;
+}
+
+.models-table {
+  width: 100%;
+  min-width: 660px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.models-table-caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.models-table th,
+.models-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-border-divider);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.models-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.models-table th {
+  color: var(--color-text-label);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.models-table-model-id {
+  font-weight: 600;
+}
+
+.models-table-url {
+  display: inline-block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.models-key-mask {
+  letter-spacing: 1px;
+  color: var(--color-text-secondary);
+}
+
+.models-table-test-failed {
+  color: var(--color-text-status);
+}
+
+.models-table-actions {
+  position: sticky;
+  right: 0;
+  border-left: 1px solid var(--color-border-divider);
+  background: var(--color-surface);
+  white-space: nowrap;
+}
+
+.models-table-actions-group {
+  display: flex;
+  gap: 6px;
+}
+
+.models-table-actions-group button {
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--color-surface-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.models-table-actions-group button:hover:not(:disabled) {
+  background: var(--color-surface-hover);
 }
 
 .settings-confirm {
@@ -1160,6 +1328,18 @@ input:disabled {
 @media (max-width: 520px) {
   .usage-section-body {
     max-width: none;
+  }
+
+  .models-section-body {
+    max-width: none;
+  }
+
+  .models-current {
+    max-width: none;
+  }
+
+  .models-table-url {
+    max-width: 140px;
   }
 
   .usage-table {

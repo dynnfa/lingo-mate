@@ -34,7 +34,6 @@
   "models": {
     "readFailed": "无法读取模型配置。",
     "writeFailed": "保存模型配置失败，请重试。",
-    "clearFailed": "清除模型配置失败，请重试。",
     "invalidBaseUrl": "Base URL 无效：请填写完整的 API 根地址，远程地址使用 HTTPS（本机回环地址可用 HTTP），且不包含用户名、密码、查询参数或片段。",
     "invalidModelId": "Model ID 不能为空。",
     "invalidApiKey": "API Key 不能为空。",
@@ -49,7 +48,11 @@
     "testNetworkError": "网络错误，请检查 Base URL 和网络连接。",
     "testUnsupportedResponse": "服务返回了不支持的响应格式。",
     "unknown": "发生未知错误，请稍后重试。",
-    "untrustedSource": "只能从应用窗口访问模型设置。"
+    "untrustedSource": "只能从应用窗口访问模型设置。",
+    "invalidConfigId": "配置 ID 无效。",
+    "configNotFound": "该模型配置不存在，可能已被删除。",
+    "deleteFailed": "删除模型配置失败，请重试。",
+    "setActiveFailed": "保存当前模型选择失败，请重试。"
   },
   "usage": {
     "readFailed": "无法读取用量数据，请稍后重试。",

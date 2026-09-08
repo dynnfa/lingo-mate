@@ -50,7 +50,8 @@ export async function writeLocalePreference(
   )
 }
 
-// 预写无密钥的模型配置记录，指向本地假服务（回环 HTTP 允许）。
+// 预写版本 2 的模型配置集合，指向本地假服务（回环 HTTP 允许）。
+// configId 必须是 UUID；记录写为当前使用的模型。
 export async function writeModelsConfig(
   userDataPath: string,
   baseUrl: string,
@@ -58,7 +59,18 @@ export async function writeModelsConfig(
 ): Promise<void> {
   await writeFile(
     join(userDataPath, 'models.json'),
-    JSON.stringify({ schemaVersion: 1, protocol: 'openai-compatible', baseUrl, modelId })
+    JSON.stringify({
+      schemaVersion: 2,
+      activeConfigId: 'e2e00000-0000-4000-8000-000000000001',
+      configs: [
+        {
+          id: 'e2e00000-0000-4000-8000-000000000001',
+          protocol: 'openai-compatible',
+          baseUrl,
+          modelId
+        }
+      ]
+    })
   )
 }
 

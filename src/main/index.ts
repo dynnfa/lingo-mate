@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { randomUUID } from 'node:crypto'
 import { openDatabase } from '../database/database'
 import { SqliteVocabularyRepository } from '../database/sqlite-vocabulary-repository'
 import { SqliteLlmUsageRepository } from '../database/sqlite-llm-usage-repository'
@@ -105,10 +106,12 @@ app.whenReady().then(() => {
     rendererUrl
   )
 
-  // 模型配置服务：持久化记录 + 系统安全存储加密密钥；IPC 与对话模型入口共用。
+  // 模型配置服务：持久化集合 + 系统安全存储加密密钥；IPC 与对话模型入口共用。
+  // 记录 ID 由 randomUUID 工厂生成并持久化，跨重启保持稳定。
   const modelsService = new ModelConfigService(
     createFileModelsConfigStore(join(app.getPath('userData'), 'models.json')),
-    createSafeStorageCredentialVault()
+    createSafeStorageCredentialVault(),
+    randomUUID
   )
   registerModelsIpc(
     modelsService,

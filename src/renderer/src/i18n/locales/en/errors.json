@@ -34,7 +34,6 @@
   "models": {
     "readFailed": "Couldn't read the model configuration.",
     "writeFailed": "Couldn't save the model configuration. Please try again.",
-    "clearFailed": "Couldn't clear the model configuration. Please try again.",
     "invalidBaseUrl": "Invalid Base URL: enter the full API root address, use HTTPS for remote hosts (HTTP is fine for loopback), without a username, password, query string, or fragment.",
     "invalidModelId": "Model ID can't be empty.",
     "invalidApiKey": "API key can't be empty.",
@@ -49,7 +48,11 @@
     "testNetworkError": "Network error. Please check the Base URL and your connection.",
     "testUnsupportedResponse": "The service returned an unsupported response format.",
     "unknown": "Something went wrong. Please try again later.",
-    "untrustedSource": "Model settings are only available from the application window."
+    "untrustedSource": "Model settings are only available from the application window.",
+    "invalidConfigId": "The configuration ID is invalid.",
+    "configNotFound": "This model configuration no longer exists; it may have been deleted.",
+    "deleteFailed": "Couldn't delete the model configuration. Please try again.",
+    "setActiveFailed": "Couldn't save the current model selection. Please try again."
   },
   "usage": {
     "readFailed": "Couldn't read usage statistics. Please try again later.",

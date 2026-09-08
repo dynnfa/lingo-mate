@@ -30,7 +30,8 @@ interface SettingsPageProps {
 }
 
 // 设置页：左侧菜单切换区块，右侧渲染对应详情。
-// 进入时焦点移入返回按钮；Escape 等同返回，退出后由调用方把焦点还给设置按钮。
+// 进入时焦点移入返回按钮；Escape 优先关闭当前确认层或编辑表单，再执行退出，
+// 一次按键只触发一个动作；退出后由调用方把焦点还给设置按钮。
 // 模型区块有未保存修改时，返回或 Escape 先经过“继续编辑 / 放弃修改”确认。
 export function SettingsPage({ onExit }: SettingsPageProps): React.JSX.Element {
   const { t } = useTranslation(['common', 'errors'])
@@ -88,10 +89,13 @@ export function SettingsPage({ onExit }: SettingsPageProps): React.JSX.Element {
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>): void => {
     if (event.key !== 'Escape') return
     event.preventDefault()
+    // Escape 分层：先关本页确认层，再交给模型区块处理其确认层与编辑表单，
+    // 最后才是退出设置。
     if (confirmDiscardOpen) {
       setConfirmDiscardOpen(false)
       return
     }
+    if (activeSectionId === 'models' && modelsSettings.consumeEscape()) return
     requestExit()
   }
 
@@ -147,7 +151,7 @@ export function SettingsPage({ onExit }: SettingsPageProps): React.JSX.Element {
           hidden={activeSectionId !== 'models'}
         >
           <h2 id="settings-section-title-models">{t('common:settings.sections.models')}</h2>
-          <div className="settings-section-body">
+          <div className="settings-section-body models-section-body">
             <ModelsSettings state={modelsSettings} />
           </div>
         </div>
