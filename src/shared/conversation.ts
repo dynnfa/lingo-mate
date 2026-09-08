@@ -2,6 +2,8 @@ import { z } from 'zod'
 import type { ModelsApi } from './models'
 import type { PreferencesApi } from './preferences'
 import type { UsageApi } from './usage'
+import type { VocabularyBatch } from './vocabulary'
+import type { PhraseBatch } from './phrase'
 
 export const CONVERSATION_CHANNELS = {
   create: 'conversation:create',
@@ -50,15 +52,20 @@ export const sendMessageInputSchema = z.object({
   text: z.string().trim().min(1).max(4_000)
 })
 
-export const conversationSkillIdSchema = z.literal('vocabulary')
+export const conversationSkillIdSchema = z.enum(['vocabulary', 'phrase'])
+export type ConversationSkillId = z.infer<typeof conversationSkillIdSchema>
+
+// 会话技能参数：vocabulary 与 phrase 首版共用同一形状；逐技能的输入
+// 语义（分隔规则、行数与长度）由 Core 的解析层校验。
+export const conversationSkillArgumentsSchema = z.strictObject({
+  text: z.string().min(1).max(4_000),
+  wordLanguage: z.literal('en')
+})
 export const runConversationSkillInputSchema = z.strictObject({
   requestId: identifierSchema,
   sessionId: identifierSchema,
   skillId: conversationSkillIdSchema,
-  arguments: z.strictObject({
-    text: z.string().min(1).max(4_000),
-    wordLanguage: z.literal('en')
-  })
+  arguments: conversationSkillArgumentsSchema
 })
 
 export const retryMessageInputSchema = z.object({
@@ -181,6 +188,9 @@ export const conversationEventSchema = z.discriminatedUnion('type', [
 
 export type SendMessageInput = z.infer<typeof sendMessageInputSchema>
 export type RunConversationSkillInput = z.infer<typeof runConversationSkillInputSchema>
+export type ConversationSkillArguments = z.infer<typeof conversationSkillArgumentsSchema>
+// 技能执行报告的持久化形状：按 skillId 对应各自的批次结构，读取方负责判别。
+export type ConversationSkillReport = VocabularyBatch | PhraseBatch
 export type RetryMessageInput = z.infer<typeof retryMessageInputSchema>
 export type CancelMessageInput = z.infer<typeof cancelMessageInputSchema>
 export type SendMessageResult = z.infer<typeof sendMessageResultSchema>

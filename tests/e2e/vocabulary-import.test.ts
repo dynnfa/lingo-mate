@@ -64,8 +64,9 @@ test('runs vocabulary inside the conversation, executes tool-call inserts, repor
         expect(server.terms).toHaveLength(4)
 
         await submitVocabulary(window, 'apple, banana, orange, apple')
+        // 反馈省略空分组：零新增时只列出已有与重复项
         const secondReply = window.locator('.message.assistant').last()
-        await expect(secondReply).toContainText('0 added')
+        await expect(secondReply).toContainText('Processed 4 terms')
         await expect(secondReply).toContainText('3 already saved')
         await expect(secondReply).toContainText('1 repeated in this input')
         // 已有词零模型调用：请求仍停留在第一次提交的四个词。
@@ -77,7 +78,7 @@ test('runs vocabulary inside the conversation, executes tool-call inserts, repor
         await waitForReady(window)
         await expect(window.locator('.message.user')).toHaveCount(2)
         await expect(window.locator('.message.assistant')).toHaveCount(2)
-        await expect(window.locator('.message.assistant').last()).toContainText('0 added')
+        await expect(window.locator('.message.assistant').last()).toContainText('3 already saved')
       } finally {
         await app.close()
       }
@@ -98,7 +99,6 @@ test('reports failed items locally when no model is configured, without a second
 
       const reply = window.locator('.message.assistant').last()
       await expect(reply).toContainText('Processed 1 terms')
-      await expect(reply).toContainText('0 added')
       await expect(reply).toContainText('1 failed (apple)')
       // 报告已提交，不再提供仅重试描述的入口。
       await expect(window.getByRole('button', { name: 'Retry' })).toHaveCount(0)

@@ -32,7 +32,9 @@ describe('VocabularyConversationSkill', () => {
       }
     })
 
-    expect(result.batch.counts).toEqual({
+    expect(result.outcome).toBe('completed')
+    if (result.outcome !== 'completed') throw new Error('expected a completed report')
+    expect(result.report.counts).toEqual({
       total: 4,
       saved: 2,
       existing: 1,
@@ -41,8 +43,8 @@ describe('VocabularyConversationSkill', () => {
     })
     expect(phases).toEqual(['analyzing', 'committing', 'summarizing'])
     expect(analyze).toHaveBeenCalledTimes(2)
-    expect(skill.feedback(result.batch, 'en')).toBe('2 added, 1 existing')
-    expect(skill.feedback(result.batch, 'zh-CN')).toBe('新增 2，已有 1')
+    expect(skill.feedback(result.report, 'en')).toBe('2 added, 1 existing')
+    expect(skill.feedback(result.report, 'zh-CN')).toBe('新增 2，已有 1')
   })
 
   it('stops before the summarizing phase when the batch was cancelled', async () => {
@@ -69,7 +71,7 @@ describe('VocabularyConversationSkill', () => {
         if (phase === 'analyzing') controller.abort()
       }
     })
-    expect(result.batch.outcome).toBe('cancelled')
+    expect(result.outcome).toBe('cancelled')
     expect(phases).toEqual(['analyzing'])
     expect(repository.commands).toHaveLength(0)
   })

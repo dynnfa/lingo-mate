@@ -866,7 +866,8 @@ h1 {
   border-color: var(--color-border-focus);
 }
 
-input {
+input,
+textarea {
   flex: 1;
   min-width: 0;
   padding: 12px 10px;
@@ -878,8 +879,17 @@ input {
   font-size: 13px;
 }
 
-input::placeholder {
+input::placeholder,
+textarea::placeholder {
   color: var(--color-text-placeholder);
+}
+
+/* 会话输入区是多行文本域：Enter 发送、Shift+Enter 换行，高度有限增长。 */
+.composer textarea {
+  resize: none;
+  max-height: 160px;
+  overflow-y: auto;
+  line-height: 1.5;
 }
 
 .composer button,
@@ -978,7 +988,8 @@ button.retry {
 }
 
 button:disabled,
-input:disabled {
+input:disabled,
+textarea:disabled {
   cursor: not-allowed;
   opacity: 0.45;
 }
@@ -1447,7 +1458,8 @@ input:disabled {
     flex-wrap: wrap;
   }
 
-  .composer input {
+  .composer input,
+  .composer textarea {
     flex-basis: 100%;
   }
 

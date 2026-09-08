@@ -24,6 +24,33 @@ type IpcFailureKey =
   | 'errors:ipc.cancel'
   | 'errors:ipc.retry'
 
+// 技能相关状态的文案 key：显式枚举，保持类型检查覆盖。
+type SkillStatusKeys = {
+  analyzing: 'conversation:status.analyzingVocabulary' | 'conversation:status.analyzingPhrase'
+  committing: 'conversation:status.committingVocabulary' | 'conversation:status.committingPhrase'
+  descriptionFailed:
+    | 'conversation:status.descriptionFailedVocabulary'
+    | 'conversation:status.descriptionFailedPhrase'
+  descriptionCancelled:
+    | 'conversation:status.descriptionCancelledVocabulary'
+    | 'conversation:status.descriptionCancelledPhrase'
+}
+
+const skillKeys = (skillId: 'vocabulary' | 'phrase' | undefined): SkillStatusKeys =>
+  skillId === 'phrase'
+    ? {
+        analyzing: 'conversation:status.analyzingPhrase',
+        committing: 'conversation:status.committingPhrase',
+        descriptionFailed: 'conversation:status.descriptionFailedPhrase',
+        descriptionCancelled: 'conversation:status.descriptionCancelledPhrase'
+      }
+    : {
+        analyzing: 'conversation:status.analyzingVocabulary',
+        committing: 'conversation:status.committingVocabulary',
+        descriptionFailed: 'conversation:status.descriptionFailedVocabulary',
+        descriptionCancelled: 'conversation:status.descriptionCancelledVocabulary'
+      }
+
 export function translateConversationStatus(
   t: StatusTFunction,
   status: ConversationStatus
@@ -41,16 +68,18 @@ export function translateConversationStatus(
       return t('conversation:status.generatingTitle')
     case 'generating':
       return t('conversation:status.generating')
-    case 'skillPhase':
-      if (status.phase === 'analyzing') return t('conversation:status.analyzing')
-      if (status.phase === 'committing') return t('conversation:status.committing')
+    case 'skillPhase': {
+      const keys = skillKeys(status.skillId)
+      if (status.phase === 'analyzing') return t(keys.analyzing)
+      if (status.phase === 'committing') return t(keys.committing)
       return t('conversation:status.summarizing')
+    }
     case 'completed':
       return t('conversation:status.completed')
-    case 'skillDescriptionFailed':
-      return status.cancelled
-        ? t('conversation:status.descriptionCancelled')
-        : t('conversation:status.descriptionFailed')
+    case 'skillDescriptionFailed': {
+      const keys = skillKeys(status.skillId)
+      return status.cancelled ? t(keys.descriptionCancelled) : t(keys.descriptionFailed)
+    }
     case 'cancelled':
       return t('conversation:status.cancelled')
     case 'protocolError':

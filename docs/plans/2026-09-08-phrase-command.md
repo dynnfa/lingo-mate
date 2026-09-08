@@ -1,7 +1,7 @@
 # /phrase 短语收录功能计划
 
 - 日期：2026-09-08
-- 状态：待实施
+- 状态：已实施
 
 ## 目标与范围
 
@@ -116,4 +116,12 @@ ON CONFLICT(phrase) DO NOTHING;
 - Renderer 组件或 Playwright 测试：直接输入与选择器均可提交，支持多行短语参数；中英文文案完整，完成、失败和取消后退出运行状态；Vocabulary 及普通对话无回归。
 - 测试放在模块 `__tests__/`，跨模块测试放在 `tests/integration/`，端到端测试放在 `tests/e2e/`。实施后运行相关测试、`pnpm lint`、`pnpm typecheck`、`pnpm build`，并通过 `pnpm dev` 手动验收。
 
-本次交付仅为计划文档；功能尚未实施。
+## 实施结果记录
+
+- 数据库迁移使用版本 9（计划编写时最新为 7，实施时已到 8）：创建 `phrase` 表，整表重建 `conversation_skill_executions`（skill_id CHECK 扩展为 vocabulary/phrase）与 `llm_request_usage`（operation 新增 phrase_analysis），历史行全部保留并带行数守卫。
+- 通用会话技能接口位于 `src/core/conversation/conversation-skill.ts`；ConversationModule 以 skillId 注册表分派执行、反馈与重试恢复，报告判别使用 zod 守卫（isVocabularyBatch / isPhraseBatch），无类型断言。
+- Phrase 工具协议位于 `src/core/tools/phrase-tools.ts`；固定 SQL 仅存在于 `src/database/sqlite-phrase-repository.ts`，仓储接口只接收内容对象。
+- Composer 由 `<input>` 改为 `<textarea>`（Enter 发送、Shift+Enter 换行），支持多行短语；`/phrase` 支持直接输入与选择器两条提交路径。
+- 顺带修复了三处先于本计划失效的 e2e 断言（行动数量 4→6、反馈省略空分组后的 '0 added' 期望），e2e 套件恢复全绿。
+- 验证：vitest 758 项、Playwright e2e 26 项全部通过；`pnpm lint`、`pnpm typecheck`、`pnpm build` 通过；`pnpm dev` 启动后真实开发库成功升级到 v9 且历史数据（会话/消息/词条/用量）完整保留。
+- Review 后简化：Phrase 批次强制传入 executionId，仅保留业务数据与报告原子提交；移除独立 saveBatch、请求 Map、BUSY/dispose 生命周期；取消改为单批次 AbortSignal。分析器工厂直接接收模块超时并创建一次配置快照，删除 Runtime 包装。模块及仓储测试统一走真实提交路径，删去重复 schema 与常量断言。

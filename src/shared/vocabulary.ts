@@ -98,3 +98,9 @@ export type VocabularyItemResult = z.infer<typeof vocabularyItemResultSchema>
 export type VocabularyEntry = z.infer<typeof vocabularyEntrySchema>
 export type VocabularyCursor = z.infer<typeof vocabularyCursorSchema>
 export type ListVocabularyInput = z.input<typeof listVocabularyInputSchema>
+
+// 报告联合类型的判别守卫：vocabulary 与 phrase 报告结构互斥（term vs phrase 字段），
+// 供会话层按 skillId 分派反馈时安全收窄，不做类型断言。
+export function isVocabularyBatch(report: unknown): report is VocabularyBatch {
+  return vocabularyBatchSchema.safeParse(report).success
+}

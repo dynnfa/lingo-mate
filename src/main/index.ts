@@ -2,12 +2,18 @@ import type Database from 'better-sqlite3'
 import { randomUUID } from 'node:crypto'
 import { openDatabase } from '../database/database'
 import { SqliteVocabularyRepository } from '../database/sqlite-vocabulary-repository'
+import { SqlitePhraseRepository } from '../database/sqlite-phrase-repository'
 import { SqliteLlmUsageRepository } from '../database/sqlite-llm-usage-repository'
 import { VocabularyConversationSkill } from '../core/learning/vocabulary/vocabulary-conversation-skill'
+import { PhraseConversationSkill } from '../core/learning/phrase/phrase-conversation-skill'
 import { LlmVocabularyAnalyzer } from '../core/llm/llm-vocabulary-analyzer'
+import { LlmPhraseAnalyzer } from '../core/llm/llm-phrase-analyzer'
 import { LlmClient, type CreateLlmClient } from '../core/llm/llm-client'
 import { LlmUsageRecorder } from '../core/llm/llm-usage-recorder'
 import { createVocabularyFeedbackFormatter } from './vocabulary-feedback'
+import { createPhraseFeedbackFormatter } from './phrase-feedback'
+import type { ConversationSkill } from '../core/conversation/conversation-skill'
+import type { ConversationSkillId } from '../shared/conversation'
 import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'node:url'
@@ -164,11 +170,24 @@ app.whenReady().then(() => {
     }),
     createVocabularyFeedbackFormatter()
   )
+  // /phrase 与 /vocabulary 共用模型配置快照解析与超时策略；用量登记为
+  // phrase_analysis，由 LlmClient 按调用上下文自动记账。
+  const phraseRepository = new SqlitePhraseRepository(database)
+  const phraseSkill = new PhraseConversationSkill(
+    phraseRepository,
+    (timeoutMs) =>
+      new LlmPhraseAnalyzer(modelsService.resolveSnapshot(), timeoutMs, createLlmClient),
+    createPhraseFeedbackFormatter()
+  )
+  const conversationSkills = new Map<ConversationSkillId, ConversationSkill>([
+    [vocabularySkill.skillId, vocabularySkill],
+    [phraseSkill.skillId, phraseSkill]
+  ])
   conversationModule = new ConversationModule(
     conversationModel,
     conversationRepository,
     resolveLanguages,
-    vocabularySkill,
+    conversationSkills,
     conversationRepository
   )
   registerConversationIpc(conversationModule, rendererUrl)

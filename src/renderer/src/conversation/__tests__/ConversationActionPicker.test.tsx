@@ -45,7 +45,7 @@ describe('ConversationActionPicker rendering', () => {
 
     const listbox = screen.getByRole('listbox', { name: '可用行动' })
     const options = screen.getAllByRole('option')
-    expect(options).toHaveLength(5)
+    expect(options).toHaveLength(6)
     expect(listbox).toContainElement(options[0])
 
     expect(options[0]).toHaveTextContent('翻译')

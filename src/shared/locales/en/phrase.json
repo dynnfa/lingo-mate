@@ -1,0 +1,12 @@
+{
+  "feedback": {
+    "summary": "Processed {{total}} phrases: {{details}}.",
+    "saved": "{{count}} added ({{terms}})",
+    "existing": "{{count}} already saved ({{terms}})",
+    "duplicate": "{{count}} repeated in this input ({{terms}})",
+    "unrecognized": "{{count}} not recognizable as English phrases ({{terms}})",
+    "failed": "{{count}} failed ({{terms}})",
+    "separator": "; ",
+    "duplicateSourceFailed": "Repeated items whose source phrase failed were not saved."
+  }
+}
