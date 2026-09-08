@@ -12,7 +12,7 @@ export type VocabularyAnalysisResult =
       status: 'insert'
       content: VocabularyInsertContent
       modelId: string
-      promptVersion: 'vocabulary-sql-v1'
+      promptVersion: 'vocabulary-tools-v2'
     }
   | { status: 'unrecognized' }
 export interface VocabularyAnalyzer {

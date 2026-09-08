@@ -1,6 +1,5 @@
 import { createServer, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { VOCABULARY_INSERT_SQL } from '../../../src/core/learning/vocabulary/vocabulary-insert'
 
 export interface VocabularyServerRequest {
   model: string
@@ -110,30 +109,24 @@ export async function startVocabularyServer(): Promise<VocabularyServer> {
       if (data.term === 'invalid') {
         // 参数化内容非法（例句不是 JSON 数组），应用必须拒绝且不写库。
         toolCallResponse(res, 'insert_vocabulary', {
-          sql: VOCABULARY_INSERT_SQL,
-          parameters: {
-            term: 'invalid',
-            phonetic: '/ˈɪnvəlɪd/',
-            meaning: 'A malformed fixture entry.',
-            concept: 'The example_sentences field is not valid JSON.',
-            example_sentences: 'not json'
-          }
+          term: 'invalid',
+          phonetic: '/ˈɪnvəlɪd/',
+          meaning: 'A malformed fixture entry.',
+          concept: 'The example_sentences field is not valid JSON.',
+          example_sentences: 'not json'
         })
         return
       }
       const english = body.messages[0].content.includes('written in English (en)')
       const meaning = MEANINGS[data.term] ?? MEANINGS.apple
       const result = {
-        sql: VOCABULARY_INSERT_SQL,
-        parameters: {
-          term: data.term,
-          phonetic: meaning.ipa,
-          meaning: english ? meaning.en : meaning.zh,
-          concept: english
-            ? 'The fruit as everyday food in shopping and meals.'
-            : '作为日常饮食和购物场景中的水果。',
-          example_sentences: JSON.stringify([`I ate an ${data.term} after lunch.`])
-        }
+        term: data.term,
+        phonetic: meaning.ipa,
+        meaning: english ? meaning.en : meaning.zh,
+        concept: english
+          ? 'The fruit as everyday food in shopping and meals.'
+          : '作为日常饮食和购物场景中的水果。',
+        example_sentences: [`I ate an ${data.term} after lunch.`]
       }
       if (data.term === 'slow') {
         const timer = setTimeout(() => {

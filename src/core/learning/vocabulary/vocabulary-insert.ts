@@ -1,8 +1,7 @@
 import { z } from 'zod'
 import { VocabularyError } from './parse-vocabulary-input'
 
-// 模型唯一允许返回并执行的单行 INSERT。Prompt、工具 schema、适配器和数据库
-// 执行边界都引用本常量；SQL 本身不通过拼接或修复放行任何其他语句。
+// 应用内部固定的参数化 INSERT，不暴露给模型，也不接受模型提供的 SQL。
 export const VOCABULARY_INSERT_SQL =
   'INSERT INTO vocabulary (id, term, phonetic, meaning, concept, example_sentences, model_id, prompt_version, created_at) VALUES (@id, @term, @phonetic, @meaning, @concept, @example_sentences, @model_id, @prompt_version, @created_at)' as const
 
@@ -30,20 +29,18 @@ const phoneticSchema = z
 
 // 模型通过 insert_vocabulary 返回的参数。四个系统字段由应用补入，不接受模型传入。
 export const insertToolArgumentsSchema = z.strictObject({
-  sql: z.literal(VOCABULARY_INSERT_SQL),
-  parameters: z.strictObject({
-    term: z.string().min(1).max(4000),
-    phonetic: phoneticSchema,
-    meaning: z.string().trim().min(1).max(2000),
-    concept: z.string().trim().min(1).max(2000),
-    example_sentences: z.string().min(2).max(2000)
-  })
+  term: z.string().min(1).max(4000),
+  phonetic: phoneticSchema,
+  meaning: z.string().trim().min(1).max(2000),
+  concept: z.string().trim().min(1).max(2000),
+  example_sentences: exampleSentenceListSchema
 })
+
 export const unrecognizedToolArgumentsSchema = z.strictObject({
   reason: z.literal(VOCABULARY_UNRECOGNIZED_REASON)
 })
 
-// 已通过全部校验的学习内容；exampleSentences 已从 JSON 字段解析为数组。
+// 已通过全部校验的学习内容；例句保留数组形态，入库时由程序序列化。
 export interface VocabularyInsertContent {
   term: string
   phonetic: string
@@ -57,22 +54,16 @@ export function validateInsertArguments(
   expectedTerm: string
 ): VocabularyInsertContent {
   const parsed = insertToolArgumentsSchema.safeParse(raw)
-  if (!parsed.success || parsed.data.parameters.term !== expectedTerm) {
+  if (!parsed.success || parsed.data.term !== expectedTerm) {
     throw new VocabularyError('INVALID_ANALYSIS')
   }
-  const { parameters } = parsed.data
-  const sentences = exampleSentenceListSchema.safeParse(
-    parseJsonOrUndefined(parameters.example_sentences)
-  )
-  if (!sentences.success) {
-    throw new VocabularyError('INVALID_ANALYSIS')
-  }
+  const parameters = parsed.data
   return {
     term: parameters.term,
     phonetic: parameters.phonetic,
     meaning: parameters.meaning,
     concept: parameters.concept,
-    exampleSentences: sentences.data
+    exampleSentences: parameters.example_sentences
   }
 }
 
@@ -154,26 +145,23 @@ export function vocabularyInsertTools(): VocabularyToolDefinition[] {
         name: VOCABULARY_INSERT_TOOL_NAME,
         description:
           'Insert the analyzed English vocabulary term into the local vocabulary table. ' +
-          'Copy sql verbatim from its enum value; parameters carries the learning content only. ' +
+          'Supply learning content only; the application handles storage. ' +
           'The application supplies id, model_id, prompt_version and created_at itself.',
         parameters: {
           type: 'object',
           properties: {
-            sql: { type: 'string', enum: [VOCABULARY_INSERT_SQL] },
-            parameters: {
-              type: 'object',
-              properties: {
-                term: { type: 'string' },
-                phonetic: { type: 'string' },
-                meaning: { type: 'string' },
-                concept: { type: 'string' },
-                example_sentences: { type: 'string' }
-              },
-              required: ['term', 'phonetic', 'meaning', 'concept', 'example_sentences'],
-              additionalProperties: false
+            term: { type: 'string', minLength: 1, maxLength: 4000 },
+            phonetic: { type: 'string', minLength: 3, maxLength: 200 },
+            meaning: { type: 'string', minLength: 1, maxLength: 2000 },
+            concept: { type: 'string', minLength: 1, maxLength: 2000 },
+            example_sentences: {
+              type: 'array',
+              items: { type: 'string', minLength: 1, maxLength: 500 },
+              minItems: 1,
+              maxItems: 3
             }
           },
-          required: ['sql', 'parameters'],
+          required: ['term', 'phonetic', 'meaning', 'concept', 'example_sentences'],
           additionalProperties: false
         }
       }

@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { openDatabase } from '../../src/database/database'
 import { SqliteVocabularyRepository } from '../../src/database/sqlite-vocabulary-repository'
 import { VocabularyModule } from '../../src/core/learning/vocabulary/vocabulary-module'
-import { VOCABULARY_INSERT_SQL } from '../../src/core/learning/vocabulary/vocabulary-insert'
 import { LlmVocabularyAnalyzer } from '../../src/core/llm/llm-vocabulary-analyzer'
 import { LlmClient, type CreateLlmClient } from '../../src/core/llm/llm-client'
 import { LlmUsageRecorder } from '../../src/core/llm/llm-usage-recorder'
@@ -21,7 +20,7 @@ const createClient: CreateLlmClient = (config) =>
     })
   )
 
-describe.each(['tool', 'text'] as const)(
+describe.each(['tool', 'text', 'sql'] as const)(
   'vocabulary with DeepSeek V4: %s response',
   (responseKind) => {
     it.each([
@@ -58,11 +57,13 @@ describe.each(['tool', 'text'] as const)(
               { status: 400 }
             )
           }
-          expect(body.tool_choice).toBe(useThinking ? 'auto' : 'required')
+          expect(body.tool_choice).toBe('auto')
           expect(body.thinking).toEqual(useThinking ? { type: 'enabled' } : undefined)
           expect(body.reasoning_effort).toBe(useThinking ? 'high' : undefined)
           expect(body.stream).toBe(false)
           expect(body.tools).toHaveLength(2)
+          expect(JSON.stringify(body.tools)).not.toContain('INSERT INTO')
+          expect(JSON.stringify(body.tools)).not.toContain('"sql"')
           if (responseKind === 'text') {
             return Response.json({
               choices: [
@@ -86,14 +87,12 @@ describe.each(['tool', 'text'] as const)(
                       function: {
                         name: 'insert_vocabulary',
                         arguments: JSON.stringify({
-                          sql: VOCABULARY_INSERT_SQL,
-                          parameters: {
-                            term: 'apple',
-                            phonetic: '/ˈæpəl/',
-                            meaning: 'A round fruit.',
-                            concept: 'A fruit eaten as food.',
-                            example_sentences: '["I ate an apple."]'
-                          }
+                          ...(responseKind === 'sql' ? { sql: 'DELETE FROM vocabulary' } : {}),
+                          term: 'apple',
+                          phonetic: '/ˈæpəl/',
+                          meaning: 'A round fruit.',
+                          concept: 'A fruit eaten as food.',
+                          example_sentences: ['I ate an apple.']
                         })
                       }
                     }

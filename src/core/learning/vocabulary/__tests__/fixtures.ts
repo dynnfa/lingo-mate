@@ -23,7 +23,7 @@ export const insertResult = (term = 'apple'): VocabularyAnalysisResult => ({
   status: 'insert',
   content: content(term),
   modelId: 'fixture-model',
-  promptVersion: 'vocabulary-sql-v1'
+  promptVersion: 'vocabulary-tools-v2'
 })
 export function insertCommand(
   term = 'apple',
@@ -32,7 +32,7 @@ export function insertCommand(
   return buildVocabularyInsertCommand(content(term), {
     id: system.id ?? randomUUID(),
     modelId: system.modelId ?? 'fixture-model',
-    promptVersion: system.promptVersion ?? 'vocabulary-sql-v1',
+    promptVersion: system.promptVersion ?? 'vocabulary-tools-v2',
     createdAt: system.createdAt ?? new Date().toISOString()
   })
 }
