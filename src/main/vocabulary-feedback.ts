@@ -31,25 +31,18 @@ function formatVocabularyFeedback(
 ): string {
   const t = (key: string, options: Record<string, unknown> = {}): string =>
     instance.t(key, { ...options, lng: language })
-  const list = (values: string[]): string =>
-    values.length ? new Intl.ListFormat(language).format(values) : t('feedback.emptyList')
-  const termsOf = (status: 'saved' | 'existing' | 'failed'): string[] =>
-    batch.items.filter((item) => item.status === status).map((item) => item.term)
-  const duplicateTerms = batch.items
-    .filter((item) => item.status === 'duplicate')
-    .map((item) => item.term)
-
-  const summary = t('feedback.summary', {
-    total: batch.counts.total,
-    saved: batch.counts.saved,
-    savedTerms: list(termsOf('saved')),
-    existing: batch.counts.existing,
-    existingTerms: list(termsOf('existing')),
-    duplicate: batch.counts.duplicate,
-    duplicateTerms: list(duplicateTerms),
-    failed: batch.counts.failed,
-    failedTerms: list(termsOf('failed'))
-  })
+  const details = (['saved', 'existing', 'duplicate', 'failed'] as const)
+    .filter((status) => batch.counts[status] > 0)
+    .map((status) =>
+      t(`feedback.${status}`, {
+        count: batch.counts[status],
+        terms: new Intl.ListFormat(language).format(
+          batch.items.filter((item) => item.status === status).map((item) => item.term)
+        )
+      })
+    )
+    .join(t('feedback.separator'))
+  const summary = t('feedback.summary', { total: batch.counts.total, details })
   const duplicateSourceFailed = batch.items.some(
     (item) => item.status === 'duplicate' && batch.items[item.sourceInputIndex]?.status === 'failed'
   )
