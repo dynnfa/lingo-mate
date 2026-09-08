@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import type { ConversationEvent } from '../../../shared/conversation'
+import type { ConversationEvent, ConversationSummary } from '../../../shared/conversation'
 import type { LanguageModel, StreamReplyInput } from '../../llm/language-model'
 import { ConfiguredLanguageModel } from '../../llm/configured-language-model'
 import { ModelConfigService } from '../../llm/model-config'
@@ -26,6 +27,19 @@ class MemoryConversationRepository implements ConversationRepository {
   readonly conversations: StoredConversation[] = []
   readonly messages: StoredMessage[] = []
 
+  async seedConversation(): Promise<ConversationSummary> {
+    const now = new Date().toISOString()
+    const conversation = {
+      id: randomUUID(),
+      title: 'Existing conversation',
+      createdAt: now,
+      updatedAt: now
+    }
+    await this.create(conversation)
+    const { id, ...rest } = conversation
+    return { sessionId: id, ...rest }
+  }
+
   async create(conversation: StoredConversation): Promise<void> {
     this.conversations.push(conversation)
   }
@@ -42,7 +56,8 @@ class MemoryConversationRepository implements ConversationRepository {
     return this.messages.filter((message) => message.sessionId === sessionId)
   }
 
-  async appendMessage(message: StoredMessage): Promise<void> {
+  async appendMessage(message: StoredMessage, conversation?: StoredConversation): Promise<void> {
+    if (conversation) this.conversations.push(conversation)
     this.messages.push(message)
   }
 }
@@ -134,23 +149,27 @@ const unusedCreateClient: CreateLlmClient = (config) =>
 
 describe('ConversationModule', () => {
   describe('conversation lifecycle', () => {
-    it('creates a conversation that is persisted and listed', async () => {
+    it('creates a draft without writing or listing it', async () => {
       const repository = new MemoryConversationRepository()
       const module = new ConversationModule(new SuccessfulModel(), repository)
 
       const summary = await module.createConversation()
 
-      expect(summary.sessionId).toBe(repository.conversations[0].id)
-      expect(summary.createdAt).toBe(repository.conversations[0].createdAt)
-      expect(await module.listConversations()).toEqual([summary])
+      expect(summary.title).toBeNull()
+      expect(repository.conversations).toEqual([])
+      expect(await module.listConversations()).toEqual([])
+      expect(await module.loadConversation(summary.sessionId)).toEqual({
+        conversation: summary,
+        messages: []
+      })
     })
 
     it('lists conversations ordered by updatedAt, then createdAt, descending', async () => {
       const repository = new MemoryConversationRepository()
       const module = new ConversationModule(new SuccessfulModel(), repository)
 
-      const first = await module.createConversation()
-      const second = await module.createConversation()
+      const first = await repository.seedConversation()
+      const second = await repository.seedConversation()
 
       // updatedAt 相同时，createdAt 较新的会话排在前面
       const secondAt = new Date(new Date(second.createdAt).getTime() + 60_000).toISOString()
@@ -158,7 +177,12 @@ describe('ConversationModule', () => {
       repository.conversations[1].updatedAt = secondAt
 
       expect(await module.listConversations()).toEqual([
-        { sessionId: second.sessionId, createdAt: secondAt, updatedAt: secondAt },
+        {
+          sessionId: second.sessionId,
+          title: second.title,
+          createdAt: secondAt,
+          updatedAt: secondAt
+        },
         first
       ])
 
@@ -167,15 +191,25 @@ describe('ConversationModule', () => {
       repository.conversations[0].updatedAt = firstTouched
 
       expect(await module.listConversations()).toEqual([
-        { sessionId: first.sessionId, createdAt: first.createdAt, updatedAt: firstTouched },
-        { sessionId: second.sessionId, createdAt: secondAt, updatedAt: secondAt }
+        {
+          sessionId: first.sessionId,
+          title: first.title,
+          createdAt: first.createdAt,
+          updatedAt: firstTouched
+        },
+        {
+          sessionId: second.sessionId,
+          title: second.title,
+          createdAt: secondAt,
+          updatedAt: secondAt
+        }
       ])
     })
 
     it('loads a conversation with its history in stored order', async () => {
       const repository = new MemoryConversationRepository()
       const module = new ConversationModule(new SuccessfulModel(), repository)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
 
       repository.messages.push(
         {
@@ -242,7 +276,7 @@ describe('ConversationModule', () => {
     it('uses one canonical assistant messageId across started, chunks, completion and storage', async () => {
       const repository = new MemoryConversationRepository()
       const module = new ConversationModule(new SuccessfulModel(), repository)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
 
       const events = await new Promise<ConversationEvent[]>((resolve) => {
         const collected: ConversationEvent[] = []
@@ -278,7 +312,7 @@ describe('ConversationModule', () => {
     it('returns the canonical generation payload from the accepted send result', async () => {
       const repository = new MemoryConversationRepository()
       const module = new ConversationModule(new SuccessfulModel(), repository)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
 
       const events: ConversationEvent[] = []
       const result = await module.sendMessage(
@@ -319,6 +353,7 @@ describe('ConversationModule', () => {
         override async find(): Promise<StoredConversation | undefined> {
           return {
             id: sessionId,
+            title: 'Existing conversation',
             createdAt: '2026-09-01T10:00:00.000Z',
             updatedAt: '2026-09-01T10:00:00.000Z'
           }
@@ -369,7 +404,7 @@ describe('ConversationModule', () => {
       }
       const gatedRepository = new GatedUserAppendRepository()
       const module = new ConversationModule(new SuccessfulModel(), gatedRepository)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await gatedRepository.seedConversation()
 
       const events: ConversationEvent[] = []
       const sendPromise = module.sendMessage(
@@ -423,7 +458,7 @@ describe('ConversationModule', () => {
         new ConfiguredLanguageModel(config, unusedCreateClient),
         repository
       )
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
       const events: ConversationEvent[] = []
       await module.sendMessage({ requestId: REQUEST_ID, sessionId, text: 'Hello' }, (event) =>
         events.push(event)
@@ -438,7 +473,7 @@ describe('ConversationModule', () => {
     it('fails with the assistant messageId and keeps only the user when the model fails before chunks', async () => {
       const repository = new MemoryConversationRepository()
       const module = new ConversationModule(new ImmediateFailureModel(), repository)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
 
       const events = await new Promise<ConversationEvent[]>((resolve) => {
         const collected: ConversationEvent[] = []
@@ -464,7 +499,7 @@ describe('ConversationModule', () => {
     it('fails with the assistant messageId after partial chunks and keeps only the user', async () => {
       const repository = new MemoryConversationRepository()
       const module = new ConversationModule(new MidStreamFailureModel(), repository)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
 
       const events = await new Promise<ConversationEvent[]>((resolve) => {
         const collected: ConversationEvent[] = []
@@ -492,6 +527,7 @@ describe('ConversationModule', () => {
         override async find(): Promise<StoredConversation | undefined> {
           return {
             id: sessionId,
+            title: 'Existing conversation',
             createdAt: '2026-09-01T10:00:00.000Z',
             updatedAt: '2026-09-01T10:00:00.000Z'
           }
@@ -530,7 +566,7 @@ describe('ConversationModule', () => {
     it('cancels an active stream without persisting a partial assistant reply', async () => {
       const repository = new MemoryConversationRepository()
       const module = new ConversationModule(new BlockingOnceModel(), repository)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
 
       const events = await new Promise<ConversationEvent[]>((resolve) => {
         const collected: ConversationEvent[] = []
@@ -557,7 +593,7 @@ describe('ConversationModule', () => {
     it('cancels before model execution when requested as soon as the generation starts', async () => {
       const repository = new MemoryConversationRepository()
       const module = new ConversationModule(new SuccessfulModel(), repository)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
 
       const events = await new Promise<ConversationEvent[]>((resolve) => {
         const collected: ConversationEvent[] = []
@@ -579,8 +615,8 @@ describe('ConversationModule', () => {
     it('rejects reusing an active request id across different sessions', async () => {
       const repository = new MemoryConversationRepository()
       const module = new ConversationModule(new BlockingOnceModel(), repository)
-      const firstConversation = await module.createConversation()
-      const secondConversation = await module.createConversation()
+      const firstConversation = await repository.seedConversation()
+      const secondConversation = await repository.seedConversation()
 
       const firstEvents: ConversationEvent[] = []
       await module.sendMessage(
@@ -603,7 +639,7 @@ describe('ConversationModule', () => {
     it('rejects a second send to the same session with a typed busy error', async () => {
       const repository = new MemoryConversationRepository()
       const module = new ConversationModule(new BlockingOnceModel(), repository)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
 
       const firstEvents: ConversationEvent[] = []
       const first = module.sendMessage(
@@ -636,8 +672,8 @@ describe('ConversationModule', () => {
     it('allows parallel generations across different sessions', async () => {
       const repository = new MemoryConversationRepository()
       const module = new ConversationModule(new SuccessfulModel(), repository)
-      const firstConversation = await module.createConversation()
-      const secondConversation = await module.createConversation()
+      const firstConversation = await repository.seedConversation()
+      const secondConversation = await repository.seedConversation()
 
       const firstTerminal = new Promise<void>((resolve) => {
         void module
@@ -669,7 +705,7 @@ describe('ConversationModule', () => {
     it('frees the session for a new generation after a terminal event', async () => {
       const repository = new MemoryConversationRepository()
       const module = new ConversationModule(new SuccessfulModel(), repository)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
 
       await new Promise<void>((resolve) => {
         void module
@@ -690,7 +726,7 @@ describe('ConversationModule', () => {
     it('throws a typed error when cancelling an unknown or finished request', async () => {
       const repository = new MemoryConversationRepository()
       const module = new ConversationModule(new SuccessfulModel(), repository)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
 
       expect(() => module.cancelMessage(REQUEST_ID)).toThrow(RequestNotFoundError)
 
@@ -725,7 +761,7 @@ describe('ConversationModule', () => {
     it('retries the last unanswered user message without duplicating it', async () => {
       const repository = new MemoryConversationRepository()
       const module = new ConversationModule(new BlockingOnceModel(), repository)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
 
       await cancelAfterFirstChunk(module, sessionId)
       const originalUser = repository.messages.find((message) => message.role === 'user')
@@ -760,7 +796,7 @@ describe('ConversationModule', () => {
     it('rejects retrying a user message that already has an assistant reply', async () => {
       const repository = new MemoryConversationRepository()
       const module = new ConversationModule(new SuccessfulModel(), repository)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
 
       await new Promise<void>((resolve) => {
         void module
@@ -783,7 +819,7 @@ describe('ConversationModule', () => {
     it('rejects retrying an unknown message or a non-user message', async () => {
       const repository = new MemoryConversationRepository()
       const module = new ConversationModule(new SuccessfulModel(), repository)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
 
       await new Promise<void>((resolve) => {
         void module
@@ -816,7 +852,7 @@ describe('ConversationModule', () => {
     it('rejects retry while another generation is active in the session', async () => {
       const repository = new MemoryConversationRepository()
       const module = new ConversationModule(new BlockingOnceModel(), repository)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
 
       await module.sendMessage({ requestId: REQUEST_ID, sessionId, text: 'Hello' }, () => undefined)
       const user = repository.messages.find((message) => message.role === 'user')!
@@ -901,7 +937,7 @@ describe('ConversationModule', () => {
         const repository = new MemoryConversationRepository()
         const model = new RecordingModel()
         const module = new ConversationModule(model, repository)
-        const { sessionId } = await module.createConversation()
+        const { sessionId } = await repository.seedConversation()
 
         await sendUntilTerminal(module, sessionId, text)
 
@@ -916,7 +952,7 @@ describe('ConversationModule', () => {
       const repository = new MemoryConversationRepository()
       const model = new RecordingModel()
       const module = new ConversationModule(model, repository)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
 
       await sendUntilTerminal(module, sessionId, 'Hello')
       await sendUntilTerminal(module, sessionId, '/concept pursue')
@@ -935,7 +971,7 @@ describe('ConversationModule', () => {
         const repository = new MemoryConversationRepository()
         const model = new RecordingModel()
         const module = new ConversationModule(model, repository)
-        const { sessionId } = await module.createConversation()
+        const { sessionId } = await repository.seedConversation()
 
         await sendUntilTerminal(module, sessionId, text)
 
@@ -948,7 +984,7 @@ describe('ConversationModule', () => {
       const repository = new MemoryConversationRepository()
       const model = new RecordingBlockingOnceModel()
       const module = new ConversationModule(model, repository)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
 
       await new Promise<void>((resolve) => {
         void module
@@ -1046,7 +1082,7 @@ describe('ConversationModule', () => {
         targetLanguage: 'en'
       }
       const module = new ConversationModule(model, repository, () => settings)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
 
       await sendUntilTerminal(module, sessionId, 'Hello')
       expect(model.inputs[0]).toMatchObject({
@@ -1071,7 +1107,7 @@ describe('ConversationModule', () => {
         targetLanguage: 'en'
       }
       const module = new ConversationModule(model, repository, () => settings)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
 
       const terminal = new Promise<void>((resolve) => {
         void module
@@ -1106,7 +1142,7 @@ describe('ConversationModule', () => {
         targetLanguage: 'en'
       }
       const module = new ConversationModule(model, repository, () => settings)
-      const { sessionId } = await module.createConversation()
+      const { sessionId } = await repository.seedConversation()
 
       await new Promise<void>((resolve) => {
         void module

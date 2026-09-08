@@ -37,6 +37,8 @@ export function translateConversationStatus(
       return t('conversation:status.creating')
     case 'ready':
       return t('conversation:status.ready')
+    case 'generatingTitle':
+      return t('conversation:status.generatingTitle')
     case 'generating':
       return t('conversation:status.generating')
     case 'skillPhase':
@@ -82,6 +84,14 @@ function translateRequestError(t: StatusTFunction, error: ConversationRequestErr
       return t('errors:untrustedSource')
     case 'PERSISTENCE_ERROR':
       return t('errors:persistence')
+    case 'MODEL_ERROR':
+      return t('errors:generation.model')
+    case 'MODEL_NOT_CONFIGURED':
+      return t('errors:generation.modelNotConfigured')
+    case 'CREDENTIAL_DECRYPT_FAILED':
+      return t('errors:models.credentialDecryptFailed')
+    case 'CANCELLED':
+      return t('conversation:status.cancelled')
     case 'UNKNOWN_ERROR':
       return t('errors:unknown')
   }

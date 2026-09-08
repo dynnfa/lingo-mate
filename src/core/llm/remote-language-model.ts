@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { conversationTitleSystemMessage } from '../prompt/conversation-title'
 import { conversationSystemMessage } from '../prompt/conversation-prompt'
 import { wordConceptSystemMessage } from '../prompt/word-concept'
 import type { LanguageModel, StreamReplyInput } from './language-model'
@@ -32,9 +33,11 @@ export class RemoteLanguageModel implements LanguageModel {
   async *streamReply(input: StreamReplyInput): AsyncGenerator<string> {
     const client = this.createClient(this.config)
     const systemPrompt =
-      input.promptKind === 'word-concept'
-        ? wordConceptSystemMessage(input)
-        : conversationSystemMessage(input)
+      input.promptKind === 'conversation-title'
+        ? conversationTitleSystemMessage(input.outputLanguage)
+        : input.promptKind === 'word-concept'
+          ? wordConceptSystemMessage(input)
+          : conversationSystemMessage(input)
     let finished = false
     let hasText = false
     for await (const rawChunk of client.stream(

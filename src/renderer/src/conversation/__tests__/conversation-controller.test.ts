@@ -4,7 +4,9 @@ import type {
   ConversationApi,
   ConversationSummary,
   ListConversationsResult,
-  LoadConversationResult
+  LoadConversationResult,
+  SendMessageResult,
+  ConversationEvent
 } from '../../../../shared/conversation'
 
 const SESSION_A = 'f9364f0f-f3f4-4ea6-a31d-b55754aa2477'
@@ -21,7 +23,7 @@ function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
 }
 
 function summary(sessionId: string): ConversationSummary {
-  return { sessionId, createdAt: NOW, updatedAt: NOW }
+  return { sessionId, title: null, createdAt: NOW, updatedAt: NOW }
 }
 
 function loaded(sessionId: string, contents: string[]): LoadConversationResult {
@@ -118,5 +120,82 @@ describe('ConversationController transitions', () => {
     expect(state.sessionId).toBe(SESSION_B)
     expect(state.conversations.map((conversation) => conversation.sessionId)).toEqual([SESSION_B])
     expect(state.phase).toBe('ready')
+  })
+})
+
+describe('draft conversation lifecycle', () => {
+  it('keeps drafts out of the list and can cancel a pending title request', async () => {
+    const result = deferred<SendMessageResult>()
+    let requestId: string | undefined
+    let cancelled: string | undefined
+    const controller = new ConversationController(
+      apiStub({
+        list: async () => ({ status: 'ok', conversations: [] }),
+        create: async () => ({ status: 'ok', conversation: summary(SESSION_A) }),
+        load: async () => loaded(SESSION_A, []),
+        send: (input) => {
+          requestId = input.requestId
+          return result.promise
+        },
+        cancel: async (input) => {
+          cancelled = input.requestId
+          return { status: 'ok' }
+        }
+      })
+    )
+    await controller.initialize()
+    expect(controller.getState().conversations).toEqual([])
+    const pending = controller.send('Coffee')
+    expect(controller.getState().status).toEqual({ kind: 'generatingTitle' })
+    await controller.cancel()
+    expect(cancelled).toBe(requestId)
+    result.resolve({ status: 'error', error: { code: 'CANCELLED' } })
+    expect(await pending).toBe(false)
+    expect(controller.getState().commandPending).toBe(false)
+    expect(controller.getState().messages).toEqual([])
+  })
+
+  it('refreshes titles when the first message is persisted even if its reply fails', async () => {
+    let listener!: (event: ConversationEvent) => void
+    let persisted = false
+    const controller = new ConversationController(
+      apiStub({
+        list: async () => ({
+          status: 'ok',
+          conversations: persisted ? [{ ...summary(SESSION_A), title: 'Coffee practice' }] : []
+        }),
+        create: async () => ({ status: 'ok', conversation: summary(SESSION_A) }),
+        load: async () => loaded(SESSION_A, []),
+        onEvent: (onEvent) => {
+          listener = onEvent
+          return () => {}
+        }
+      })
+    )
+    controller.attach()
+    await controller.initialize()
+    persisted = true
+    listener({
+      type: 'started',
+      requestId: SESSION_B,
+      sessionId: SESSION_A,
+      userMessage: {
+        messageId: SESSION_C,
+        sessionId: SESSION_A,
+        role: 'user',
+        content: 'Coffee',
+        createdAt: NOW
+      },
+      assistantMessageId: 'assistant'
+    })
+    listener({
+      type: 'failed',
+      requestId: SESSION_B,
+      sessionId: SESSION_A,
+      messageId: 'assistant',
+      error: { code: 'MODEL_ERROR' }
+    })
+    await Promise.resolve()
+    expect(controller.getState().conversations[0]?.title).toBe('Coffee practice')
   })
 })

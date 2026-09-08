@@ -40,6 +40,7 @@ describe('conversation protocol schemas', () => {
     expect(
       conversationSummarySchema.parse({
         sessionId: SESSION_ID,
+        title: 'Greeting',
         createdAt: '2026-09-01T10:00:00.000Z',
         updatedAt: '2026-09-01T10:00:01.000Z'
       })
@@ -173,6 +174,7 @@ describe('conversation protocol schemas', () => {
         status: 'ok',
         conversation: {
           sessionId: SESSION_ID,
+          title: null,
           createdAt: '2026-09-01T10:00:00.000Z',
           updatedAt: '2026-09-01T10:00:00.000Z'
         }
@@ -190,6 +192,7 @@ describe('conversation protocol schemas', () => {
       status: 'ok',
       conversation: {
         sessionId: SESSION_ID,
+        title: 'Greeting',
         createdAt: '2026-09-01T10:00:00.000Z',
         updatedAt: '2026-09-01T10:00:01.000Z'
       },

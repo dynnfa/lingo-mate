@@ -7,7 +7,7 @@ export interface ModelMessage {
 
 // 本次回复使用的系统提示词形态：普通对话，或 `/concept` 单词概念讲解。
 // 由调用方依据被回复的消息决定；缺省为普通对话。
-export type ReplyPromptKind = 'conversation' | 'word-concept'
+export type ReplyPromptKind = 'conversation' | 'word-concept' | 'conversation-title'
 
 export interface StreamReplyInput {
   messages: ModelMessage[]

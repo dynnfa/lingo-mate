@@ -13,7 +13,8 @@
     "descriptionFailed": "词汇已处理，但结果描述失败。你可以只重试结果描述。",
     "descriptionCancelled": "词汇已保存，但结果描述已取消。你可以只重试结果描述。",
     "cancelled": "已取消，可重试。",
-    "protocolError": "会话协议异常，已忽略一条身份不一致的消息。"
+    "protocolError": "会话协议异常，已忽略一条身份不一致的消息。",
+    "generatingTitle": "正在生成对话标题…"
   },
   "composer": {
     "vocabularyRequired": "请在 /vocabulary 后输入一个或多个英语单词或短语。"

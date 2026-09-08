@@ -94,6 +94,7 @@ describe('vocabulary conversation integration', () => {
     expect(completed).toMatchObject({ type: 'completed', skillCompletion: 'complete' })
     expect(vocabularyRepository.list({}).entries).toHaveLength(2)
     const loaded = await module.loadConversation(sessionId)
+    expect(loaded.conversation.title).toBe('unused')
     expect(loaded.messages.map((message) => message.role)).toEqual(['user', 'assistant'])
     expect(loaded.messages[0].content).toBe('/vocabulary apple, banana, apple')
     expect(loaded.messages[1].content).toContain('2 added')

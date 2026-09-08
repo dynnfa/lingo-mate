@@ -14,6 +14,7 @@ import type {
 } from '../core/conversation/conversation-skill-repository'
 
 interface ConversationRow {
+  title: string
   id: string
   created_at: string
   updated_at: string
@@ -49,22 +50,26 @@ export class SqliteConversationRepository
 
   async create(conversation: StoredConversation): Promise<void> {
     try {
-      this.database
-        .prepare(
-          `INSERT INTO conversations (id, created_at, updated_at)
-           VALUES (@id, @createdAt, @updatedAt)`
-        )
-        .run(conversation)
+      this.insertConversation(conversation)
     } catch (error) {
       throw new ConversationPersistenceError('Unable to create conversation', { cause: error })
     }
+  }
+
+  private insertConversation(conversation: StoredConversation): void {
+    this.database
+      .prepare(
+        `INSERT INTO conversations (id, title, created_at, updated_at)
+      VALUES (@id, @title, @createdAt, @updatedAt)`
+      )
+      .run(conversation)
   }
 
   async list(): Promise<StoredConversation[]> {
     try {
       const rows = this.database
         .prepare(
-          `SELECT id, created_at, updated_at
+          `SELECT id, title, created_at, updated_at
            FROM conversations
            ORDER BY updated_at DESC, created_at DESC`
         )
@@ -79,7 +84,7 @@ export class SqliteConversationRepository
   async find(sessionId: string): Promise<StoredConversation | undefined> {
     try {
       const row = this.database
-        .prepare('SELECT id, created_at, updated_at FROM conversations WHERE id = ?')
+        .prepare('SELECT id, title, created_at, updated_at FROM conversations WHERE id = ?')
         .get(sessionId) as ConversationRow | undefined
 
       return row ? toStoredConversation(row) : undefined
@@ -113,10 +118,11 @@ export class SqliteConversationRepository
     }
   }
 
-  async appendMessage(message: StoredMessage): Promise<void> {
+  async appendMessage(message: StoredMessage, conversation?: StoredConversation): Promise<void> {
     try {
       // 插入消息与更新会话 updated_at 必须同事务，保证列表排序不依赖额外 touch。
       this.database.transaction(() => {
+        if (conversation) this.insertConversation(conversation)
         this.database
           .prepare(
             `INSERT INTO conversation_messages (id, session_id, role, content, created_at)
@@ -136,10 +142,12 @@ export class SqliteConversationRepository
 
   async createExecution(
     execution: StoredConversationSkillExecution,
-    userMessage: StoredMessage
+    userMessage: StoredMessage,
+    conversation?: StoredConversation
   ): Promise<void> {
     try {
       this.database.transaction(() => {
+        if (conversation) this.insertConversation(conversation)
         this.database
           .prepare(
             `INSERT INTO conversation_messages (id, session_id, role, content, created_at)
@@ -224,7 +232,7 @@ export class SqliteConversationRepository
 }
 
 function toStoredConversation(row: ConversationRow): StoredConversation {
-  return { id: row.id, createdAt: row.created_at, updatedAt: row.updated_at }
+  return { id: row.id, title: row.title, createdAt: row.created_at, updatedAt: row.updated_at }
 }
 
 function toStoredMessage(row: MessageRow): StoredMessage {

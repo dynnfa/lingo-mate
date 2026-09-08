@@ -19,6 +19,7 @@ const timestampSchema = z.iso.datetime()
 
 export const conversationSummarySchema = z.object({
   sessionId: identifierSchema,
+  title: z.string().trim().min(1).max(80).nullable(),
   createdAt: timestampSchema,
   updatedAt: timestampSchema
 })
@@ -79,6 +80,10 @@ export const conversationRequestErrorSchema = z.discriminatedUnion('code', [
   z.object({ code: z.literal('INVALID_INPUT') }),
   z.object({ code: z.literal('UNTRUSTED_SOURCE') }),
   z.object({ code: z.literal('PERSISTENCE_ERROR') }),
+  z.object({ code: z.literal('MODEL_ERROR') }),
+  z.object({ code: z.literal('MODEL_NOT_CONFIGURED') }),
+  z.object({ code: z.literal('CREDENTIAL_DECRYPT_FAILED') }),
+  z.object({ code: z.literal('CANCELLED') }),
   z.object({ code: z.literal('UNKNOWN_ERROR') })
 ])
 

@@ -13,7 +13,8 @@
     "descriptionFailed": "Vocabulary was processed, but the result description failed. You can retry the description.",
     "descriptionCancelled": "Vocabulary was saved, but the result description was cancelled. You can retry the description.",
     "cancelled": "Cancelled. You can retry.",
-    "protocolError": "Conversation protocol error: ignored a message with mismatched identity."
+    "protocolError": "Conversation protocol error: ignored a message with mismatched identity.",
+    "generatingTitle": "Generating conversation title…"
   },
   "composer": {
     "vocabularyRequired": "Enter one or more English words or phrases after /vocabulary."

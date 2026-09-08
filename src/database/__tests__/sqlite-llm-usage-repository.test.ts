@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import Database from 'better-sqlite3'
 import { openDatabase } from '../database'
-import { migrateDatabase } from '../migrations'
+import { MIGRATIONS, migrateDatabase } from '../migrations'
 import { SqliteLlmUsageRepository } from '../sqlite-llm-usage-repository'
 import { LlmUsageStatisticsError } from '../../core/llm/llm-usage-statistics'
 import type { LlmUsageStart, LlmUsageTerminal } from '../../core/llm/llm-usage'
@@ -48,9 +48,11 @@ describe('llm_request_usage migrations and repository', () => {
 
     const upgraded = new Database(':memory:')
     try {
+      for (const migration of MIGRATIONS.filter(({ version }) => version <= 5))
+        migration.up(upgraded)
       upgraded.pragma('user_version = 5')
       expect(() => migrateDatabase(upgraded)).not.toThrow()
-      expect(upgraded.pragma('user_version', { simple: true })).toBe(7)
+      expect(upgraded.pragma('user_version', { simple: true })).toBe(8)
       expect(hasIndex(upgraded, 'llm_request_usage_started_at')).toBe(true)
     } finally {
       upgraded.close()
@@ -60,6 +62,8 @@ describe('llm_request_usage migrations and repository', () => {
   it('upgrades a v6 usage ledger to v7 keeping existing rows', () => {
     const upgraded = new Database(':memory:')
     try {
+      for (const migration of MIGRATIONS.filter(({ version }) => version <= 5))
+        migration.up(upgraded)
       // 手工构造 v6 终态：用量表与复合索引存在、无 started_at 单列索引。
       upgraded.exec(`
         CREATE TABLE llm_request_usage (
@@ -90,7 +94,7 @@ describe('llm_request_usage migrations and repository', () => {
       `)
       upgraded.pragma('user_version = 6')
       migrateDatabase(upgraded)
-      expect(upgraded.pragma('user_version', { simple: true })).toBe(7)
+      expect(upgraded.pragma('user_version', { simple: true })).toBe(8)
       expect(hasIndex(upgraded, 'llm_request_usage_started_at')).toBe(true)
       const rows = upgraded.prepare('SELECT COUNT(*) AS count FROM llm_request_usage').get() as {
         count: number
@@ -101,7 +105,7 @@ describe('llm_request_usage migrations and repository', () => {
     }
   })
 
-  it('keeps old rows when upgrading: messages and vocabulary survive, usage is queryable', () => {
+  it('clears legacy messages while preserving vocabulary on upgrade', () => {
     const legacy = new Database(':memory:')
     try {
       // 手工构造 v5 终态：会话消息与词条已存在、无用量表。
@@ -111,6 +115,7 @@ describe('llm_request_usage migrations and repository', () => {
           id TEXT PRIMARY KEY, session_id TEXT NOT NULL, role TEXT NOT NULL,
           content TEXT NOT NULL, created_at TEXT NOT NULL
         );
+        CREATE TABLE conversation_skill_executions (id TEXT PRIMARY KEY);
         CREATE TABLE vocabulary (
           id TEXT PRIMARY KEY, term TEXT NOT NULL, phonetic TEXT, meaning TEXT,
           concept TEXT, example_sentences TEXT, model_id TEXT NOT NULL,
@@ -130,7 +135,7 @@ describe('llm_request_usage migrations and repository', () => {
       const vocabulary = legacy.prepare('SELECT COUNT(*) AS count FROM vocabulary').get() as {
         count: number
       }
-      expect(messages.count).toBe(1)
+      expect(messages.count).toBe(0)
       expect(vocabulary.count).toBe(1)
     } finally {
       legacy.close()

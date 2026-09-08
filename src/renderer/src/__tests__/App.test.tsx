@@ -97,7 +97,7 @@ function usageApiStub(): UsageApi {
 }
 
 function summary(sessionId: string, updatedAt: string): ConversationSummary {
-  return { sessionId, createdAt: '2026-09-01T08:00:00.000Z', updatedAt }
+  return { sessionId, title: null, createdAt: '2026-09-01T08:00:00.000Z', updatedAt }
 }
 
 interface ApiMock {
@@ -343,6 +343,22 @@ describe('App conversation recovery', () => {
     expect(mock.calls.create).toBe(1)
     expect(mock.calls.load).toEqual([SESSION_A])
     expect(screen.getByLabelText('练习内容')).toBeEnabled()
+  })
+
+  it('shows a generated title in the conversation list', async () => {
+    const mock = installApiMock({
+      list: {
+        status: 'ok',
+        conversations: [{ ...summary(SESSION_A, NOW), title: '咖啡店英语练习' }]
+      },
+      load: () => ({
+        status: 'ok',
+        conversation: { ...summary(SESSION_A, NOW), title: '咖啡店英语练习' },
+        messages: []
+      })
+    })
+    await renderReady(mock)
+    expect(sessionButton(SESSION_A)).toHaveTextContent('咖啡店英语练习')
   })
 
   it('labels conversation entries with a locale-formatted date', async () => {
@@ -808,7 +824,8 @@ describe('App conversation switching', () => {
         name: '新会话'
       })
     )
-    await waitFor(() => expect(sessionButton(SESSION_B)).toHaveAttribute('aria-pressed', 'true'))
+    await waitFor(() => expect(mock.calls.load).toContain(SESSION_B))
+    expect(document.querySelector(`[data-session-id="${SESSION_B}"]`)).toBeNull()
     expect(mock.calls.create).toBe(1)
     expect(mock.calls.load).toEqual([SESSION_A, SESSION_B])
     expect(sessionButton(SESSION_A)).toHaveAttribute('aria-pressed', 'false')
@@ -850,7 +867,8 @@ describe('App conversation switching', () => {
 
     fireEvent.change(screen.getByLabelText('练习内容'), { target: { value: 'unsent draft' } })
     fireEvent.click(screen.getByRole('button', { name: '新会话' }))
-    await waitFor(() => expect(sessionButton(SESSION_B)).toHaveAttribute('aria-pressed', 'true'))
+    await waitFor(() => expect(mock.calls.load).toContain(SESSION_B))
+    expect(document.querySelector(`[data-session-id="${SESSION_B}"]`)).toBeNull()
 
     expect(screen.getByLabelText('练习内容')).toHaveValue('unsent draft')
   })
