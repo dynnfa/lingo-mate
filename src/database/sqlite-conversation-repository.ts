@@ -65,6 +65,16 @@ export class SqliteConversationRepository
       .run(conversation)
   }
 
+  async updateTitle(sessionId: string, title: string): Promise<void> {
+    try {
+      this.database.prepare('UPDATE conversations SET title = ? WHERE id = ?').run(title, sessionId)
+    } catch (error) {
+      throw new ConversationPersistenceError('Unable to update conversation title', {
+        cause: error
+      })
+    }
+  }
+
   async list(): Promise<StoredConversation[]> {
     try {
       const rows = this.database

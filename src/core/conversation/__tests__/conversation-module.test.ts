@@ -44,6 +44,11 @@ class MemoryConversationRepository implements ConversationRepository {
     this.conversations.push(conversation)
   }
 
+  async updateTitle(sessionId: string, title: string): Promise<void> {
+    const conversation = await this.find(sessionId)
+    if (conversation) conversation.title = title
+  }
+
   async list(): Promise<StoredConversation[]> {
     return [...this.conversations]
   }
@@ -262,6 +267,11 @@ describe('ConversationModule', () => {
 
     it('wraps unexpected repository failures as persistence errors', async () => {
       class FailingListRepository extends MemoryConversationRepository {
+        async updateTitle(sessionId: string, title: string): Promise<void> {
+          const conversation = await this.find(sessionId)
+          if (conversation) conversation.title = title
+        }
+
         async list(): Promise<StoredConversation[]> {
           throw new Error('raw driver failure')
         }

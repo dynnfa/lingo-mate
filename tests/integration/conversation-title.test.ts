@@ -1,11 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type Database from 'better-sqlite3'
 import { ConversationModule } from '../../src/core/conversation/conversation-module'
-import {
-  ConversationBusyError,
-  ConversationPersistenceError
-} from '../../src/core/conversation/conversation-repository'
+import { ConversationPersistenceError } from '../../src/core/conversation/conversation-repository'
 import type { LanguageModel, StreamReplyInput } from '../../src/core/llm/language-model'
 import type { ConversationEvent, GenerationAccepted } from '../../src/shared/conversation'
 import { openDatabase } from '../../src/database/database'
@@ -58,102 +55,79 @@ async function send(
 }
 
 describe('first-message conversation titles', () => {
-  it('waits for the full title, blocks concurrent sends, and generates it only once', async () => {
-    const entered = deferred()
+  it('finishes replies while the title is pending, then updates only the title', async () => {
     const finishTitle = deferred()
     const calls: StreamReplyInput[] = []
     const { module, repository } = setup({
       async *streamReply(input) {
         calls.push(input)
         if (input.promptKind === 'conversation-title') {
-          yield 'Coffee '
-          entered.resolve()
           await finishTitle.promise
-          yield 'practice'
+          yield 'Coffee practice'
         } else yield 'What would you like?'
       }
     })
-    const draft = await module.createConversation()
-    const pending = send(module, draft.sessionId)
-    await entered.promise
-    expect(await repository.list()).toEqual([])
-    expect(await repository.history(draft.sessionId)).toEqual([])
-    await expect(send(module, draft.sessionId, 'Another message')).rejects.toThrow(
-      ConversationBusyError
-    )
-    finishTitle.resolve()
-    const first = await pending
+    const { sessionId } = await module.createConversation()
+    const first = await send(module, sessionId)
     expect(first.events.map(({ type }) => type)).toEqual(['started', 'chunk', 'completed'])
-    expect((await repository.find(draft.sessionId))?.title).toBe('Coffee practice')
-    await send(module, draft.sessionId, 'Now tea')
+    expect((await repository.find(sessionId))?.title).toBe('Practice ordering coffee')
+    await send(module, sessionId, 'Now tea')
+    const before = await repository.find(sessionId)
+    finishTitle.resolve()
+    await vi.waitFor(() => expect(first.events.some((e) => e.type === 'titleUpdated')).toBe(true))
+    expect(await repository.find(sessionId)).toEqual({ ...before, title: 'Coffee practice' })
     expect(calls.filter(({ promptKind }) => promptKind === 'conversation-title')).toHaveLength(1)
-    expect(calls[0]).toMatchObject({
-      outputLanguage: 'en',
-      messages: [{ role: 'user', content: 'Practice ordering coffee' }]
-    })
-    expect((await repository.history(draft.sessionId)).map(({ role }) => role)).toEqual([
-      'user',
-      'assistant',
-      'user',
-      'assistant'
-    ])
+    expect(calls[0]).toMatchObject({ outputLanguage: 'en', targetLanguage: 'en' })
   })
 
-  it.each(['', '   ', 'a'.repeat(81), 'line one\nline two'])(
-    'rejects invalid title %j without writing and allows resending',
-    async (invalid) => {
-      let title = invalid
+  it.each(['', '   ', 'a'.repeat(41), 'line one\nline two'])(
+    'keeps the input title when the summary is invalid: %j',
+    async (title) => {
       const { module, repository } = setup({
-        async *streamReply() {
-          yield title
+        async *streamReply(input) {
+          yield input.promptKind === 'conversation-title' ? title : 'Reply'
         }
       })
       const { sessionId } = await module.createConversation()
-      await expect(send(module, sessionId)).rejects.toThrow()
-      expect(await repository.list()).toEqual([])
-      expect(await repository.history(sessionId)).toEqual([])
-      title = 'Coffee practice'
-      await send(module, sessionId)
-      expect((await repository.find(sessionId))?.title).toBe(title)
+      const { events } = await send(module, sessionId)
+      expect(events.at(-1)?.type).toBe('completed')
+      expect((await repository.find(sessionId))?.title).toBe('Practice ordering coffee')
     }
   )
 
-  it('discards partial titles on model failure', async () => {
+  it('keeps the input title when title generation fails', async () => {
     const { module, repository } = setup({
-      async *streamReply() {
-        yield 'Partial'
-        throw new Error('network failed')
+      async *streamReply(input) {
+        if (input.promptKind === 'conversation-title') {
+          yield 'Partial'
+          throw new Error('network failed')
+        }
+        yield 'Reply'
       }
     })
     const { sessionId } = await module.createConversation()
-    await expect(send(module, sessionId)).rejects.toMatchObject({
-      cause: expect.objectContaining({ message: 'network failed' })
-    })
-    expect(await repository.list()).toEqual([])
-    expect(await repository.history(sessionId)).toEqual([])
+    const { events } = await send(module, sessionId)
+    expect(events.at(-1)?.type).toBe('completed')
+    expect((await repository.find(sessionId))?.title).toBe('Practice ordering coffee')
   })
 
-  it('does not persist a late title after cancellation and releases the session for resending', async () => {
-    const entered = deferred()
-    const finishTitle = deferred()
+  it('does not persist a late title after cancellation', async () => {
+    const gate = deferred()
     const { module, repository } = setup({
       async *streamReply() {
-        entered.resolve()
-        await finishTitle.promise
+        await gate.promise
         yield 'Coffee practice'
       }
     })
     const { sessionId } = await module.createConversation()
     const requestId = randomUUID()
-    const pending = module.sendMessage({ sessionId, requestId, text: 'Coffee' }, () => {})
-    await entered.promise
+    const events: ConversationEvent[] = []
+    await module.sendMessage({ sessionId, requestId, text: 'Coffee' }, (e) => events.push(e))
     module.cancelMessage(requestId)
-    finishTitle.resolve()
-    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
-    expect(await repository.list()).toEqual([])
-    expect(await repository.history(sessionId)).toEqual([])
-    await send(module, sessionId)
-    expect(await repository.list()).toHaveLength(1)
+    gate.resolve()
+    await vi.waitFor(() => expect(events.some((e) => e.type === 'cancelled')).toBe(true))
+    expect((await repository.find(sessionId))?.title).toBe('Coffee')
+    expect(await repository.history(sessionId)).toHaveLength(1)
   })
 
   it('rolls back conversation creation when writing the first message fails', async () => {

@@ -18,6 +18,7 @@ export interface StoredMessage {
 
 export interface ConversationRepository {
   create(conversation: StoredConversation): Promise<void>
+  updateTitle(sessionId: string, title: string): Promise<void>
   list(): Promise<StoredConversation[]>
   find(sessionId: string): Promise<StoredConversation | undefined>
   history(sessionId: string): Promise<StoredMessage[]>
