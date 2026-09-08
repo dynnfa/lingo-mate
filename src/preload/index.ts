@@ -19,13 +19,19 @@ import {
 import {
   cancelModelsTestInputSchema,
   cancelModelsTestResultSchema,
-  clearModelsSettingsResultSchema,
-  getModelsSettingsResultSchema,
+  createModelConfigInputSchema,
+  createModelConfigResultSchema,
+  deleteModelConfigInputSchema,
+  deleteModelConfigResultSchema,
+  listModelsConfigsResultSchema,
   MODELS_CHANNELS,
-  saveModelsSettingsInputSchema,
-  saveModelsSettingsResultSchema,
-  testModelsConnectionInputSchema,
-  testModelsConnectionResultSchema
+  setActiveModelConfigInputSchema,
+  setActiveModelConfigResultSchema,
+  testDraftModelsConnectionInputSchema,
+  testModelsConnectionResultSchema,
+  testSavedModelsConnectionInputSchema,
+  updateModelConfigInputSchema,
+  updateModelConfigResultSchema
 } from '../shared/models'
 import {
   getLocaleResultSchema,
@@ -52,28 +58,44 @@ const api: LingoMateApi = {
     }
   },
   models: {
-    async getSettings() {
-      const result: unknown = await ipcRenderer.invoke(MODELS_CHANNELS.getSettings)
-      return getModelsSettingsResultSchema.parse(result)
+    async listConfigs() {
+      const result: unknown = await ipcRenderer.invoke(MODELS_CHANNELS.listConfigs)
+      return listModelsConfigsResultSchema.parse(result)
     },
-    async saveSettings(rawInput) {
-      const input = saveModelsSettingsInputSchema.parse(rawInput)
-      const result: unknown = await ipcRenderer.invoke(MODELS_CHANNELS.saveSettings, input)
-      return saveModelsSettingsResultSchema.parse(result)
+    async createConfig(rawInput) {
+      const input = createModelConfigInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(MODELS_CHANNELS.createConfig, input)
+      return createModelConfigResultSchema.parse(result)
     },
-    async testConnection(rawInput) {
-      const input = testModelsConnectionInputSchema.parse(rawInput)
-      const result: unknown = await ipcRenderer.invoke(MODELS_CHANNELS.testConnection, input)
+    async updateConfig(rawInput) {
+      const input = updateModelConfigInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(MODELS_CHANNELS.updateConfig, input)
+      return updateModelConfigResultSchema.parse(result)
+    },
+    async deleteConfig(rawInput) {
+      const input = deleteModelConfigInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(MODELS_CHANNELS.deleteConfig, input)
+      return deleteModelConfigResultSchema.parse(result)
+    },
+    async setActiveConfig(rawInput) {
+      const input = setActiveModelConfigInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(MODELS_CHANNELS.setActiveConfig, input)
+      return setActiveModelConfigResultSchema.parse(result)
+    },
+    async testSavedConnection(rawInput) {
+      const input = testSavedModelsConnectionInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(MODELS_CHANNELS.testSavedConnection, input)
+      return testModelsConnectionResultSchema.parse(result)
+    },
+    async testDraftConnection(rawInput) {
+      const input = testDraftModelsConnectionInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(MODELS_CHANNELS.testDraftConnection, input)
       return testModelsConnectionResultSchema.parse(result)
     },
     async cancelTest(rawInput) {
       const input = cancelModelsTestInputSchema.parse(rawInput)
       const result: unknown = await ipcRenderer.invoke(MODELS_CHANNELS.cancelTest, input)
       return cancelModelsTestResultSchema.parse(result)
-    },
-    async clearSettings() {
-      const result: unknown = await ipcRenderer.invoke(MODELS_CHANNELS.clearSettings)
-      return clearModelsSettingsResultSchema.parse(result)
     }
   },
   usage: {

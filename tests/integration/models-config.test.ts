@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { AddressInfo } from 'node:net'
+import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { ConfiguredLanguageModel } from '../../src/core/llm/configured-language-model'
 import { ModelConnectionTester } from '../../src/core/llm/model-connection-tester'
@@ -110,8 +111,8 @@ function writeCompletion(res: ServerResponse, content: string): void {
   )
 }
 
-function memoryStore(): ModelsConfigStore & { records: unknown[] } {
-  const records: unknown[] = []
+function memoryStore(initial?: unknown): ModelsConfigStore & { records: unknown[] } {
+  const records: unknown[] = initial === undefined ? [] : [initial]
   return {
     records,
     read: () => (records.length > 0 ? records[records.length - 1] : undefined),
@@ -203,13 +204,24 @@ describe('models integration with a fake OpenAI-compatible service', () => {
   })
 
   function serviceFor(store: ModelsConfigStore): ModelConfigService {
-    return new ModelConfigService(store, fakeVault)
+    return new ModelConfigService(store, fakeVault, randomUUID)
   }
 
-  it('streams a reply through the saved config with an explicit output language', async () => {
+  async function collectReply(
+    model: ConfiguredLanguageModel,
+    signal = new AbortController().signal
+  ): Promise<string> {
+    let text = ''
+    for await (const delta of model.streamReply(STREAM_INPUT(signal))) {
+      text += delta
+    }
+    return text
+  }
+
+  it('streams a reply through the active config with an explicit output language', async () => {
     const store = memoryStore()
     const service = serviceFor(store)
-    service.save({
+    service.createConfig({
       protocol: 'openai-compatible',
       baseUrl: `${streamingServer.baseUrl}/v1`,
       modelId: 'fake-model',
@@ -217,12 +229,7 @@ describe('models integration with a fake OpenAI-compatible service', () => {
     })
     const model = new ConfiguredLanguageModel(service, createClient)
 
-    const chunks: string[] = []
-    for await (const delta of model.streamReply(STREAM_INPUT(new AbortController().signal))) {
-      chunks.push(delta)
-    }
-
-    expect(chunks.join('')).toBe('你好，世界')
+    expect(await collectReply(model)).toBe('你好，世界')
     const request = streamingServer.requests.at(-1)
     expect(request?.path).toBe('/v1/chat/completions')
     expect(request?.body.model).toBe('fake-model')
@@ -233,9 +240,8 @@ describe('models integration with a fake OpenAI-compatible service', () => {
   })
 
   it('sends the configured api key and maps auth failures to safe codes', async () => {
-    const store = memoryStore()
-    const service = serviceFor(store)
-    service.save({
+    const service = serviceFor(memoryStore())
+    service.createConfig({
       protocol: 'openai-compatible',
       baseUrl: `${errorServer.baseUrl}/auth`,
       modelId: 'fake-model',
@@ -320,10 +326,66 @@ describe('models integration with a fake OpenAI-compatible service', () => {
     expect(request?.body.stream).not.toBe(true)
   })
 
-  it('keeps an in-flight stream on its snapshot and applies saves from the next request', async () => {
+  it('keeps multiple configs across restarts with isolated credentials and a stable active selection', () => {
+    const store = memoryStore()
+    const first = serviceFor(store)
+    const created = first.createConfig({
+      protocol: 'openai-compatible',
+      baseUrl: `${streamingServer.baseUrl}/v1`,
+      modelId: 'model-a',
+      credential: { action: 'replace', apiKey: 'sk-a' }
+    })
+    const configA = created.configs[0]
+    const createdB = first.createConfig({
+      protocol: 'openai-compatible',
+      baseUrl: `${secondServer.baseUrl}/v1`,
+      modelId: 'model-b',
+      credential: { action: 'keep' }
+    })
+    const configB = createdB.configs[1]
+    first.setActiveConfig(configB.id)
+
+    // 模拟重启：同一存储上的新服务实例
+    const restarted = serviceFor(store)
+    const list = restarted.getList()
+    expect(list.configs.map((config) => [config.id, config.modelId, config.hasApiKey])).toEqual([
+      [configA.id, 'model-a', true],
+      [configB.id, 'model-b', false]
+    ])
+    expect(list.activeConfigId).toBe(configB.id)
+
+    // 凭据按记录归属，不串用
+    expect(restarted.resolveConfigSnapshot(configA.id)).toMatchObject({ apiKey: 'sk-a' })
+    expect(restarted.resolveConfigSnapshot(configB.id)).toMatchObject({ apiKey: undefined })
+    expect(restarted.resolveSnapshot()).toMatchObject({ modelId: 'model-b', apiKey: undefined })
+  })
+
+  it('row tests resolve their own target without changing the active selection', () => {
+    const service = serviceFor(memoryStore())
+    const created = service.createConfig({
+      protocol: 'openai-compatible',
+      baseUrl: `${streamingServer.baseUrl}/v1`,
+      modelId: 'model-a',
+      credential: { action: 'keep' }
+    })
+    const createdB = service.createConfig({
+      protocol: 'openai-compatible',
+      baseUrl: `${secondServer.baseUrl}/v1`,
+      modelId: 'model-b',
+      credential: { action: 'keep' }
+    })
+
+    // 行测试按 ID 解析目标配置；当前选择保持第一条
+    const rowSnapshot = service.resolveConfigSnapshot(createdB.configs[1].id)
+    expect(rowSnapshot).toMatchObject({ modelId: 'model-b' })
+    expect(service.getList().activeConfigId).toBe(created.configs[0].id)
+    expect(service.resolveSnapshot()).toMatchObject({ modelId: 'model-a' })
+  })
+
+  it('applies edits, switches, and deletions only to new requests, never in-flight streams', async () => {
     const store = memoryStore()
     const service = serviceFor(store)
-    service.save({
+    const created = service.createConfig({
       protocol: 'openai-compatible',
       baseUrl: `${slowServer.baseUrl}/v1`,
       modelId: 'fake-model',
@@ -335,11 +397,12 @@ describe('models integration with a fake OpenAI-compatible service', () => {
     const iterator = model.streamReply(STREAM_INPUT(controller.signal, 'en'))
     const firstChunk = iterator.next()
 
-    // 在途流未完成时切换配置到另一台服务
-    service.save({
+    // 在途流未完成时编辑该记录
+    service.updateConfig({
+      configId: created.configs[0].id,
       protocol: 'openai-compatible',
       baseUrl: `${secondServer.baseUrl}/v1`,
-      modelId: 'other-model',
+      modelId: 'edited-model',
       credential: { action: 'keep' }
     })
 
@@ -349,13 +412,15 @@ describe('models integration with a fake OpenAI-compatible service', () => {
     // 排空旧流
     await iterator.next()
 
-    // 下一次请求使用新配置
-    const chunks: string[] = []
-    for await (const delta of model.streamReply(STREAM_INPUT(new AbortController().signal, 'en'))) {
-      chunks.push(delta)
-    }
-    expect(chunks.join('')).toBe('second-service')
-    expect(secondServer.requests.at(-1)?.body.model).toBe('other-model')
+    // 下一次请求使用编辑后的配置
+    expect(await collectReply(model)).toBe('second-service')
+    expect(secondServer.requests.at(-1)?.body.model).toBe('edited-model')
+
+    // 删除当前模型：在途流不受影响，后续请求回到未配置
+    const pendingStream = model.streamReply(STREAM_INPUT(new AbortController().signal, 'en')).next()
+    service.deleteConfig(created.configs[0].id)
+    await pendingStream
+    await expect(collectReply(model)).rejects.toBeInstanceOf(ModelNotConfiguredError)
   })
 
   it('aborts an in-flight stream with AbortError semantics', async () => {

@@ -416,7 +416,8 @@ describe('ConversationModule', () => {
           decrypt: () => {
             throw cause
           }
-        }
+        },
+        () => 'test-config-id'
       )
       const module = new ConversationModule(
         new ConfiguredLanguageModel(config, unusedCreateClient),

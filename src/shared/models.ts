@@ -1,11 +1,14 @@
 import { z } from 'zod'
 
 export const MODELS_CHANNELS = {
-  getSettings: 'models:getSettings',
-  saveSettings: 'models:saveSettings',
-  testConnection: 'models:testConnection',
-  cancelTest: 'models:cancelTest',
-  clearSettings: 'models:clearSettings'
+  listConfigs: 'models:listConfigs',
+  createConfig: 'models:createConfig',
+  updateConfig: 'models:updateConfig',
+  deleteConfig: 'models:deleteConfig',
+  setActiveConfig: 'models:setActiveConfig',
+  testSavedConnection: 'models:testSavedConnection',
+  testDraftConnection: 'models:testDraftConnection',
+  cancelTest: 'models:cancelTest'
 } as const
 
 // 首版只支持 OpenAI 兼容协议；展示与校验共用同一来源，不提供尚未实现的选项。
@@ -25,46 +28,86 @@ export const credentialUpdateSchema = z.discriminatedUnion('action', [
 ])
 export type CredentialUpdate = z.infer<typeof credentialUpdateSchema>
 
+// 记录 ID 由 Main 注入 Core 的 ID 工厂生成（UUID），不使用 Model ID 或
+// 数组下标作主键；协议层统一按 UUID 校验，非法 ID 返回稳定错误码。
+export const modelConfigIdSchema = z.string().uuid()
+export type ModelConfigId = string
+
 const modelDraftConfigSchema = z.object({
   protocol: modelProtocolSchema,
   baseUrl: z.string().trim().min(1).max(2_048),
   modelId: z.string().trim().min(1).max(200)
 })
 
-export const saveModelsSettingsInputSchema = modelDraftConfigSchema.extend({
+export const createModelConfigInputSchema = modelDraftConfigSchema.extend({
   credential: credentialUpdateSchema
 })
-export type SaveModelsSettingsInput = z.infer<typeof saveModelsSettingsInputSchema>
+export type CreateModelConfigInput = z.infer<typeof createModelConfigInputSchema>
 
-export const testModelsConnectionInputSchema = modelDraftConfigSchema.extend({
+export const updateModelConfigInputSchema = createModelConfigInputSchema.extend({
+  configId: modelConfigIdSchema
+})
+export type UpdateModelConfigInput = z.infer<typeof updateModelConfigInputSchema>
+
+export const deleteModelConfigInputSchema = z.object({
+  configId: modelConfigIdSchema
+})
+export type DeleteModelConfigInput = z.infer<typeof deleteModelConfigInputSchema>
+
+export const setActiveModelConfigInputSchema = z.object({
+  configId: modelConfigIdSchema
+})
+export type SetActiveModelConfigInput = z.infer<typeof setActiveModelConfigInputSchema>
+
+// 行测试只提交 configId 与 requestId：目标配置和密钥由 Main 调用 Core 从
+// 存储读取，Renderer 草稿不影响已保存版本。
+export const testSavedModelsConnectionInputSchema = z.object({
+  configId: modelConfigIdSchema,
+  requestId: z.string().uuid()
+})
+export type TestSavedModelsConnectionInput = z.infer<typeof testSavedModelsConnectionInputSchema>
+
+// 草稿测试携带当前表单输入；编辑已有配置时通过 editTargetConfigId 显式
+// 声明凭据 keep 归属哪条记录，新增草稿不继承任何已存凭据。
+export const testDraftModelsConnectionInputSchema = modelDraftConfigSchema.extend({
   requestId: z.string().uuid(),
+  editTargetConfigId: modelConfigIdSchema.optional(),
   credential: credentialUpdateSchema
 })
-export type TestModelsConnectionInput = z.infer<typeof testModelsConnectionInputSchema>
+export type TestDraftModelsConnectionInput = z.infer<typeof testDraftModelsConnectionInputSchema>
 
 export const cancelModelsTestInputSchema = z.object({
   requestId: z.string().uuid()
 })
 export type CancelModelsTestInput = z.infer<typeof cancelModelsTestInputSchema>
 
-// 安全读取结果：判别联合，未配置不以空字符串伪装有效配置；
-// hasApiKey 只表达布尔状态，密钥本体永不回传 Renderer。
-export const modelsSettingsSummarySchema = z.discriminatedUnion('configured', [
-  z.object({ configured: z.literal(false) }),
-  z.object({
-    configured: z.literal(true),
-    protocol: modelProtocolSchema,
-    baseUrl: z.string(),
-    modelId: z.string(),
-    hasApiKey: z.boolean(),
-    // 已保存密钥存在但无法解密时为 true：提示用户重新输入，不静默当作无密钥。
-    apiKeyUndecryptable: z.boolean()
-  })
-])
-export type ModelsSettingsSummary = z.infer<typeof modelsSettingsSummarySchema>
+// 安全摘要：逐条记录只暴露非敏感字段、密钥布尔状态与脱敏预览，密钥本体
+//（明文或密文）永不回传 Renderer。
+export const modelConfigSummarySchema = z.object({
+  id: z.string().min(1),
+  protocol: modelProtocolSchema,
+  baseUrl: z.string(),
+  modelId: z.string(),
+  hasApiKey: z.boolean(),
+  // 已保存密钥存在但无法解密时为 true：提示用户重新配置，不静默当作无密钥。
+  apiKeyUndecryptable: z.boolean(),
+  // 脱敏预览：前 4 位 + 固定掩码 + 后 4 位，由 Core 在持有明文的进程内生成；
+  // null 表示无密钥或密钥不可解。长度上限即预览固定长度，超出视为协议违规。
+  apiKeyPreview: z.string().min(1).max(12).nullable()
+})
+export type ModelConfigSummary = z.infer<typeof modelConfigSummarySchema>
+
+export const modelsConfigListSchema = z.object({
+  // 当前使用模型：null 表示尚未选择（不回退到任何默认记录）。
+  activeConfigId: z.string().min(1).nullable(),
+  configs: z.array(modelConfigSummarySchema)
+})
+export type ModelsConfigList = z.infer<typeof modelsConfigListSchema>
 
 export const MODELS_ERROR_CODES = [
   'UNTRUSTED_SOURCE',
+  'INVALID_CONFIG_ID',
+  'CONFIG_NOT_FOUND',
   'INVALID_BASE_URL',
   'INVALID_MODEL_ID',
   'INVALID_API_KEY',
@@ -92,23 +135,23 @@ export const modelsErrorSchema = z.object({
 })
 export type ModelsError = z.infer<typeof modelsErrorSchema>
 
-export const getModelsSettingsResultSchema = z.discriminatedUnion('status', [
-  z.object({ status: z.literal('ok'), summary: modelsSettingsSummarySchema }),
+// 集合读取 / 变更操作共用同一结果形状：成功携带完整安全列表。
+export const modelsConfigListResultSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('ok'), list: modelsConfigListSchema }),
   z.object({ status: z.literal('error'), error: modelsErrorSchema })
 ])
-export type GetModelsSettingsResult = z.infer<typeof getModelsSettingsResultSchema>
+export type ModelsConfigListResult = z.infer<typeof modelsConfigListResultSchema>
 
-export const saveModelsSettingsResultSchema = z.discriminatedUnion('status', [
-  z.object({ status: z.literal('ok'), summary: modelsSettingsSummarySchema }),
-  z.object({ status: z.literal('error'), error: modelsErrorSchema })
-])
-export type SaveModelsSettingsResult = z.infer<typeof saveModelsSettingsResultSchema>
-
-export const clearModelsSettingsResultSchema = z.discriminatedUnion('status', [
-  z.object({ status: z.literal('ok'), summary: modelsSettingsSummarySchema }),
-  z.object({ status: z.literal('error'), error: modelsErrorSchema })
-])
-export type ClearModelsSettingsResult = z.infer<typeof clearModelsSettingsResultSchema>
+export const listModelsConfigsResultSchema = modelsConfigListResultSchema
+export const createModelConfigResultSchema = modelsConfigListResultSchema
+export const updateModelConfigResultSchema = modelsConfigListResultSchema
+export const deleteModelConfigResultSchema = modelsConfigListResultSchema
+export const setActiveModelConfigResultSchema = modelsConfigListResultSchema
+export type ListModelsConfigsResult = ModelsConfigListResult
+export type CreateModelConfigResult = ModelsConfigListResult
+export type UpdateModelConfigResult = ModelsConfigListResult
+export type DeleteModelConfigResult = ModelsConfigListResult
+export type SetActiveModelConfigResult = ModelsConfigListResult
 
 export const testModelsConnectionResultSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('ok') }),
@@ -123,11 +166,14 @@ export const cancelModelsTestResultSchema = z.discriminatedUnion('status', [
 export type CancelModelsTestResult = z.infer<typeof cancelModelsTestResultSchema>
 
 export interface ModelsApi {
-  getSettings(): Promise<GetModelsSettingsResult>
-  saveSettings(input: SaveModelsSettingsInput): Promise<SaveModelsSettingsResult>
-  testConnection(input: TestModelsConnectionInput): Promise<TestModelsConnectionResult>
+  listConfigs(): Promise<ModelsConfigListResult>
+  createConfig(input: CreateModelConfigInput): Promise<CreateModelConfigResult>
+  updateConfig(input: UpdateModelConfigInput): Promise<UpdateModelConfigResult>
+  deleteConfig(input: DeleteModelConfigInput): Promise<DeleteModelConfigResult>
+  setActiveConfig(input: SetActiveModelConfigInput): Promise<SetActiveModelConfigResult>
+  testSavedConnection(input: TestSavedModelsConnectionInput): Promise<TestModelsConnectionResult>
+  testDraftConnection(input: TestDraftModelsConnectionInput): Promise<TestModelsConnectionResult>
   cancelTest(input: CancelModelsTestInput): Promise<CancelModelsTestResult>
-  clearSettings(): Promise<ClearModelsSettingsResult>
 }
 
 const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]', '::1'])

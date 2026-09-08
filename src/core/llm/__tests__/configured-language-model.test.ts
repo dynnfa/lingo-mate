@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { ConfiguredLanguageModel } from '../configured-language-model'
 import { ModelConfigService, type CredentialVault, type ModelsConfigStore } from '../model-config'
@@ -32,7 +33,7 @@ const createClient: CreateLlmClient = (config) =>
 describe('ConfiguredLanguageModel', () => {
   it('throws ModelNotConfiguredError when nothing is saved', async () => {
     const model = new ConfiguredLanguageModel(
-      new ModelConfigService(memoryStore(), vault),
+      new ModelConfigService(memoryStore(), vault, randomUUID),
       createClient
     )
     const stream = model.streamReply({

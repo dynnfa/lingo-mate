@@ -2,9 +2,12 @@ import type { ModelsErrorCode } from '../../../shared/models'
 
 type ModelsErrorKey =
   | 'errors:models.untrustedSource'
+  | 'errors:models.invalidConfigId'
+  | 'errors:models.configNotFound'
   | 'errors:models.readFailed'
   | 'errors:models.writeFailed'
-  | 'errors:models.clearFailed'
+  | 'errors:models.deleteFailed'
+  | 'errors:models.setActiveFailed'
   | 'errors:models.invalidBaseUrl'
   | 'errors:models.invalidModelId'
   | 'errors:models.invalidApiKey'
@@ -23,6 +26,8 @@ type ModelsErrorKey =
 // 穷尽的显式映射，不使用任意字符串断言绕过 key 校验。
 const MODELS_ERROR_KEYS: Record<ModelsErrorCode, ModelsErrorKey> = {
   UNTRUSTED_SOURCE: 'errors:models.untrustedSource',
+  INVALID_CONFIG_ID: 'errors:models.invalidConfigId',
+  CONFIG_NOT_FOUND: 'errors:models.configNotFound',
   INVALID_BASE_URL: 'errors:models.invalidBaseUrl',
   INVALID_MODEL_ID: 'errors:models.invalidModelId',
   INVALID_API_KEY: 'errors:models.invalidApiKey',
@@ -45,7 +50,12 @@ export function modelsErrorKey(code: ModelsErrorCode): ModelsErrorKey {
   return MODELS_ERROR_KEYS[code]
 }
 
-// 清除配置失败时写入错误换成清除语境文案，其余码保持原语义。
-export function modelsClearErrorKey(code: ModelsErrorCode): ModelsErrorKey {
-  return code === 'MODELS_WRITE_FAILED' ? 'errors:models.clearFailed' : modelsErrorKey(code)
+// 删除失败时写入错误换成删除语境文案，其余码保持原语义。
+export function modelsDeleteErrorKey(code: ModelsErrorCode): ModelsErrorKey {
+  return code === 'MODELS_WRITE_FAILED' ? 'errors:models.deleteFailed' : modelsErrorKey(code)
+}
+
+// 保存当前模型选择失败使用切换语境文案，其余码保持原语义。
+export function modelsSetActiveErrorKey(code: ModelsErrorCode): ModelsErrorKey {
+  return code === 'MODELS_WRITE_FAILED' ? 'errors:models.setActiveFailed' : modelsErrorKey(code)
 }

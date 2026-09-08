@@ -4,6 +4,7 @@ import { ModelConnectionTester } from '../../core/llm/model-connection-tester'
 import { LlmClient, type CreateLlmClient } from '../../core/llm/llm-client'
 import { LlmUsageRecorder } from '../../core/llm/llm-usage-recorder'
 import {
+  ModelConfigNotFoundError,
   ModelConfigValidationError,
   ModelsWriteError,
   type ModelConfigService,
@@ -11,9 +12,12 @@ import {
 } from '../../core/llm/model-config'
 import {
   MODELS_CHANNELS,
-  type SaveModelsSettingsInput,
-  type TestModelsConnectionInput,
-  type TestModelsConnectionResult
+  type CreateModelConfigInput,
+  type ModelsConfigList,
+  type TestDraftModelsConnectionInput,
+  type TestModelsConnectionResult,
+  type TestSavedModelsConnectionInput,
+  type UpdateModelConfigInput
 } from '../../shared/models'
 import { registerModelsIpc } from '../models-ipc'
 
@@ -44,6 +48,8 @@ const createClient: CreateLlmClient = (config) =>
   )
 
 const REQUEST_ID = '3f70b8ae-7ad9-4eab-aaf4-1cae54aa2477'
+const OTHER_REQUEST_ID = '0d4b2f7e-52c8-4a61-9ac1-30b1e6de9d02'
+const CONFIG_ID = 'f9364f0f-f3f4-4ea6-a31d-b55754aa2477'
 
 class FakeSender extends EventEmitter {
   readonly id = 42
@@ -77,27 +83,55 @@ const CONFIGURED_SNAPSHOT: RuntimeModelConfig & { configured: true } = {
   apiKey: undefined
 }
 
+const SAFE_LIST: ModelsConfigList = {
+  activeConfigId: CONFIG_ID,
+  configs: [
+    {
+      id: CONFIG_ID,
+      protocol: 'openai-compatible',
+      baseUrl: 'https://api.example.com/v1',
+      modelId: 'gpt-test',
+      hasApiKey: false,
+      apiKeyUndecryptable: false,
+      apiKeyPreview: null
+    }
+  ]
+}
+
 function fakeService(overrides: Partial<ModelConfigService> = {}): ModelConfigService {
   return {
-    getSummary: vi.fn(() => ({ configured: false })),
+    getList: vi.fn(() => SAFE_LIST),
     resolveSnapshot: vi.fn(() => ({ configured: false })),
-    save: vi.fn(),
-    clear: vi.fn(),
+    resolveConfigSnapshot: vi.fn(() => CONFIGURED_SNAPSHOT),
+    createConfig: vi.fn(),
+    updateConfig: vi.fn(),
+    deleteConfig: vi.fn(),
+    setActiveConfig: vi.fn(),
     resolveDraftConfig: vi.fn(() => ({ config: CONFIGURED_SNAPSHOT, credentialRecord: undefined })),
     ...overrides
   } as unknown as ModelConfigService
 }
 
-const SAVE_INPUT: SaveModelsSettingsInput = {
+const CREATE_INPUT: CreateModelConfigInput = {
   protocol: 'openai-compatible',
   baseUrl: 'https://api.example.com/v1',
   modelId: 'gpt-test',
   credential: { action: 'keep' }
 }
 
-const TEST_INPUT: TestModelsConnectionInput = {
+const UPDATE_INPUT: UpdateModelConfigInput = {
+  configId: CONFIG_ID,
+  ...CREATE_INPUT
+}
+
+const SAVED_TEST_INPUT: TestSavedModelsConnectionInput = {
+  configId: CONFIG_ID,
+  requestId: REQUEST_ID
+}
+
+const DRAFT_TEST_INPUT: TestDraftModelsConnectionInput = {
   requestId: REQUEST_ID,
-  ...SAVE_INPUT
+  ...CREATE_INPUT
 }
 
 beforeEach(() => {
@@ -125,159 +159,240 @@ describe('models IPC', () => {
         { sender, senderFrame: { url: RENDERER_URL } },
         { sender, senderFrame: null }
       ]) {
-        expect(await registeredHandler(channel)(event, TEST_INPUT)).toEqual({
+        expect(await registeredHandler(channel)(event, SAVED_TEST_INPUT)).toEqual({
           status: 'error',
           error: { code: 'UNTRUSTED_SOURCE' }
         })
       }
-      expect(service.getSummary).not.toHaveBeenCalled()
-      expect(service.save).not.toHaveBeenCalled()
-      expect(service.clear).not.toHaveBeenCalled()
+      expect(service.getList).not.toHaveBeenCalled()
+      expect(service.createConfig).not.toHaveBeenCalled()
+      expect(service.updateConfig).not.toHaveBeenCalled()
+      expect(service.deleteConfig).not.toHaveBeenCalled()
+      expect(service.setActiveConfig).not.toHaveBeenCalled()
+      expect(service.resolveConfigSnapshot).not.toHaveBeenCalled()
       expect(service.resolveDraftConfig).not.toHaveBeenCalled()
       expect(tester.test).not.toHaveBeenCalled()
     }
   )
 
-  it('returns the safe summary for getSettings', () => {
-    const service = fakeService({
-      getSummary: () => ({
-        configured: true,
-        protocol: 'openai-compatible',
-        baseUrl: 'https://api.example.com/v1',
-        modelId: 'gpt-test',
-        hasApiKey: true,
-        apiKeyUndecryptable: false
-      })
-    })
-    registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
+  it('returns the safe collection summary for listConfigs', () => {
+    registerModelsIpc(fakeService(), new ModelConnectionTester(1_000, createClient), RENDERER_URL)
 
-    const result = registeredHandler(MODELS_CHANNELS.getSettings)(
+    const result = registeredHandler(MODELS_CHANNELS.listConfigs)(
       { sender: new FakeSender() },
       undefined
     )
-    expect(result).toEqual({
-      status: 'ok',
-      summary: {
-        configured: true,
-        protocol: 'openai-compatible',
-        baseUrl: 'https://api.example.com/v1',
-        modelId: 'gpt-test',
-        hasApiKey: true,
-        apiKeyUndecryptable: false
-      }
-    })
+    expect(result).toEqual({ status: 'ok', list: SAFE_LIST })
   })
 
   it('maps read failures to MODELS_READ_FAILED without leaking internals', () => {
     const service = fakeService({
-      getSummary: () => {
+      getList: () => {
         throw new Error('EACCES disk')
       }
     })
     registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
 
-    const result = registeredHandler(MODELS_CHANNELS.getSettings)(
+    const result = registeredHandler(MODELS_CHANNELS.listConfigs)(
       { sender: new FakeSender() },
       undefined
     )
     expect(result).toEqual({ status: 'error', error: { code: 'MODELS_READ_FAILED' } })
   })
 
-  it('validates save input and maps persistence failures to safe codes', () => {
+  it('creates a config and returns the refreshed safe list', () => {
     const service = fakeService({
-      save: () => {
+      createConfig: vi.fn(() => SAFE_LIST)
+    })
+    registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
+
+    const result = registeredHandler(MODELS_CHANNELS.createConfig)(
+      { sender: new FakeSender() },
+      CREATE_INPUT
+    )
+    expect(service.createConfig).toHaveBeenCalledWith(CREATE_INPUT)
+    expect(result).toEqual({ status: 'ok', list: SAFE_LIST })
+  })
+
+  it.each([
+    ['create', MODELS_CHANNELS.createConfig] as const,
+    ['update', MODELS_CHANNELS.updateConfig] as const
+  ])('validates %s input and maps failures to safe codes', (_name, channel) => {
+    const service = fakeService({
+      createConfig: () => {
+        throw new ModelsWriteError(new Error('io'))
+      },
+      updateConfig: () => {
         throw new ModelsWriteError(new Error('io'))
       }
     })
     registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
 
-    const invalid = registeredHandler(MODELS_CHANNELS.saveSettings)(
+    const invalid = registeredHandler(channel)(
       { sender: new FakeSender() },
-      { ...SAVE_INPUT, baseUrl: '' }
+      { ...UPDATE_INPUT, baseUrl: '' }
     )
     expect(invalid).toEqual({
       status: 'error',
       error: { code: 'INVALID_BASE_URL', field: 'baseUrl' }
     })
 
-    const rejected = registeredHandler(MODELS_CHANNELS.saveSettings)(
-      { sender: new FakeSender() },
-      SAVE_INPUT
-    )
+    const rejected = registeredHandler(channel)({ sender: new FakeSender() }, UPDATE_INPUT)
     expect(rejected).toEqual({ status: 'error', error: { code: 'MODELS_WRITE_FAILED' } })
   })
 
-  it('rejects saves with unknown error codes when nothing specific applies', () => {
-    const service = fakeService({
-      save: () => {
-        throw new ModelConfigValidationError('INVALID_BASE_URL')
-      }
-    })
+  it('rejects non-uuid config ids with a stable code before touching the service', async () => {
+    const service = fakeService()
     registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
-
-    const result = registeredHandler(MODELS_CHANNELS.saveSettings)(
-      { sender: new FakeSender() },
-      SAVE_INPUT
-    )
-    expect(result).toEqual({ status: 'error', error: { code: 'INVALID_BASE_URL' } })
-  })
-
-  it('clears settings and returns the unconfigured summary', () => {
-    const service = fakeService({
-      clear: vi.fn(),
-      getSummary: () => ({ configured: false })
-    })
-    registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
-
-    const result = registeredHandler(MODELS_CHANNELS.clearSettings)(
-      { sender: new FakeSender() },
-      undefined
-    )
-    expect(service.clear).toHaveBeenCalledTimes(1)
-    expect(result).toEqual({ status: 'ok', summary: { configured: false } })
-  })
-
-  it('maps clear failures to MODELS_WRITE_FAILED', () => {
-    const failing = fakeService({
-      clear: () => {
-        throw new ModelsWriteError(new Error('io'))
-      }
-    })
-    registerModelsIpc(failing, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
 
     expect(
-      registeredHandler(MODELS_CHANNELS.clearSettings)({ sender: new FakeSender() }, undefined)
-    ).toEqual({ status: 'error', error: { code: 'MODELS_WRITE_FAILED' } })
+      registeredHandler(MODELS_CHANNELS.updateConfig)(
+        { sender: new FakeSender() },
+        { ...UPDATE_INPUT, configId: 'model-a' }
+      )
+    ).toEqual({ status: 'error', error: { code: 'INVALID_CONFIG_ID' } })
+    expect(
+      registeredHandler(MODELS_CHANNELS.deleteConfig)(
+        { sender: new FakeSender() },
+        { configId: 'model-a' }
+      )
+    ).toEqual({ status: 'error', error: { code: 'INVALID_CONFIG_ID' } })
+    expect(
+      registeredHandler(MODELS_CHANNELS.setActiveConfig)(
+        { sender: new FakeSender() },
+        { configId: 'model-a' }
+      )
+    ).toEqual({ status: 'error', error: { code: 'INVALID_CONFIG_ID' } })
+    await expect(
+      registeredHandler(MODELS_CHANNELS.testSavedConnection)(
+        { sender: new FakeSender() },
+        { configId: 'model-a', requestId: REQUEST_ID }
+      )
+    ).resolves.toEqual({ status: 'error', error: { code: 'INVALID_CONFIG_ID' } })
+    expect(service.updateConfig).not.toHaveBeenCalled()
   })
 
-  it('runs one connection test per sender and resolves through the tester', async () => {
+  it('maps missing-record errors to CONFIG_NOT_FOUND across id-scoped operations', async () => {
+    const service = fakeService({
+      updateConfig: () => {
+        throw new ModelConfigNotFoundError(CONFIG_ID)
+      },
+      deleteConfig: () => {
+        throw new ModelConfigNotFoundError(CONFIG_ID)
+      },
+      setActiveConfig: () => {
+        throw new ModelConfigNotFoundError(CONFIG_ID)
+      },
+      resolveConfigSnapshot: () => {
+        throw new ModelConfigNotFoundError(CONFIG_ID)
+      }
+    })
+    registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
+
+    expect(
+      registeredHandler(MODELS_CHANNELS.updateConfig)({ sender: new FakeSender() }, UPDATE_INPUT)
+    ).toEqual({ status: 'error', error: { code: 'CONFIG_NOT_FOUND' } })
+    expect(
+      registeredHandler(MODELS_CHANNELS.deleteConfig)(
+        { sender: new FakeSender() },
+        { configId: CONFIG_ID }
+      )
+    ).toEqual({ status: 'error', error: { code: 'CONFIG_NOT_FOUND' } })
+    expect(
+      registeredHandler(MODELS_CHANNELS.setActiveConfig)(
+        { sender: new FakeSender() },
+        { configId: CONFIG_ID }
+      )
+    ).toEqual({ status: 'error', error: { code: 'CONFIG_NOT_FOUND' } })
+    await expect(
+      registeredHandler(MODELS_CHANNELS.testSavedConnection)(
+        { sender: new FakeSender() },
+        SAVED_TEST_INPUT
+      )
+    ).resolves.toEqual({ status: 'error', error: { code: 'CONFIG_NOT_FOUND' } })
+  })
+
+  it('deletes and selects configs by id and returns the refreshed list', () => {
+    const service = fakeService({
+      deleteConfig: vi.fn(() => SAFE_LIST),
+      setActiveConfig: vi.fn(() => SAFE_LIST)
+    })
+    registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
+
+    expect(
+      registeredHandler(MODELS_CHANNELS.deleteConfig)(
+        { sender: new FakeSender() },
+        { configId: CONFIG_ID }
+      )
+    ).toEqual({ status: 'ok', list: SAFE_LIST })
+    expect(service.deleteConfig).toHaveBeenCalledWith(CONFIG_ID)
+
+    expect(
+      registeredHandler(MODELS_CHANNELS.setActiveConfig)(
+        { sender: new FakeSender() },
+        { configId: CONFIG_ID }
+      )
+    ).toEqual({ status: 'ok', list: SAFE_LIST })
+    expect(service.setActiveConfig).toHaveBeenCalledWith(CONFIG_ID)
+  })
+
+  it('tests a saved config by id through the shared tester', async () => {
     const service = fakeService()
     const tester = {
-      test: vi.fn(
-        async (_config: RuntimeModelConfig & { configured: true }, signal: AbortSignal) => {
-          if (signal.aborted) {
-            return {
-              status: 'error',
-              error: { code: 'TEST_CANCELLED' }
-            } as TestModelsConnectionResult
-          }
-          return { status: 'ok' } as TestModelsConnectionResult
-        }
+      test: vi.fn(async () => ({ status: 'ok' }) as TestModelsConnectionResult)
+    } as unknown as ModelConnectionTester
+    registerModelsIpc(service, tester, RENDERER_URL)
+
+    await expect(
+      registeredHandler(MODELS_CHANNELS.testSavedConnection)(
+        { sender: new FakeSender() },
+        SAVED_TEST_INPUT
       )
+    ).resolves.toEqual({ status: 'ok' })
+    expect(service.resolveConfigSnapshot).toHaveBeenCalledWith(CONFIG_ID)
+    expect(tester.test).toHaveBeenCalledWith(CONFIGURED_SNAPSHOT, expect.any(AbortSignal))
+  })
+
+  it('shares the single-test quota between saved and draft connection tests', async () => {
+    const service = fakeService()
+    const tester = {
+      test: vi.fn(async () => ({ status: 'ok' }) as TestModelsConnectionResult)
     } as unknown as ModelConnectionTester
     registerModelsIpc(service, tester, RENDERER_URL)
 
     const sender = new FakeSender()
-    const first = registeredHandler(MODELS_CHANNELS.testConnection)({ sender }, TEST_INPUT)
-    const second = registeredHandler(MODELS_CHANNELS.testConnection)({ sender }, TEST_INPUT)
-
-    await expect(first).resolves.toEqual({ status: 'ok' })
-    await expect(second).resolves.toEqual({ status: 'error', error: { code: 'TEST_IN_PROGRESS' } })
-
-    // 结束后可以再次测试
+    const saved = registeredHandler(MODELS_CHANNELS.testSavedConnection)(
+      { sender },
+      SAVED_TEST_INPUT
+    )
     await expect(
-      registeredHandler(MODELS_CHANNELS.testConnection)({ sender }, TEST_INPUT)
+      registeredHandler(MODELS_CHANNELS.testDraftConnection)({ sender }, DRAFT_TEST_INPUT)
+    ).resolves.toEqual({ status: 'error', error: { code: 'TEST_IN_PROGRESS' } })
+    await expect(saved).resolves.toEqual({ status: 'ok' })
+
+    // 结束后槽位释放，草稿测试可立即进行
+    await expect(
+      registeredHandler(MODELS_CHANNELS.testDraftConnection)({ sender }, DRAFT_TEST_INPUT)
     ).resolves.toEqual({ status: 'ok' })
+  })
+
+  it('resolves a draft test against the declared edit target', async () => {
+    const service = fakeService()
+    const tester = {
+      test: vi.fn(async () => ({ status: 'ok' }) as TestModelsConnectionResult)
+    } as unknown as ModelConnectionTester
+    registerModelsIpc(service, tester, RENDERER_URL)
+
+    await registeredHandler(MODELS_CHANNELS.testDraftConnection)(
+      { sender: new FakeSender() },
+      { ...DRAFT_TEST_INPUT, editTargetConfigId: CONFIG_ID }
+    )
+
+    expect(service.resolveDraftConfig).toHaveBeenCalledWith(
+      { ...DRAFT_TEST_INPUT, editTargetConfigId: CONFIG_ID },
+      CONFIG_ID
+    )
+    expect(tester.test).toHaveBeenCalledWith(CONFIGURED_SNAPSHOT, expect.any(AbortSignal))
   })
 
   it('resolves draft validation errors from the test path', async () => {
@@ -289,7 +404,10 @@ describe('models IPC', () => {
     registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
 
     await expect(
-      registeredHandler(MODELS_CHANNELS.testConnection)({ sender: new FakeSender() }, TEST_INPUT)
+      registeredHandler(MODELS_CHANNELS.testDraftConnection)(
+        { sender: new FakeSender() },
+        DRAFT_TEST_INPUT
+      )
     ).resolves.toEqual({
       status: 'error',
       error: { code: 'CROSS_ORIGIN_CREDENTIAL', field: 'apiKey' }
@@ -305,17 +423,14 @@ describe('models IPC', () => {
     registerModelsIpc(fakeService(), tester, RENDERER_URL)
 
     const sender = new FakeSender()
-    const inFlight = registeredHandler(MODELS_CHANNELS.testConnection)(
+    const inFlight = registeredHandler(MODELS_CHANNELS.testSavedConnection)(
       { sender },
-      TEST_INPUT
+      SAVED_TEST_INPUT
     ) as Promise<TestModelsConnectionResult>
 
     // requestId 不匹配时幂等成功且不打断测试
     expect(
-      registeredHandler(MODELS_CHANNELS.cancelTest)(
-        { sender },
-        { requestId: '0d4b2f7e-52c8-4a61-9ac1-30b1e6de9d02' }
-      )
+      registeredHandler(MODELS_CHANNELS.cancelTest)({ sender }, { requestId: OTHER_REQUEST_ID })
     ).toEqual({ status: 'ok' })
     expect(tester.test).toHaveBeenCalledTimes(1)
 
@@ -344,9 +459,9 @@ describe('models IPC', () => {
     registerModelsIpc(fakeService(), tester, RENDERER_URL)
 
     const sender = new FakeSender()
-    const inFlight = registeredHandler(MODELS_CHANNELS.testConnection)(
+    const inFlight = registeredHandler(MODELS_CHANNELS.testSavedConnection)(
       { sender },
-      TEST_INPUT
+      SAVED_TEST_INPUT
     ) as Promise<TestModelsConnectionResult>
 
     sender.emit('destroyed')
@@ -363,7 +478,7 @@ describe('models IPC', () => {
     // 销毁后 sender 槽位释放，新 sender 可立即测试
     const fresh = new FakeSender()
     await expect(
-      registeredHandler(MODELS_CHANNELS.testConnection)({ sender: fresh }, TEST_INPUT)
+      registeredHandler(MODELS_CHANNELS.testSavedConnection)({ sender: fresh }, SAVED_TEST_INPUT)
     ).resolves.toEqual({ status: 'error', error: { code: 'TEST_CANCELLED' } })
   })
 })

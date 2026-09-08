@@ -5,6 +5,7 @@ import { openDatabase } from '../../src/database/database'
 import { SqliteLlmUsageRepository } from '../../src/database/sqlite-llm-usage-repository'
 import { ConfiguredLanguageModel } from '../../src/core/llm/configured-language-model'
 import { ModelConnectionTester } from '../../src/core/llm/model-connection-tester'
+import { randomUUID } from 'node:crypto'
 import { ModelConfigService, type ModelsConfigStore } from '../../src/core/llm/model-config'
 import { LlmClient, type CreateLlmClient } from '../../src/core/llm/llm-client'
 import { LlmUsageRecorder } from '../../src/core/llm/llm-usage-recorder'
@@ -120,8 +121,8 @@ describe('LLM usage ledger across the unified client', () => {
   })
 
   function configuredModel(modelId: string, store = memoryStore()): ConfiguredLanguageModel {
-    const service = new ModelConfigService(store, fakeVault)
-    service.save({
+    const service = new ModelConfigService(store, fakeVault, randomUUID)
+    service.createConfig({
       protocol: 'openai-compatible',
       baseUrl: server.baseUrl,
       modelId,
@@ -179,13 +180,14 @@ describe('LLM usage ledger across the unified client', () => {
     expect(await streamReply(configuredModel('snapshot-model', store))).toBe('Hi')
 
     // 已落库记录的 model 是调用时快照，切换设置不回写历史。
-    const service = new ModelConfigService(store, fakeVault)
-    service.save({
+    const service = new ModelConfigService(store, fakeVault, randomUUID)
+    const switched = service.createConfig({
       protocol: 'openai-compatible',
       baseUrl: server.baseUrl,
       modelId: 'switched-model',
       credential: { action: 'keep' }
     })
+    service.setActiveConfig(switched.configs[1].id)
     const snapshotRow = usageRepository.list({ modelId: 'snapshot-model' })
     expect(snapshotRow).toHaveLength(1)
     expect(snapshotRow[0]).toMatchObject({ status: 'completed', inputTokens: 1 })
@@ -203,8 +205,8 @@ describe('LLM usage ledger across the unified client', () => {
       usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
       responseModel: 'provider-alias-model'
     }
-    const service = new ModelConfigService(memoryStore(), fakeVault)
-    service.save({
+    const service = new ModelConfigService(memoryStore(), fakeVault, randomUUID)
+    service.createConfig({
       protocol: 'openai-compatible',
       baseUrl: server.baseUrl,
       modelId: 'saved-model',
@@ -247,7 +249,7 @@ describe('LLM usage ledger across the unified client', () => {
     // 未配置模型：抛出明确错误，不产生真实请求记录。
     const before = usageRepository.list({}).length
     const unconfigured = new ConfiguredLanguageModel(
-      new ModelConfigService(memoryStore(), fakeVault),
+      new ModelConfigService(memoryStore(), fakeVault, randomUUID),
       createClient
     )
     await expect(streamReply(unconfigured)).rejects.toMatchObject({

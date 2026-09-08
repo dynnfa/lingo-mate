@@ -1,17 +1,53 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import { I18nextProvider } from 'react-i18next'
 import type {
+  CreateModelConfigInput,
+  DeleteModelConfigInput,
+  ModelConfigSummary,
   ModelsApi,
-  ModelsSettingsSummary,
-  SaveModelsSettingsInput,
-  TestModelsConnectionInput
+  ModelsConfigList,
+  SetActiveModelConfigInput,
+  TestDraftModelsConnectionInput,
+  TestSavedModelsConnectionInput,
+  UpdateModelConfigInput
 } from '../../../../shared/models'
 import type { PreferencesApi } from '../../../../shared/preferences'
 import { createI18n } from '../../i18n'
 import { SettingsPage } from '../SettingsPage'
+
+const CONFIG_A = 'f9364f0f-f3f4-4ea6-a31d-b55754aa2477'
+const CONFIG_B = '0d4b2f7e-52c8-4a61-9ac1-30b1e6de9d02'
+const CONFIG_C = '11111111-2222-4333-8444-555555555555'
+
+function config(overrides: Partial<ModelConfigSummary> & { id: string }): ModelConfigSummary {
+  return {
+    protocol: 'openai-compatible',
+    baseUrl: 'https://api.example.com/v1',
+    modelId: 'gpt-test',
+    hasApiKey: false,
+    apiKeyUndecryptable: false,
+    apiKeyPreview: null,
+    ...overrides
+  }
+}
+
+const KEYLESS_REMOTE = config({ id: CONFIG_A, modelId: 'gpt-test' })
+const KEYED_LOCAL = config({
+  id: CONFIG_B,
+  baseUrl: 'http://127.0.0.1:9000/v1',
+  modelId: 'local-model',
+  hasApiKey: true,
+  apiKeyPreview: 'sk-l••••y-01'
+})
+const BROKEN_KEY = config({
+  id: CONFIG_C,
+  baseUrl: 'https://broken.example.com/v1',
+  modelId: 'broken-model',
+  apiKeyUndecryptable: true
+})
 
 function preferencesStub(): PreferencesApi {
   return {
@@ -24,38 +60,44 @@ function preferencesStub(): PreferencesApi {
   }
 }
 
-const UNCONFIGURED_SUMMARY: ModelsSettingsSummary = { configured: false }
-
-const CONFIGURED_SUMMARY: ModelsSettingsSummary = {
-  configured: true,
-  protocol: 'openai-compatible',
-  baseUrl: 'https://api.example.com/v1',
-  modelId: 'gpt-test',
-  hasApiKey: false,
-  apiKeyUndecryptable: false
-}
-
 interface ModelsApiStub {
   api: ModelsApi
   calls: {
-    save: SaveModelsSettingsInput[]
-    test: TestModelsConnectionInput[]
+    create: CreateModelConfigInput[]
+    update: UpdateModelConfigInput[]
+    delete: DeleteModelConfigInput[]
+    setActive: SetActiveModelConfigInput[]
+    testSaved: TestSavedModelsConnectionInput[]
+    testDraft: TestDraftModelsConnectionInput[]
     cancel: string[]
-    clear: number
     reloads: number
   }
+  // 直接改写内存集合，模拟 Main 返回的列表
+  setList(list: ModelsConfigList): void
 }
 
 function modelsApiStub(
   options: {
-    summary?: ModelsSettingsSummary
-    saveSummary?: ModelsSettingsSummary
-    testResult?: 'ok' | 'authFailed'
+    initialList?: ModelsConfigList
     readFails?: boolean
+    deleteFails?: boolean
+    saveFails?: boolean
+    testResult?: 'ok' | 'authFailed'
     pendingTest?: boolean
   } = {}
 ): ModelsApiStub {
-  const calls: ModelsApiStub['calls'] = { save: [], test: [], cancel: [], clear: 0, reloads: 0 }
+  const calls: ModelsApiStub['calls'] = {
+    create: [],
+    update: [],
+    delete: [],
+    setActive: [],
+    testSaved: [],
+    testDraft: [],
+    cancel: [],
+    reloads: 0
+  }
+  let nextId = 0
+  let list: ModelsConfigList = options.initialList ?? { activeConfigId: null, configs: [] }
   // 模拟 Main 的取消语义：cancelTest 让在途测试以 TEST_CANCELLED 结束。
   let resolvePendingTest: ((outcome: 'ok' | 'authFailed' | 'cancelled') => void) | undefined
   const pendingOutcome = options.pendingTest
@@ -63,38 +105,114 @@ function modelsApiStub(
         resolvePendingTest = resolve
       })
     : undefined
+  const testResult = async (): Promise<
+    { status: 'ok' } | { status: 'error'; error: { code: 'TEST_AUTH_FAILED' | 'TEST_CANCELLED' } }
+  > => {
+    const outcome = (await pendingOutcome) ?? options.testResult ?? 'ok'
+    if (outcome === 'ok') return { status: 'ok' }
+    if (outcome === 'cancelled') {
+      return { status: 'error', error: { code: 'TEST_CANCELLED' } }
+    }
+    return { status: 'error', error: { code: 'TEST_AUTH_FAILED' } }
+  }
   const api: ModelsApi = {
-    async getSettings() {
+    async listConfigs() {
       calls.reloads += 1
       if (options.readFails) {
         return { status: 'error', error: { code: 'MODELS_READ_FAILED' } }
       }
-      return { status: 'ok', summary: options.summary ?? UNCONFIGURED_SUMMARY }
+      return { status: 'ok', list }
     },
-    async saveSettings(input) {
-      calls.save.push(input)
-      return { status: 'ok', summary: options.saveSummary ?? CONFIGURED_SUMMARY }
-    },
-    async testConnection(input) {
-      calls.test.push(input)
-      const outcome = (await pendingOutcome) ?? options.testResult ?? 'ok'
-      if (outcome === 'ok') return { status: 'ok' }
-      if (outcome === 'cancelled') {
-        return { status: 'error', error: { code: 'TEST_CANCELLED' } }
+    async createConfig(input) {
+      calls.create.push(input)
+      if (options.saveFails) {
+        return { status: 'error', error: { code: 'MODELS_WRITE_FAILED' } }
       }
-      return { status: 'error', error: { code: 'TEST_AUTH_FAILED' } }
+      nextId += 1
+      const created = config({
+        id: `created-${nextId}`,
+        baseUrl: input.baseUrl,
+        modelId: input.modelId,
+        hasApiKey: input.credential.action === 'replace',
+        // 模拟 Main 生成的脱敏预览；stub 使用的短密钥整段掩码
+        apiKeyPreview: input.credential.action === 'replace' ? '••••••••' : null
+      })
+      list = {
+        activeConfigId: list.configs.length === 0 ? created.id : list.activeConfigId,
+        configs: [...list.configs, created]
+      }
+      return { status: 'ok', list }
+    },
+    async updateConfig(input) {
+      calls.update.push(input)
+      if (options.saveFails) {
+        return { status: 'error', error: { code: 'MODELS_WRITE_FAILED' } }
+      }
+      list = {
+        ...list,
+        configs: list.configs.map((item) =>
+          item.id === input.configId
+            ? {
+                ...item,
+                baseUrl: input.baseUrl,
+                modelId: input.modelId,
+                hasApiKey:
+                  input.credential.action === 'replace'
+                    ? true
+                    : input.credential.action === 'remove'
+                      ? false
+                      : item.hasApiKey,
+                apiKeyUndecryptable:
+                  input.credential.action === 'keep' ? item.apiKeyUndecryptable : false,
+                apiKeyPreview:
+                  input.credential.action === 'replace'
+                    ? '••••••••'
+                    : input.credential.action === 'remove'
+                      ? null
+                      : item.apiKeyPreview
+              }
+            : item
+        )
+      }
+      return { status: 'ok', list }
+    },
+    async deleteConfig(input) {
+      calls.delete.push(input)
+      if (options.deleteFails) {
+        return { status: 'error', error: { code: 'MODELS_WRITE_FAILED' } }
+      }
+      list = {
+        activeConfigId: list.activeConfigId === input.configId ? null : list.activeConfigId,
+        configs: list.configs.filter((item) => item.id !== input.configId)
+      }
+      return { status: 'ok', list }
+    },
+    async setActiveConfig(input) {
+      calls.setActive.push(input)
+      list = { ...list, activeConfigId: input.configId }
+      return { status: 'ok', list }
+    },
+    async testSavedConnection(input) {
+      calls.testSaved.push(input)
+      return testResult()
+    },
+    async testDraftConnection(input) {
+      calls.testDraft.push(input)
+      return testResult()
     },
     async cancelTest(input) {
       calls.cancel.push(input.requestId)
       resolvePendingTest?.('cancelled')
       return { status: 'ok' }
-    },
-    async clearSettings() {
-      calls.clear += 1
-      return { status: 'ok', summary: UNCONFIGURED_SUMMARY }
     }
   }
-  return { api, calls }
+  return {
+    api,
+    calls,
+    setList(next) {
+      list = next
+    }
+  }
 }
 
 function renderPage(
@@ -115,11 +233,11 @@ function installApi(models: ModelsApi): void {
   vi.stubGlobal('api', { preferences: preferencesStub(), models })
 }
 
-async function openModels(): Promise<void> {
+async function openModels(list?: ModelsConfigList): Promise<void> {
+  void list
   fireEvent.click(screen.getByRole('button', { name: '模型' }))
-  // 等待摘要读取完成，表单字段可用。
   await waitFor(() => {
-    expect(screen.getByLabelText('Base URL')).toBeEnabled()
+    expect(screen.getByRole('button', { name: '新增模型' })).toBeEnabled()
   })
 }
 
@@ -134,59 +252,6 @@ afterEach(() => {
 })
 
 describe('SettingsPage', () => {
-  it('lets the user remove an undecryptable key without clearing other settings', async () => {
-    const { api, calls } = modelsApiStub({
-      summary: { ...CONFIGURED_SUMMARY, apiKeyUndecryptable: true }
-    })
-    installApi(api)
-    renderPage()
-    await openModels()
-    fireEvent.click(screen.getByRole('checkbox', { name: '移除已保存的密钥' }))
-    fireEvent.click(screen.getByRole('button', { name: '保存' }))
-    await screen.findByText('已保存。')
-    expect(calls.save[0]).toMatchObject({
-      baseUrl: CONFIGURED_SUMMARY.baseUrl,
-      modelId: CONFIGURED_SUMMARY.modelId,
-      credential: { action: 'remove' }
-    })
-  })
-
-  it('resets the draft to normalized saved values and exits without confirmation', async () => {
-    const { api } = modelsApiStub()
-    installApi(api)
-    const onExit = renderPage()
-    await openModels()
-    fillForm('https://api.example.com/v1/', ' gpt-test ')
-    fireEvent.click(screen.getByRole('button', { name: '保存' }))
-    await screen.findByText('已保存。')
-    expect(screen.getByLabelText('Base URL')).toHaveValue(CONFIGURED_SUMMARY.baseUrl)
-    expect(screen.getByLabelText('Model ID')).toHaveValue(CONFIGURED_SUMMARY.modelId)
-    expect(screen.getByRole('button', { name: '保存' })).toBeDisabled()
-    fireEvent.click(screen.getByRole('button', { name: '返回' }))
-    expect(onExit).toHaveBeenCalledOnce()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  })
-
-  it.each(['ok', 'authFailed'] as const)(
-    'keeps the %s test outcome visible after saving',
-    async (testResult) => {
-      const { api } = modelsApiStub({ testResult })
-      installApi(api)
-      renderPage()
-      await openModels()
-      fillForm(CONFIGURED_SUMMARY.baseUrl, CONFIGURED_SUMMARY.modelId)
-      fireEvent.click(screen.getByRole('button', { name: '保存' }))
-      await screen.findByText('已保存。')
-      fireEvent.click(screen.getByRole('button', { name: '测试连接' }))
-      expect(
-        await screen.findByText(
-          testResult === 'ok' ? '连接测试成功。' : '鉴权失败，请检查 API Key。'
-        )
-      ).toBeVisible()
-      expect(screen.getByText('已保存。')).toBeVisible()
-    }
-  )
-
   it('renders the menu with the language section active and its detail', () => {
     installApi(modelsApiStub().api)
     renderPage()
@@ -200,9 +265,8 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('radio', { name: '跟随系统 / System' })).toBeInTheDocument()
   })
 
-  it('registers the models section after language and shows its detail on demand', async () => {
-    const { api } = modelsApiStub()
-    installApi(api)
+  it('registers the models section after language and shows an empty state with an add entry', async () => {
+    installApi(modelsApiStub().api)
     renderPage()
 
     const menuItems = screen
@@ -214,9 +278,8 @@ describe('SettingsPage', () => {
 
     expect(screen.getByRole('button', { name: '模型' })).toHaveAttribute('aria-current', 'true')
     expect(screen.getByRole('heading', { name: '模型' })).toBeInTheDocument()
-    expect(screen.getByText('OpenAI 兼容')).toBeInTheDocument()
-    expect(screen.getByLabelText('Base URL')).toHaveValue('')
-    expect(screen.getByLabelText('Model ID')).toHaveValue('')
+    expect(screen.getByText('还没有已配置的模型')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '新增模型' })).toBeInTheDocument()
   })
 
   it('moves focus to the back button when mounted', () => {
@@ -244,18 +307,6 @@ describe('SettingsPage', () => {
     expect(onExit).toHaveBeenCalledTimes(1)
   })
 
-  it('prefills saved settings without ever refilling the API key', async () => {
-    installApi(modelsApiStub({ summary: { ...CONFIGURED_SUMMARY, hasApiKey: true } }).api)
-    renderPage()
-
-    await openModels()
-
-    expect(screen.getByLabelText('Base URL')).toHaveValue(CONFIGURED_SUMMARY.baseUrl)
-    expect(screen.getByLabelText('Model ID')).toHaveValue(CONFIGURED_SUMMARY.modelId)
-    expect(screen.getByLabelText('API Key')).toHaveValue('')
-    expect(screen.getByText('已配置')).toBeInTheDocument()
-  })
-
   it('shows a read failure with a retry action and never treats it as unconfigured', async () => {
     const { api, calls } = modelsApiStub({ readFails: true })
     installApi(api)
@@ -265,43 +316,67 @@ describe('SettingsPage', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('无法读取模型配置。')
     expect(screen.getByRole('button', { name: '重试' })).toBeInTheDocument()
-    // 读取失败不渲染可编辑表单，不误判成首次未配置
-    expect(screen.queryByLabelText('Base URL')).not.toBeInTheDocument()
+    // 读取失败不渲染表格或表单，不误判成首次未配置
+    expect(screen.queryByRole('button', { name: '新增模型' })).not.toBeInTheDocument()
     expect(calls.reloads).toBe(1)
   })
 
-  it('blocks saving without valid changes and validates fields before submit', async () => {
-    const { api, calls } = modelsApiStub()
-    installApi(api)
+  it('renders one row per saved config with masked, missing, and undecryptable keys', async () => {
+    installApi(
+      modelsApiStub({
+        initialList: {
+          activeConfigId: CONFIG_A,
+          configs: [KEYLESS_REMOTE, KEYED_LOCAL, BROKEN_KEY]
+        }
+      }).api
+    )
     renderPage()
 
     await openModels()
 
-    const saveButton = screen.getByRole('button', { name: '保存' })
-    expect(saveButton).toBeDisabled()
+    const table = screen.getByRole('table', { name: '已保存的模型配置列表' })
+    expect(table).toBeInTheDocument()
+    const headers = within(table)
+      .getAllByRole('columnheader')
+      .map((header) => header.textContent)
+    expect(headers).toEqual(['Model ID', 'Base URL', '协议', 'API Key', '测试状态', '操作'])
 
-    fillForm('not a url', '')
-    fireEvent.click(screen.getByRole('button', { name: '测试连接' }))
-
-    expect(await screen.findByText(/Base URL 无效/)).toBeInTheDocument()
-    expect(screen.getByText('Model ID 不能为空。')).toBeInTheDocument()
-    expect(calls.test).toHaveLength(0)
-    expect(calls.save).toHaveLength(0)
+    const rows = within(table).getAllByRole('row')
+    expect(rows).toHaveLength(4) // 表头 + 3 行
+    expect(within(rows[1]).getByText('gpt-test')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('未配置')).toBeInTheDocument()
+    // 已配置密钥只显示脱敏预览：前 4 位与后 4 位，中间整段掩码
+    expect(within(rows[2]).getByText('sk-l••••y-01')).toBeInTheDocument()
+    expect(within(rows[3]).getByText('密钥不可用，请重新配置')).toBeInTheDocument()
+    // 长地址保留完整内容于 title
+    expect(within(rows[2]).getByTitle('http://127.0.0.1:9000/v1')).toBeInTheDocument()
+    // 最右列提供三个动作
+    for (const row of rows.slice(1)) {
+      expect(within(row).getByRole('button', { name: '删除' })).toBeInTheDocument()
+      expect(within(row).getByRole('button', { name: '编辑' })).toBeInTheDocument()
+      expect(within(row).getByRole('button', { name: '测试连通' })).toBeInTheDocument()
+      expect(within(row).getByText('未测试')).toBeInTheDocument()
+    }
   })
 
-  it('saves the draft with explicit credential intent and clears the key input on success', async () => {
+  it('creates a config from an empty form and auto-selects the first one as current', async () => {
     const { api, calls } = modelsApiStub()
     installApi(api)
     renderPage()
-
     await openModels()
+
+    fireEvent.click(screen.getByRole('button', { name: '新增模型' }))
+    expect(screen.getByRole('heading', { name: '新增模型' })).toBeInTheDocument()
+    // 无修改时保存禁用
+    expect(screen.getByRole('button', { name: '保存' })).toBeDisabled()
+
     fillForm('http://127.0.0.1:9000/v1/', 'local-model')
     fireEvent.change(screen.getByLabelText('API Key'), { target: { value: ' secret ' } })
 
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
 
     await waitFor(() => {
-      expect(calls.save).toEqual([
+      expect(calls.create).toEqual([
         {
           protocol: 'openai-compatible',
           baseUrl: 'http://127.0.0.1:9000/v1',
@@ -310,43 +385,157 @@ describe('SettingsPage', () => {
         }
       ])
     })
-    expect(await screen.findByText('已保存。')).toBeInTheDocument()
+    // 表单关闭，表格出现新行，第一条自动成为当前模型
+    expect(await screen.findByText('local-model')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '新增模型' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('当前使用模型')).toHaveValue('created-1')
+  })
+
+  it('edits a config without refilling the key and keeps it by explicit intent', async () => {
+    const { api, calls } = modelsApiStub({
+      initialList: { activeConfigId: CONFIG_B, configs: [KEYED_LOCAL] }
+    })
+    installApi(api)
+    renderPage()
+    await openModels()
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+
+    expect(screen.getByRole('heading', { name: '编辑模型' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Base URL')).toHaveValue('http://127.0.0.1:9000/v1')
+    expect(screen.getByLabelText('Model ID')).toHaveValue('local-model')
     expect(screen.getByLabelText('API Key')).toHaveValue('')
+    expect(screen.getByText('已配置')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: 'renamed-model' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() => {
+      expect(calls.update).toEqual([
+        {
+          configId: CONFIG_B,
+          protocol: 'openai-compatible',
+          baseUrl: 'http://127.0.0.1:9000/v1',
+          modelId: 'renamed-model',
+          credential: { action: 'keep' }
+        }
+      ])
+    })
+    expect(await screen.findByText('renamed-model')).toBeInTheDocument()
+    // 编辑保持当前模型选择不变
+    expect(screen.getByLabelText('当前使用模型')).toHaveValue(CONFIG_B)
+  })
+
+  it('removes an undecryptable stored key through the edit form', async () => {
+    const { api, calls } = modelsApiStub({
+      initialList: { activeConfigId: CONFIG_C, configs: [BROKEN_KEY] }
+    })
+    installApi(api)
+    renderPage()
+    await openModels()
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: '移除已保存的密钥' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+    await waitFor(() => {
+      expect(calls.update[0]).toMatchObject({
+        configId: CONFIG_C,
+        credential: { action: 'remove' }
+      })
+    })
+    expect(await screen.findByText('未配置')).toBeInTheDocument()
+  })
+
+  it('cancels an unchanged form directly and returns focus to the edit button', async () => {
+    const { api } = modelsApiStub({
+      initialList: { activeConfigId: CONFIG_A, configs: [KEYLESS_REMOTE] }
+    })
+    installApi(api)
+    renderPage()
+    await openModels()
+
+    const editButton = screen.getByRole('button', { name: '编辑' })
+    fireEvent.click(editButton)
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+
+    expect(screen.queryByRole('heading', { name: '编辑模型' })).not.toBeInTheDocument()
+    expect(editButton).toHaveFocus()
+  })
+
+  it('asks before discarding unsaved edits when switching edit targets or closing', async () => {
+    const { api } = modelsApiStub({
+      initialList: { activeConfigId: CONFIG_A, configs: [KEYLESS_REMOTE, KEYED_LOCAL] }
+    })
+    installApi(api)
+    renderPage()
+    await openModels()
+
+    const rows = screen.getAllByRole('row')
+    fireEvent.click(within(rows[1]).getByRole('button', { name: '编辑' }))
+    fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: 'changed' } })
+
+    // 切换编辑目标先确认
+    fireEvent.click(within(rows[2]).getByRole('button', { name: '编辑' }))
+    const dialog = screen.getByRole('dialog', { name: '有未保存的修改' })
+    fireEvent.click(within(dialog).getByRole('button', { name: '继续编辑' }))
+    expect(screen.getByLabelText('Model ID')).toHaveValue('changed')
+
+    // 取消表单同样先确认；放弃后加载另一条记录
+    fireEvent.click(within(rows[2]).getByRole('button', { name: '编辑' }))
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: '有未保存的修改' })).getByRole('button', {
+        name: '放弃修改'
+      })
+    )
+    expect(await screen.findByLabelText('Model ID')).toHaveValue('local-model')
+  })
+
+  it('blocks saving without valid changes and validates fields before submit', async () => {
+    const { api, calls } = modelsApiStub()
+    installApi(api)
+    renderPage()
+    await openModels()
+
+    fireEvent.click(screen.getByRole('button', { name: '新增模型' }))
+    fillForm('not a url', '')
+    fireEvent.click(screen.getByRole('button', { name: '测试草稿' }))
+
+    expect(await screen.findByText(/Base URL 无效/)).toBeInTheDocument()
+    expect(screen.getByText('Model ID 不能为空。')).toBeInTheDocument()
+    expect(calls.testDraft).toHaveLength(0)
+    expect(calls.create).toHaveLength(0)
   })
 
   it('keeps the draft and shows a failure when saving fails', async () => {
-    const { api } = modelsApiStub()
-    const savedInputs: SaveModelsSettingsInput[] = []
-    api.saveSettings = async (input) => {
-      savedInputs.push(input)
-      return { status: 'error', error: { code: 'MODELS_WRITE_FAILED' } }
-    }
+    const { api } = modelsApiStub({ saveFails: true })
     installApi(api)
     renderPage()
-
     await openModels()
+
+    fireEvent.click(screen.getByRole('button', { name: '新增模型' }))
     fillForm('https://api.example.com/v1', 'gpt-test')
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
 
     expect(await screen.findByText('保存模型配置失败，请重试。')).toBeInTheDocument()
     expect(screen.getByLabelText('Base URL')).toHaveValue('https://api.example.com/v1')
-    expect(savedInputs).toHaveLength(1)
     // 保存按钮在失败后可重试
     expect(screen.getByRole('button', { name: '保存' })).toBeEnabled()
   })
 
   it('reports cross-origin keep as a field error on the API key', async () => {
     const { api } = modelsApiStub({
-      summary: { ...CONFIGURED_SUMMARY, hasApiKey: true }
+      initialList: { activeConfigId: CONFIG_B, configs: [KEYED_LOCAL] }
     })
-    api.saveSettings = async () => ({
+    api.updateConfig = async () => ({
       status: 'error',
       error: { code: 'CROSS_ORIGIN_CREDENTIAL', field: 'apiKey' }
     })
     installApi(api)
     renderPage()
-
     await openModels()
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
     fireEvent.change(screen.getByLabelText('Base URL'), {
       target: { value: 'https://other.example.com/v1' }
     })
@@ -355,92 +544,327 @@ describe('SettingsPage', () => {
     expect(await screen.findByText(/Base URL 的源已变化，不允许沿用旧密钥/)).toBeInTheDocument()
   })
 
-  it('shows the connection test result separately from save status', async () => {
-    const { api, calls } = modelsApiStub({ testResult: 'authFailed' })
+  it('deletes a row after confirming the identified target', async () => {
+    const { api, calls } = modelsApiStub({
+      initialList: { activeConfigId: CONFIG_A, configs: [KEYLESS_REMOTE, KEYED_LOCAL] }
+    })
     installApi(api)
     renderPage()
-
     await openModels()
-    fillForm('https://api.example.com/v1', 'gpt-test')
-    fireEvent.click(screen.getByRole('button', { name: '测试连接' }))
+
+    const rows = screen.getAllByRole('row')
+    fireEvent.click(within(rows[2]).getByRole('button', { name: '删除' }))
+
+    const dialog = screen.getByRole('dialog', { name: '删除模型配置？' })
+    expect(
+      within(dialog).getByText(/local-model（http:\/\/127\.0\.0\.1:9000\/v1）/)
+    ).toBeInTheDocument()
+    // 非当前模型的删除不提示重新选择
+    expect(within(dialog).queryByText(/重新选择/)).not.toBeInTheDocument()
+    expect(calls.delete).toHaveLength(0)
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '删除' }))
 
     await waitFor(() => {
-      expect(calls.test).toHaveLength(1)
-    })
-    expect(await screen.findByText('鉴权失败，请检查 API Key。')).toBeInTheDocument()
-
-    // 修改表单后旧测试结果清除
-    fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: 'gpt-other' } })
-    expect(screen.queryByText('鉴权失败，请检查 API Key。')).not.toBeInTheDocument()
-  })
-
-  it('locks the form while a test is running and cancels it when switching sections', async () => {
-    const { api, calls } = modelsApiStub({ pendingTest: true })
-    installApi(api)
-    renderPage()
-
-    await openModels()
-    fillForm('https://api.example.com/v1', 'gpt-test')
-    fireEvent.click(screen.getByRole('button', { name: '测试连接' }))
-
-    await waitFor(() => {
-      expect(screen.getByText('正在测试连接…')).toBeInTheDocument()
-    })
-    expect(screen.getByLabelText('Base URL')).toBeDisabled()
-    expect(screen.getByRole('button', { name: '测试连接' })).toBeDisabled()
-
-    // 切到 Language：中止测试但不弹放弃确认、不丢草稿
-    fireEvent.click(screen.getByRole('button', { name: '语言' }))
-    expect(await screen.findByText('界面语言')).toBeVisible()
-    expect(screen.queryByText('有未保存的修改')).not.toBeInTheDocument()
-    await waitFor(() => {
-      expect(calls.cancel).toHaveLength(1)
-    })
-
-    // 切回 Models：草稿保留，取消结果落地后表单恢复可用
-    await openModels()
-    expect(screen.getByLabelText('Base URL')).toHaveValue('https://api.example.com/v1')
-    await waitFor(() => {
-      expect(screen.getByText('连接测试已取消。')).toBeInTheDocument()
-    })
-    expect(screen.getByRole('button', { name: '测试连接' })).toBeEnabled()
-  })
-
-  it('requires confirmation to clear the configuration and resets afterwards', async () => {
-    const { api, calls } = modelsApiStub({ summary: CONFIGURED_SUMMARY })
-    installApi(api)
-    renderPage()
-
-    await openModels()
-    fireEvent.click(screen.getByRole('button', { name: '清除配置' }))
-
-    expect(await screen.findByRole('dialog', { name: '清除模型配置？' })).toBeInTheDocument()
-    expect(calls.clear).toBe(0)
-
-    fireEvent.click(screen.getByRole('button', { name: '清除' }))
-
-    await waitFor(() => {
-      expect(calls.clear).toBe(1)
+      expect(calls.delete).toEqual([{ configId: CONFIG_B }])
     })
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
-    expect(await screen.findByLabelText('Base URL')).toHaveValue('')
-    expect(screen.queryByRole('button', { name: '清除配置' })).not.toBeInTheDocument()
+    expect(screen.getByRole('row', { name: /gpt-test/ })).toBeInTheDocument()
+    expect(screen.queryByRole('row', { name: /local-model/ })).not.toBeInTheDocument()
+    // 删除的是最后一行：没有下一行，焦点移至新增入口
+    expect(screen.getByRole('button', { name: '新增模型' })).toHaveFocus()
   })
 
-  it('keeps the models draft across section switches within one settings visit', async () => {
-    const { api } = modelsApiStub()
+  it('warns about reselecting when deleting the current model and clears the selection', async () => {
+    const { api, calls } = modelsApiStub({
+      initialList: { activeConfigId: CONFIG_A, configs: [KEYLESS_REMOTE, KEYED_LOCAL] }
+    })
     installApi(api)
     renderPage()
-
     await openModels()
-    fillForm('https://api.example.com/v1', 'gpt-test')
+
+    fireEvent.click(within(screen.getAllByRole('row')[1]).getByRole('button', { name: '删除' }))
+
+    const dialog = screen.getByRole('dialog', { name: '删除模型配置？' })
+    expect(within(dialog).getByText(/删除后需要重新选择模型/)).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: '删除' }))
+
+    await waitFor(() => {
+      expect(calls.delete).toEqual([{ configId: CONFIG_A }])
+    })
+    // 当前模型为空时提示显式选择，选择器回到占位项
+    expect(await screen.findByText('请选择当前使用的模型。')).toBeInTheDocument()
+    expect(screen.getByLabelText('当前使用模型')).toHaveValue('')
+  })
+
+  it('notes discarded drafts when deleting the row being edited and keeps failures retryable', async () => {
+    const { api, calls } = modelsApiStub({
+      initialList: { activeConfigId: CONFIG_A, configs: [KEYLESS_REMOTE] }
+    })
+    installApi(api)
+    renderPage()
+    await openModels()
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: 'changed' } })
+    fireEvent.click(screen.getByRole('button', { name: '删除' }))
+
+    const dialog = screen.getByRole('dialog', { name: '删除模型配置？' })
+    expect(within(dialog).getByText(/未保存的修改，将一并丢弃/)).toBeInTheDocument()
+
+    api.deleteConfig = async () => ({ status: 'error', error: { code: 'MODELS_WRITE_FAILED' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: '删除' }))
+
+    expect(await screen.findByText('删除模型配置失败，请重试。')).toBeInTheDocument()
+    // 失败保持原行与编辑表单
+    expect(screen.getByRole('heading', { name: '编辑模型' })).toBeInTheDocument()
+
+    api.deleteConfig = async (input) => {
+      calls.delete.push(input)
+      return {
+        status: 'ok',
+        list: { activeConfigId: null, configs: [] }
+      }
+    }
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '删除' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('还没有已配置的模型')).toBeInTheDocument()
+    })
+    // 编辑草稿随删除清理
+    expect(screen.queryByRole('heading', { name: '编辑模型' })).not.toBeInTheDocument()
+    // 空列表后焦点移至新增入口
+    expect(screen.getByRole('button', { name: '新增模型' })).toHaveFocus()
+  })
+
+  it('cancelling a delete confirmation keeps the data untouched', async () => {
+    const { api, calls } = modelsApiStub({
+      initialList: { activeConfigId: CONFIG_A, configs: [KEYLESS_REMOTE] }
+    })
+    installApi(api)
+    renderPage()
+    await openModels()
+
+    fireEvent.click(screen.getByRole('button', { name: '删除' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '取消' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(calls.delete).toHaveLength(0)
+    expect(screen.getByRole('row', { name: /gpt-test/ })).toBeInTheDocument()
+  })
+
+  it('selects the current model through the selector', async () => {
+    const { api, calls } = modelsApiStub({
+      initialList: { activeConfigId: null, configs: [KEYLESS_REMOTE, KEYED_LOCAL] }
+    })
+    installApi(api)
+    renderPage()
+    await openModels()
+
+    expect(screen.getByText('请选择当前使用的模型。')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('当前使用模型'), { target: { value: CONFIG_B } })
+
+    await waitFor(() => {
+      expect(calls.setActive).toEqual([{ configId: CONFIG_B }])
+    })
+    await waitFor(() => {
+      expect(screen.getByLabelText('当前使用模型')).toHaveValue(CONFIG_B)
+    })
+    expect(screen.queryByText('请选择当前使用的模型。')).not.toBeInTheDocument()
+  })
+
+  it('attributes row test results per config and isolates late callbacks', async () => {
+    const { api, calls } = modelsApiStub({
+      initialList: { activeConfigId: CONFIG_A, configs: [KEYLESS_REMOTE, KEYED_LOCAL] },
+      testResult: 'authFailed'
+    })
+    installApi(api)
+    renderPage()
+    await openModels()
+
+    const rows = screen.getAllByRole('row')
+    fireEvent.click(within(rows[1]).getByRole('button', { name: '测试连通' }))
+
+    await waitFor(() => {
+      expect(calls.testSaved).toHaveLength(1)
+    })
+    expect(
+      await within(screen.getAllByRole('row')[1]).findByText('鉴权失败，请检查 API Key。')
+    ).toBeInTheDocument()
+    // 其他行保持未测试
+    expect(within(screen.getAllByRole('row')[2]).getByText('未测试')).toBeInTheDocument()
+
+    // 编辑保存后清除此行旧测试结果（需先有修改，保存按钮才可用）
+    fireEvent.click(within(screen.getAllByRole('row')[1]).getByRole('button', { name: '编辑' }))
+    fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: 'gpt-renamed' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => {
+      expect(within(screen.getAllByRole('row')[1]).getByText('未测试')).toBeInTheDocument()
+    })
+  })
+
+  it('locks other test entries and the tested row during a row test', async () => {
+    const { api, calls } = modelsApiStub({
+      initialList: { activeConfigId: CONFIG_A, configs: [KEYLESS_REMOTE, KEYED_LOCAL] },
+      pendingTest: true
+    })
+    installApi(api)
+    renderPage()
+    await openModels()
+
+    const rows = screen.getAllByRole('row')
+    fireEvent.click(within(rows[1]).getByRole('button', { name: '测试连通' }))
+
+    await waitFor(() => {
+      expect(within(screen.getAllByRole('row')[1]).getByText('测试中…')).toBeInTheDocument()
+    })
+    const testedRow = screen.getAllByRole('row')[1]
+    const otherRow = screen.getAllByRole('row')[2]
+    expect(within(testedRow).getByRole('button', { name: '编辑' })).toBeDisabled()
+    expect(within(testedRow).getByRole('button', { name: '删除' })).toBeDisabled()
+    expect(within(otherRow).getByRole('button', { name: '测试连通' })).toBeDisabled()
+    // 其他行仍可编辑
+    expect(within(otherRow).getByRole('button', { name: '编辑' })).toBeEnabled()
+
+    // 切到 Language：中止测试但不弹放弃确认
     fireEvent.click(screen.getByRole('button', { name: '语言' }))
+    await waitFor(() => {
+      expect(calls.cancel).toHaveLength(1)
+    })
+    expect(screen.queryByText('有未保存的修改')).not.toBeInTheDocument()
+
+    // 切回 Models：取消结果落地
+    await openModels()
+    expect(await within(screen.getAllByRole('row')[1]).findByText('已取消')).toBeInTheDocument()
+    expect(
+      within(screen.getAllByRole('row')[1]).getByRole('button', { name: '测试连通' })
+    ).toBeEnabled()
+  })
+
+  it('tests the draft from the form with the edit target declared', async () => {
+    const { api, calls } = modelsApiStub({
+      initialList: { activeConfigId: CONFIG_B, configs: [KEYED_LOCAL] },
+      testResult: 'ok'
+    })
+    installApi(api)
+    renderPage()
     await openModels()
 
-    expect(screen.getByLabelText('Base URL')).toHaveValue('https://api.example.com/v1')
-    expect(screen.getByLabelText('Model ID')).toHaveValue('gpt-test')
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    fireEvent.click(screen.getByRole('button', { name: '测试草稿' }))
+
+    await waitFor(() => {
+      expect(calls.testDraft).toHaveLength(1)
+    })
+    expect(calls.testDraft[0]).toMatchObject({
+      protocol: 'openai-compatible',
+      baseUrl: 'http://127.0.0.1:9000/v1',
+      modelId: 'local-model',
+      credential: { action: 'keep' },
+      editTargetConfigId: CONFIG_B
+    })
+    expect(await screen.findByText('连接测试成功。')).toBeInTheDocument()
+    // 草稿结果不写入行状态
+    expect(within(screen.getAllByRole('row')[1]).getByText('未测试')).toBeInTheDocument()
+
+    // 修改表单后旧测试结果清除
+    fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: 'gpt-other' } })
+    expect(screen.queryByText('连接测试成功。')).not.toBeInTheDocument()
+  })
+
+  it('locks the form while a draft test is running', async () => {
+    const { api } = modelsApiStub({ pendingTest: true })
+    installApi(api)
+    renderPage()
+    await openModels()
+
+    fireEvent.click(screen.getByRole('button', { name: '新增模型' }))
+    fillForm('https://api.example.com/v1', 'gpt-test')
+    fireEvent.click(screen.getByRole('button', { name: '测试草稿' }))
+
+    expect(await screen.findByText('正在测试连接…')).toBeInTheDocument()
+    expect(screen.getByLabelText('Base URL')).toBeDisabled()
+    expect(screen.getByRole('button', { name: '测试草稿' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '保存' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '取消' })).toBeDisabled()
+  })
+
+  it('uses Escape to close the form first and exits only when nothing is open', async () => {
+    const { api } = modelsApiStub({
+      initialList: { activeConfigId: CONFIG_A, configs: [KEYLESS_REMOTE] }
+    })
+    installApi(api)
+    const onExit = renderPage()
+    await openModels()
+
+    // 打开表单后 Escape 关闭表单，不退出设置
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    fireEvent.keyDown(screen.getByRole('main', { name: '设置' }), { key: 'Escape' })
+    expect(screen.queryByRole('heading', { name: '编辑模型' })).not.toBeInTheDocument()
+    expect(onExit).not.toHaveBeenCalled()
+
+    // 有未保存修改时 Escape 打开弃改确认；确认层内 Escape 回到编辑
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: 'changed' } })
+    fireEvent.keyDown(screen.getByRole('main', { name: '设置' }), { key: 'Escape' })
+    const dialog = screen.getByRole('dialog', { name: '有未保存的修改' })
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    expect(screen.getByLabelText('Model ID')).toHaveValue('changed')
+    expect(onExit).not.toHaveBeenCalled()
+
+    // 放弃修改后再次 Escape 才退出
+    fireEvent.keyDown(screen.getByRole('main', { name: '设置' }), { key: 'Escape' })
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: '有未保存的修改' })).getByRole('button', {
+        name: '放弃修改'
+      })
+    )
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    fireEvent.keyDown(screen.getByRole('main', { name: '设置' }), { key: 'Escape' })
+    expect(onExit).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses the page exit confirmation on language with a hidden model draft', async () => {
+    installApi(modelsApiStub().api)
+    const onExit = renderPage()
+    await openModels()
+    fireEvent.click(screen.getByRole('button', { name: '新增模型' }))
+    fillForm('https://api.example.com/v1', 'draft-model')
+    fireEvent.click(screen.getByRole('button', { name: '语言' }))
+
+    fireEvent.keyDown(screen.getByRole('main', { name: '设置' }), { key: 'Escape' })
+    const dialog = screen.getByRole('dialog', { name: '有未保存的修改' })
+    expect(dialog).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: '继续编辑' })).toHaveFocus()
+    expect(onExit).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await openModels()
+    expect(screen.getByLabelText('Model ID')).toHaveValue('draft-model')
+
+    fireEvent.click(screen.getByRole('button', { name: '语言' }))
+    fireEvent.keyDown(screen.getByRole('main', { name: '设置' }), { key: 'Escape' })
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '放弃修改' }))
+    expect(onExit).toHaveBeenCalledTimes(1)
+  })
+
+  it('Escape closes a delete confirmation before anything else', async () => {
+    const { api, calls } = modelsApiStub({
+      initialList: { activeConfigId: CONFIG_A, configs: [KEYLESS_REMOTE] }
+    })
+    installApi(api)
+    const onExit = renderPage()
+    await openModels()
+
+    fireEvent.click(screen.getByRole('button', { name: '删除' }))
+    fireEvent.keyDown(screen.getByRole('main', { name: '设置' }), { key: 'Escape' })
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(calls.delete).toHaveLength(0)
+    expect(onExit).not.toHaveBeenCalled()
   })
 
   it('asks for confirmation before exiting with unsaved model changes', async () => {
@@ -449,6 +873,7 @@ describe('SettingsPage', () => {
     const onExit = renderPage()
 
     await openModels()
+    fireEvent.click(screen.getByRole('button', { name: '新增模型' }))
     fillForm('https://api.example.com/v1', 'gpt-test')
 
     fireEvent.click(screen.getByRole('button', { name: '返回' }))
@@ -469,23 +894,34 @@ describe('SettingsPage', () => {
     expect(onExit).toHaveBeenCalledTimes(1)
   })
 
-  it('asks for confirmation before Escape exits with unsaved model changes', async () => {
-    const { api } = modelsApiStub()
+  it('exits without confirmation when the models draft is untouched', async () => {
+    const { api } = modelsApiStub({
+      initialList: { activeConfigId: CONFIG_A, configs: [KEYLESS_REMOTE] }
+    })
     installApi(api)
     const onExit = renderPage()
 
     await openModels()
+    fireEvent.click(screen.getByRole('button', { name: '返回' }))
+
+    expect(onExit).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('keeps the models draft across section switches within one settings visit', async () => {
+    const { api } = modelsApiStub()
+    installApi(api)
+    renderPage()
+
+    await openModels()
+    fireEvent.click(screen.getByRole('button', { name: '新增模型' }))
     fillForm('https://api.example.com/v1', 'gpt-test')
+    fireEvent.click(screen.getByRole('button', { name: '语言' }))
+    await openModels()
 
-    fireEvent.keyDown(screen.getByRole('main', { name: '设置' }), { key: 'Escape' })
-
-    const dialog = await screen.findByRole('dialog', { name: '有未保存的修改' })
-    expect(onExit).not.toHaveBeenCalled()
-
-    // 对话框内 Escape 回到编辑，不退出
-    fireEvent.keyDown(dialog, { key: 'Escape' })
-    expect(onExit).not.toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: '新增模型' })).toBeInTheDocument()
     expect(screen.getByLabelText('Base URL')).toHaveValue('https://api.example.com/v1')
+    expect(screen.getByLabelText('Model ID')).toHaveValue('gpt-test')
   })
 })
 

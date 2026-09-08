@@ -141,20 +141,29 @@ function preferencesStub(): PreferencesApi {
 
 function modelsApiStub(): ModelsApi {
   return {
-    async getSettings() {
-      return { status: 'ok', summary: { configured: false } }
+    async listConfigs() {
+      return { status: 'ok', list: { activeConfigId: null, configs: [] } }
     },
-    async saveSettings() {
+    async createConfig() {
       return { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
     },
-    async testConnection() {
+    async updateConfig() {
+      return { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
+    },
+    async deleteConfig() {
+      return { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
+    },
+    async setActiveConfig() {
+      return { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
+    },
+    async testSavedConnection() {
+      return { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
+    },
+    async testDraftConnection() {
       return { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
     },
     async cancelTest() {
       return { status: 'ok' }
-    },
-    async clearSettings() {
-      return { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
     }
   }
 }

@@ -1,16 +1,44 @@
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { modelsClearErrorKey, modelsErrorKey } from './models-messages'
+import { ModelConfigForm } from './ModelConfigForm'
+import { ModelsTable } from './ModelsTable'
+import { modelsDeleteErrorKey, modelsSetActiveErrorKey } from './models-messages'
 import type { ModelsSettingsState } from './useModelsSettings'
 
-// 设置页“模型”区块：读取安全配置摘要，展示 LLM 表单并承担
-// 保存 / 测试连接 / 清除操作与状态提示。状态本体由 SettingsPage 通过
-// useModelsSettings 持有，区块随菜单切换卸载时草稿不丢失。
-export function ModelsSettings({ state }: { state: ModelsSettingsState }): React.JSX.Element {
+// 设置页“模型”区块：表格化管理已保存的 LLM 配置。表格只展示已保存记录，
+// 新增／编辑在表格下方展开复用表单；删除与弃改均需确认。状态本体由
+// SettingsPage 通过 useModelsSettings 持有，区块随菜单切换卸载时草稿不丢失。
+export function ModelsSettings({
+  state
+}: {
+  state: ModelsSettingsState
+}): React.JSX.Element | null {
   const { t } = useTranslation(['common', 'errors'])
-  const { loadState, retryLoad, summary, draft, fieldIssues, saveState, testOutcome, clearState } =
-    state
-  const configured = summary?.configured === true
-  const formLocked = state.busy || loadState !== 'ready'
+  const { loadState, retryLoad, list, editSession, deleteTarget, discardPrompt } = state
+  // 焦点管理：关闭表单后焦点回到来源按钮；删除成功后移至下一行操作按钮，
+  // 空列表时移至新增入口。
+  const addButtonRef = useRef<HTMLButtonElement>(null)
+  const formOpenerRef = useRef<HTMLElement | null>(null)
+  const postDeleteFocusRef = useRef<HTMLElement | null>(null)
+  const wasFormOpenRef = useRef(false)
+  const wasDeletingRef = useRef(false)
+
+  useEffect(() => {
+    const formOpen = editSession.mode !== 'closed'
+    if (wasFormOpenRef.current && !formOpen) {
+      formOpenerRef.current?.focus()
+    }
+    wasFormOpenRef.current = formOpen
+  }, [editSession.mode])
+
+  // 删除完成（deleting → idle）后把焦点移到预记录的目标按钮。
+  useEffect(() => {
+    const deleting = deleteTarget !== undefined && state.deleteState.kind === 'deleting'
+    if (wasDeletingRef.current && !deleting && state.deleteState.kind === 'idle') {
+      postDeleteFocusRef.current?.focus()
+    }
+    wasDeletingRef.current = deleting
+  }, [deleteTarget, state.deleteState.kind])
 
   if (loadState === 'loading') {
     return <p className="models-loading">{t('common:settings.models.loading')}</p>
@@ -29,180 +57,173 @@ export function ModelsSettings({ state }: { state: ModelsSettingsState }): React
     )
   }
 
-  const saveMessage = (() => {
-    if (saveState.kind === 'saving') return t('common:settings.models.saving')
-    if (saveState.kind === 'saved') return t('common:settings.models.saved')
-    if (saveState.kind === 'failed') return t(modelsErrorKey(saveState.code))
-    return undefined
-  })()
-  const testMessage = (() => {
-    if (testOutcome.status === 'running') return t('common:settings.models.testRunning')
-    if (testOutcome.status === 'succeeded') return t('common:settings.models.testSucceeded')
-    if (testOutcome.status === 'failed') return t(modelsErrorKey(testOutcome.code))
-    return undefined
-  })()
+  if (list === undefined) return null
+  const empty = list.configs.length === 0
+
+  const beginCreateFromButton = (event: React.MouseEvent<HTMLButtonElement>): void => {
+    formOpenerRef.current = event.currentTarget
+    state.beginCreate()
+  }
+
+  const beginEditFromButton = (
+    configId: string,
+    event: React.MouseEvent<HTMLButtonElement>
+  ): void => {
+    formOpenerRef.current = event.currentTarget
+    state.beginEdit(configId)
+  }
+
+  const requestDeleteFromButton = (
+    configId: string,
+    event: React.MouseEvent<HTMLButtonElement>
+  ): void => {
+    // 删除成功后的焦点目标：下一行第一个操作按钮，否则新增入口。
+    const row = event.currentTarget.closest('tr')
+    const nextRow = row?.nextElementSibling
+    const nextButton = nextRow?.querySelector<HTMLButtonElement>('.models-table-actions button')
+    postDeleteFocusRef.current = nextButton ?? addButtonRef.current
+    state.requestDelete(configId)
+  }
 
   return (
-    <form
-      className="models-form"
-      noValidate
-      onSubmit={(event) => {
-        event.preventDefault()
-        state.save()
-      }}
-    >
+    <div className="models-settings">
       <p className="settings-section-description">{t('common:settings.models.description')}</p>
 
-      <fieldset className="models-fieldset" disabled={formLocked}>
-        <div className="models-field">
-          <span className="models-field-label">{t('common:settings.models.protocolLabel')}</span>
-          <span className="models-static-value">
-            {t('common:settings.models.protocolOpenAICompatible')}
-          </span>
+      {empty ? (
+        <div className="models-empty">
+          <p className="models-empty-title">{t('common:settings.models.emptyTitle')}</p>
+          <p className="models-empty-body">{t('common:settings.models.emptyBody')}</p>
         </div>
-
-        <div className="models-field">
-          <label htmlFor="models-base-url">{t('common:settings.models.baseUrlLabel')}</label>
-          <input
-            aria-describedby={fieldIssues.baseUrl ? 'models-base-url-error' : undefined}
-            aria-invalid={fieldIssues.baseUrl !== undefined}
-            autoComplete="off"
-            id="models-base-url"
-            onChange={(event) => state.setDraftField('baseUrl', event.target.value)}
-            placeholder={t('common:settings.models.baseUrlPlaceholder')}
-            spellCheck={false}
-            type="text"
-            value={draft.baseUrl}
-          />
-          {fieldIssues.baseUrl ? (
-            <p className="models-field-error" id="models-base-url-error">
-              {t(modelsErrorKey(fieldIssues.baseUrl))}
-            </p>
-          ) : null}
-        </div>
-
-        <div className="models-field">
-          <label htmlFor="models-model-id">{t('common:settings.models.modelIdLabel')}</label>
-          <input
-            aria-describedby={fieldIssues.modelId ? 'models-model-id-error' : undefined}
-            aria-invalid={fieldIssues.modelId !== undefined}
-            autoComplete="off"
-            id="models-model-id"
-            onChange={(event) => state.setDraftField('modelId', event.target.value)}
-            placeholder={t('common:settings.models.modelIdPlaceholder')}
-            spellCheck={false}
-            type="text"
-            value={draft.modelId}
-          />
-          {fieldIssues.modelId ? (
-            <p className="models-field-error" id="models-model-id-error">
-              {t(modelsErrorKey(fieldIssues.modelId))}
-            </p>
-          ) : null}
-        </div>
-
-        <div className="models-field">
-          <label htmlFor="models-api-key">{t('common:settings.models.apiKeyLabel')}</label>
-          <input
-            aria-describedby={fieldIssues.apiKey ? 'models-api-key-error' : 'models-api-key-hint'}
-            aria-invalid={fieldIssues.apiKey !== undefined}
-            autoComplete="new-password"
-            id="models-api-key"
-            onChange={(event) => state.setDraftField('apiKey', event.target.value)}
-            placeholder={t('common:settings.models.apiKeyPlaceholder')}
-            type="password"
-            value={draft.apiKey}
-          />
-          <p className="models-field-hint" id="models-api-key-hint">
-            {configured && summary.hasApiKey
-              ? t('common:settings.models.apiKeyKeepHint')
-              : t('common:settings.models.apiKeyOptionalHint')}
-          </p>
-          {fieldIssues.apiKey ? (
-            <p className="models-field-error" id="models-api-key-error">
-              {t(modelsErrorKey(fieldIssues.apiKey))}
-            </p>
-          ) : null}
-        </div>
-
-        {configured ? (
-          <div className="models-key-status">
-            <span className="models-key-status-label">
-              {t('common:settings.models.apiKeyStatusLabel')}
-            </span>
-            {summary.apiKeyUndecryptable ? (
-              <span className="models-key-warning" role="alert">
-                {t('common:settings.models.apiKeyUndecryptable')}
-              </span>
-            ) : summary.hasApiKey ? (
-              <span className="models-key-configured">
-                {t('common:settings.models.apiKeyConfigured')}
-              </span>
-            ) : (
-              <span className="models-key-missing">
-                {t('common:settings.models.apiKeyNotConfigured')}
-              </span>
-            )}
-            {summary.hasApiKey || summary.apiKeyUndecryptable ? (
-              <label className="models-remove-key">
-                <input
-                  checked={draft.removeStoredKey}
-                  onChange={(event) => state.setDraftField('removeStoredKey', event.target.checked)}
-                  type="checkbox"
-                />
-                {t('common:settings.models.removeStoredKey')}
-              </label>
+      ) : (
+        <div className="models-current">
+          <label className="models-field-label" htmlFor="models-active-config">
+            {t('common:settings.models.currentModelLabel')}
+          </label>
+          <select
+            disabled={state.setActiveState.kind === 'saving'}
+            id="models-active-config"
+            onChange={(event) => state.setActive(event.target.value)}
+            value={list.activeConfigId ?? ''}
+          >
+            {list.activeConfigId === null ? (
+              <option value="">{t('common:settings.models.currentModelPlaceholder')}</option>
             ) : null}
-          </div>
-        ) : null}
-
-        <div className="models-actions">
-          <button disabled={formLocked} onClick={state.test} type="button">
-            {t('common:settings.models.testButton')}
-          </button>
-          <button disabled={formLocked || !state.dirty} type="submit">
-            {t('common:settings.models.saveButton')}
-          </button>
-          {configured ? (
-            <button disabled={formLocked} onClick={state.requestClear} type="button">
-              {t('common:settings.models.clearButton')}
-            </button>
+            {list.configs.map((config) => (
+              <option key={config.id} value={config.id}>
+                {`${config.modelId} — ${config.baseUrl}`}
+              </option>
+            ))}
+          </select>
+          {list.activeConfigId === null ? (
+            <p className="models-current-hint">
+              {t('common:settings.models.currentModelRequired')}
+            </p>
+          ) : null}
+          {state.setActiveState.kind === 'failed' ? (
+            <p className="settings-error" role="alert">
+              {t(modelsSetActiveErrorKey(state.setActiveState.code))}
+            </p>
           ) : null}
         </div>
+      )}
 
-        <p className="models-test-hint">{t('common:settings.models.testHint')}</p>
+      <ModelsTable
+        activeTest={state.activeTest}
+        configs={list.configs}
+        deleteState={state.deleteState}
+        deletingConfigId={deleteTarget?.id}
+        onDelete={requestDeleteFromButton}
+        onEdit={beginEditFromButton}
+        onTest={state.testRow}
+        rowTests={state.rowTests}
+      />
 
-        <div aria-live="polite" className="models-status" role="status">
-          {saveMessage ? <p>{saveMessage}</p> : null}
-          {testMessage ? <p>{testMessage}</p> : null}
-        </div>
+      <button
+        className="models-add-button"
+        disabled={state.formLocked}
+        onClick={beginCreateFromButton}
+        ref={addButtonRef}
+        type="button"
+      >
+        {t('common:settings.models.addButton')}
+      </button>
 
-        {clearState.kind === 'failed' ? (
-          <p className="settings-error" role="alert">
-            {t(modelsClearErrorKey(clearState.code))}
-          </p>
-        ) : null}
-      </fieldset>
+      {editSession.mode !== 'closed' ? <ModelConfigForm state={state} /> : null}
 
-      {clearState.kind === 'confirming' ? (
+      {deleteTarget !== undefined ? (
         <div
-          aria-describedby="models-clear-confirm-body"
-          aria-labelledby="models-clear-confirm-title"
+          aria-describedby="models-delete-confirm-body"
+          aria-labelledby="models-delete-confirm-title"
           className="settings-confirm"
           role="dialog"
         >
-          <h3 id="models-clear-confirm-title">{t('common:settings.models.clearConfirmTitle')}</h3>
-          <p id="models-clear-confirm-body">{t('common:settings.models.clearConfirmBody')}</p>
+          <h3 id="models-delete-confirm-title">{t('common:settings.models.deleteConfirmTitle')}</h3>
+          <p id="models-delete-confirm-body">
+            {t('common:settings.models.deleteConfirmBody', {
+              modelId: deleteTarget.modelId,
+              baseUrl: deleteTarget.baseUrl
+            })}
+          </p>
+          {list.activeConfigId === deleteTarget.id ? (
+            <p>{t('common:settings.models.deleteConfirmActiveNote')}</p>
+          ) : null}
+          {editSession.mode === 'edit' && editSession.configId === deleteTarget.id ? (
+            <p>{t('common:settings.models.deleteConfirmDraftNote')}</p>
+          ) : null}
+          {state.deleteState.kind === 'failed' ? (
+            <p className="settings-error" role="alert">
+              {t(modelsDeleteErrorKey(state.deleteState.code))}
+            </p>
+          ) : null}
           <div className="settings-confirm-actions">
-            <button onClick={state.cancelClear} type="button">
-              {t('common:settings.models.clearConfirmCancel')}
+            <button
+              disabled={state.deleteState.kind === 'deleting'}
+              onClick={state.cancelDelete}
+              type="button"
+            >
+              {t('common:settings.models.deleteConfirmCancel')}
             </button>
-            <button className="settings-confirm-danger" onClick={state.confirmClear} type="button">
-              {t('common:settings.models.clearConfirmAccept')}
+            <button
+              className="settings-confirm-danger"
+              disabled={state.deleteState.kind === 'deleting'}
+              onClick={state.confirmDelete}
+              type="button"
+            >
+              {state.deleteState.kind === 'deleting'
+                ? t('common:settings.models.deleting')
+                : t('common:settings.models.deleteConfirmAccept')}
             </button>
           </div>
         </div>
       ) : null}
-    </form>
+
+      {discardPrompt !== undefined ? (
+        <div
+          aria-describedby="models-form-discard-confirm-body"
+          aria-labelledby="models-form-discard-confirm-title"
+          className="settings-confirm"
+          role="dialog"
+        >
+          <h3 id="models-form-discard-confirm-title">
+            {t('common:settings.models.discardConfirmTitle')}
+          </h3>
+          <p id="models-form-discard-confirm-body">
+            {t('common:settings.models.discardConfirmBody')}
+          </p>
+          <div className="settings-confirm-actions">
+            <button onClick={state.keepEditing} type="button">
+              {t('common:settings.models.discardConfirmKeepEditing')}
+            </button>
+            <button
+              className="settings-confirm-danger"
+              onClick={state.confirmDiscard}
+              type="button"
+            >
+              {t('common:settings.models.discardConfirmDiscard')}
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
   )
 }
