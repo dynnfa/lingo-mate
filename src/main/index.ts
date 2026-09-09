@@ -50,6 +50,8 @@ import { registerPreferencesIpc } from './preferences-ipc'
 import { createElectronPreferenceStore } from './preferences-store'
 import { LlmUsageStatisticsService } from '../core/llm/llm-usage-statistics'
 import { registerUsageIpc } from './usage-ipc'
+import { registerVocabularyIpc } from './vocabulary-ipc'
+import { VocabularyManagementService } from '../core/learning/vocabulary/vocabulary-management'
 
 let database: Database.Database | undefined
 let conversationModule: ConversationModule | undefined
@@ -173,6 +175,9 @@ app.whenReady().then(() => {
     return { outputLanguage: 'zh-CN', targetLanguage: 'en' }
   }
   const vocabularyRepository = new SqliteVocabularyRepository(database)
+  // 已记录页的词汇列表与删除：复用同一仓储，经管理服务暴露窄接口；
+  // 删除只作用于 vocabulary 记录，不改写历史会话与收藏批次报告。
+  registerVocabularyIpc(new VocabularyManagementService(vocabularyRepository), rendererUrl)
   const vocabularySkill = new VocabularyConversationSkill(
     vocabularyRepository,
     () => ({

@@ -6,7 +6,8 @@ import {
   listVocabularyInputSchema,
   type VocabularyEntry,
   type ListVocabularyInput,
-  type VocabularyBatch
+  type VocabularyBatch,
+  type VocabularyPage
 } from '../shared/vocabulary'
 import {
   normalizeLookupKey,
@@ -17,10 +18,7 @@ import {
   exampleSentenceListSchema,
   type VocabularyInsertCommand
 } from '../core/learning/vocabulary/vocabulary-insert'
-import type {
-  VocabularyRepository,
-  VocabularyPage
-} from '../core/learning/vocabulary/vocabulary-repository'
+import type { VocabularyRepository } from '../core/learning/vocabulary/vocabulary-repository'
 
 // v5 词表 9 列；历史迁移行允许四个内容字段为 NULL，读取时不得因此失败。
 const ROW_COLUMNS =
@@ -152,6 +150,14 @@ export class SqliteVocabularyRepository implements VocabularyRepository {
           ? { nextCursor: { createdAt: last.createdAt, id: last.id } }
           : {})
       }
+    })
+  }
+
+  deleteById(id: string): boolean {
+    // id 只作为绑定参数参与参数化删除；不存在时 changes 为 0，返回幂等结果。
+    return this.withStorage(() => {
+      const result = this.database.prepare('DELETE FROM vocabulary WHERE id = ?').run(id)
+      return result.changes === 1
     })
   }
 

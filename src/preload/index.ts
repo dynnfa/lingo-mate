@@ -46,6 +46,13 @@ import {
   usageOverviewInputSchema,
   usageOverviewResultSchema
 } from '../shared/usage'
+import {
+  deleteVocabularyInputSchema,
+  deleteVocabularyResultSchema,
+  listVocabularyInputSchema,
+  listVocabularyResultSchema,
+  VOCABULARY_CHANNELS
+} from '../shared/vocabulary'
 
 const api: LingoMateApi = {
   preferences: {
@@ -113,6 +120,18 @@ const api: LingoMateApi = {
       const input = usageOverviewInputSchema.parse(rawInput)
       const result: unknown = await ipcRenderer.invoke(USAGE_CHANNELS.getOverview, input)
       return usageOverviewResultSchema.parse(result)
+    }
+  },
+  vocabulary: {
+    async list(rawInput) {
+      const input = listVocabularyInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(VOCABULARY_CHANNELS.list, input)
+      return listVocabularyResultSchema.parse(result)
+    },
+    async delete(rawInput) {
+      const input = deleteVocabularyInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(VOCABULARY_CHANNELS.delete, input)
+      return deleteVocabularyResultSchema.parse(result)
     }
   },
   conversation: {

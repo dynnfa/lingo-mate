@@ -99,6 +99,59 @@ export type VocabularyEntry = z.infer<typeof vocabularyEntrySchema>
 export type VocabularyCursor = z.infer<typeof vocabularyCursorSchema>
 export type ListVocabularyInput = z.input<typeof listVocabularyInputSchema>
 
+// ── 已记录页词汇管理（列表与删除）IPC 协议 ──
+// 与批量收藏分析共用本文件的内容 schema，但管理入口只允许预定义的
+// 读取与删除 channel，不暴露任意 SQL；错误结果只携带安全错误码。
+export const VOCABULARY_CHANNELS = {
+  list: 'vocabulary:list',
+  delete: 'vocabulary:delete'
+} as const
+
+export const VOCABULARY_MANAGEMENT_ERROR_CODES = [
+  'UNTRUSTED_SOURCE',
+  'INVALID_INPUT',
+  'STORAGE_FAILED',
+  'UNKNOWN_ERROR'
+] as const
+export type VocabularyManagementErrorCode = (typeof VOCABULARY_MANAGEMENT_ERROR_CODES)[number]
+export const vocabularyManagementErrorSchema = z.strictObject({
+  code: z.enum(VOCABULARY_MANAGEMENT_ERROR_CODES)
+})
+export type VocabularyManagementError = z.infer<typeof vocabularyManagementErrorSchema>
+
+// 分页结果：entries 按创建时间倒序；nextCursor 缺省表示没有后续页。
+export const vocabularyPageSchema = z.strictObject({
+  entries: z.array(vocabularyEntrySchema),
+  nextCursor: vocabularyCursorSchema.optional()
+})
+export type VocabularyPage = z.infer<typeof vocabularyPageSchema>
+
+export const listVocabularyResultSchema = z.discriminatedUnion('status', [
+  z.strictObject({
+    status: z.literal('ok'),
+    entries: z.array(vocabularyEntrySchema),
+    nextCursor: vocabularyCursorSchema.optional()
+  }),
+  z.strictObject({ status: z.literal('error'), error: vocabularyManagementErrorSchema })
+])
+export type ListVocabularyResult = z.infer<typeof listVocabularyResultSchema>
+
+// 删除只接受记录 UUID：按 id 精确删除，不按 term 匹配，避免误删历史同名词。
+export const deleteVocabularyInputSchema = z.strictObject({ id: z.uuid() })
+export type DeleteVocabularyInput = z.input<typeof deleteVocabularyInputSchema>
+
+// 目标 ID 不存在时返回成功且 deleted: false，保证重复请求幂等。
+export const deleteVocabularyResultSchema = z.discriminatedUnion('status', [
+  z.strictObject({ status: z.literal('ok'), id: z.uuid(), deleted: z.boolean() }),
+  z.strictObject({ status: z.literal('error'), error: vocabularyManagementErrorSchema })
+])
+export type DeleteVocabularyResult = z.infer<typeof deleteVocabularyResultSchema>
+
+export interface VocabularyApi {
+  list(input: ListVocabularyInput): Promise<ListVocabularyResult>
+  delete(input: DeleteVocabularyInput): Promise<DeleteVocabularyResult>
+}
+
 // 报告联合类型的判别守卫：vocabulary 与 phrase 报告结构互斥（term vs phrase 字段），
 // 供会话层按 skillId 分派反馈时安全收窄，不做类型断言。
 export function isVocabularyBatch(report: unknown): report is VocabularyBatch {

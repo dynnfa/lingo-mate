@@ -22,6 +22,7 @@ import type {
 } from '../../../shared/preferences'
 import type { ModelsApi } from '../../../shared/models'
 import type { UsageApi } from '../../../shared/usage'
+import type { VocabularyApi } from '../../../shared/vocabulary'
 import App from '../App'
 import { createI18n } from '../i18n'
 
@@ -92,6 +93,18 @@ function usageApiStub(): UsageApi {
   return {
     async getOverview() {
       return { status: 'error', error: { code: 'USAGE_READ_FAILED' } }
+    }
+  }
+}
+
+// App 测试不进入已记录词汇详情；提供稳定空结果桩，避免页面挂起。
+function vocabularyApiStub(): VocabularyApi {
+  return {
+    async list() {
+      return { status: 'ok', entries: [] }
+    },
+    async delete() {
+      return { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
     }
   }
 }
@@ -185,6 +198,7 @@ function installApiMock(
     // App 测试不关注模型设置；提供未配置的稳定桩供 Settings 页读取。
     models: modelsApiStub(),
     usage: usageApiStub(),
+    vocabulary: vocabularyApiStub(),
     conversation: {
       async create() {
         mock.calls.create += 1

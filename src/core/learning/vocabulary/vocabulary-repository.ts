@@ -1,15 +1,11 @@
 import type {
   VocabularyEntry,
-  VocabularyCursor,
   ListVocabularyInput,
-  VocabularyBatch
+  VocabularyBatch,
+  VocabularyPage
 } from '../../../shared/vocabulary'
 import type { VocabularyInsertCommand } from './vocabulary-insert'
 
-export interface VocabularyPage {
-  entries: VocabularyEntry[]
-  nextCursor?: VocabularyCursor
-}
 export interface VocabularyRepository {
   find(lookupKey: string): VocabularyEntry | undefined
   // 批次预查：一次读取词项建立 key 索引，避免逐词扫描词库。
@@ -26,4 +22,7 @@ export interface VocabularyRepository {
     finalize: (saved: Array<{ id: string; status: 'saved' | 'existing' }>) => VocabularyBatch
   ): VocabularyBatch
   list(input: ListVocabularyInput): VocabularyPage
+  // 按记录 id 精确删除一条词汇：目标存在并删除返回 true，不存在返回 false（幂等）。
+  // 不改写历史会话消息与收藏批次报告。
+  deleteById(id: string): boolean
 }

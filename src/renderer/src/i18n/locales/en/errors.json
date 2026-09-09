@@ -60,5 +60,11 @@
     "invalidInput": "The usage request is invalid.",
     "untrustedSource": "Usage statistics are only available from the application window.",
     "unknown": "Something went wrong. Please try again later."
+  },
+  "vocabulary": {
+    "storageFailed": "Couldn't access your saved vocabulary. Please try again later.",
+    "invalidInput": "The vocabulary request is invalid.",
+    "untrustedSource": "Recorded vocabulary is only available from the application window.",
+    "unknown": "Something went wrong. Please try again later."
   }
 }
