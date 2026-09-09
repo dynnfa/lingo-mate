@@ -37,10 +37,17 @@ export function ModelConfigForm({ state }: { state: ModelsSettingsState }): Reac
 
       <fieldset className="models-fieldset" disabled={formLocked}>
         <div className="models-field">
-          <span className="models-field-label">{t('common:settings.models.protocolLabel')}</span>
-          <span className="models-static-value">
-            {t('common:settings.models.protocolOpenAICompatible')}
-          </span>
+          <label htmlFor="models-protocol">{t('common:settings.models.protocolLabel')}</label>
+          <select
+            id="models-protocol"
+            value={draft.protocol}
+            onChange={(event) => state.setDraftField('protocol', event.target.value)}
+          >
+            <option value="openai-compatible">
+              {t('common:settings.models.protocolOpenAICompatible')}
+            </option>
+            <option value="gemini">{t('common:settings.models.protocolGemini')}</option>
+          </select>
         </div>
 
         <div className="models-field">
@@ -51,7 +58,11 @@ export function ModelConfigForm({ state }: { state: ModelsSettingsState }): Reac
             autoComplete="off"
             id="models-base-url"
             onChange={(event) => state.setDraftField('baseUrl', event.target.value)}
-            placeholder={t('common:settings.models.baseUrlPlaceholder')}
+            placeholder={t(
+              draft.protocol === 'gemini'
+                ? 'common:settings.models.geminiBaseUrlPlaceholder'
+                : 'common:settings.models.baseUrlPlaceholder'
+            )}
             spellCheck={false}
             type="text"
             value={draft.baseUrl}

@@ -48,6 +48,8 @@
       "formTitleCreate": "新增模型",
       "formTitleEdit": "编辑模型",
       "protocolLabel": "接口类型",
+      "protocolGemini": "Gemini",
+      "geminiBaseUrlPlaceholder": "https://generativelanguage.googleapis.com/v1beta",
       "protocolOpenAICompatible": "OpenAI 兼容",
       "baseUrlLabel": "Base URL",
       "baseUrlPlaceholder": "例如 https://api.example.com/v1",

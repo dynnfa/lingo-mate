@@ -1,4 +1,6 @@
 import OpenAI from 'openai'
+import { GeminiTransport } from './gemini-transport'
+import type { ModelProtocol } from '../../shared/models'
 import type {
   ChatCompletion,
   ChatCompletionChunk,
@@ -36,6 +38,7 @@ export function classifyModelRequestError(error: unknown): ModelRequestErrorKind
 }
 
 export interface LlmClientConfig {
+  protocol?: ModelProtocol
   baseUrl: string
   apiKey: string | undefined
 }
@@ -149,6 +152,7 @@ function withoutUsage(chunk: ChatCompletionChunk): LlmStreamChunk {
 // 每次实际 SDK 调用自动记账（started → 终态），业务适配器只传调用上下文。
 export class LlmClient {
   private readonly sdk: OpenAI
+  private readonly gemini: GeminiTransport | undefined
 
   // SDK 自动重试关闭：应用层重试是一次新的 SDK 调用，对应新的账本记录。
   // 鉴权头不主动转发到跨 origin 重定向目标——undici 的 fetch 遵循 Fetch 规范，
@@ -158,6 +162,7 @@ export class LlmClient {
     config: LlmClientConfig,
     private readonly recorder: LlmUsageRecorder
   ) {
+    this.gemini = config.protocol === 'gemini' ? new GeminiTransport(config) : undefined
     this.sdk = new OpenAI({
       baseURL: config.baseUrl,
       apiKey: config.apiKey ?? 'lingo-mate-keyless',
@@ -186,10 +191,12 @@ export class LlmClient {
     try {
       try {
         const completion = await guard.awaitInterruptible(() =>
-          this.sdk.chat.completions.create(
-            { ...params, stream: false as const },
-            { signal: guard.controller.signal, timeout: context.timeoutMs }
-          )
+          this.gemini
+            ? this.gemini.complete(params, guard.controller.signal)
+            : this.sdk.chat.completions.create(
+                { ...params, stream: false as const },
+                { signal: guard.controller.signal, timeout: context.timeoutMs }
+              )
         )
         const responseModel =
           typeof completion?.model === 'string' && completion.model !== '' ? completion.model : null
@@ -240,16 +247,18 @@ export class LlmClient {
     try {
       try {
         const { data: stream, response } = await guard.awaitInterruptible(() =>
-          this.sdk.chat.completions
-            .create(
-              {
-                ...params,
-                stream: true as const,
-                stream_options: { include_usage: true }
-              },
-              { signal: guard.controller.signal, timeout: context.timeoutMs }
-            )
-            .withResponse()
+          this.gemini
+            ? this.gemini.stream(params, guard.controller.signal)
+            : this.sdk.chat.completions
+                .create(
+                  {
+                    ...params,
+                    stream: true as const,
+                    stream_options: { include_usage: true }
+                  },
+                  { signal: guard.controller.signal, timeout: context.timeoutMs }
+                )
+                .withResponse()
         )
         const mediaType = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase()
         if (mediaType !== 'text/event-stream') {

@@ -25,7 +25,7 @@ const responseSchema = z.object({
                 function: z.object({ name: z.string(), arguments: z.string() })
               })
             )
-            .length(1)
+            .min(1)
         })
       })
     )
@@ -47,6 +47,7 @@ export class LlmSynonymAnalyzer implements SynonymAnalyzer {
       { role: 'user', content: JSON.stringify({ word: input.word, wordLanguage: 'en' }) }
     ]
     const ids = new Set<string>()
+    let correctedParallelTurn = false
     try {
       for (let round = 0; round < this.maxRounds; round++) {
         if (input.signal.aborted) throw new SynonymError('CANCELLED')
@@ -56,7 +57,7 @@ export class LlmSynonymAnalyzer implements SynonymAnalyzer {
             messages,
             tools: synonymTools(),
             tool_choice: 'auto',
-            parallel_tool_calls: false
+            ...(this.config.protocol === 'gemini' ? {} : { parallel_tool_calls: false })
           },
           { operation: 'synonym_analysis', signal: input.signal, timeoutMs: this.timeoutMs }
         )
@@ -65,9 +66,27 @@ export class LlmSynonymAnalyzer implements SynonymAnalyzer {
         if (!parsed.success) throw new SynonymError('INVALID_ANALYSIS', { cause: parsed.error })
         const message = parsed.data.choices[0].message
         if (message.content || message.refusal) throw new SynonymError('INVALID_ANALYSIS')
+        for (const call of message.tool_calls) {
+          if (ids.has(call.id)) throw new SynonymError('INVALID_ANALYSIS')
+          ids.add(call.id)
+        }
+        if (message.tool_calls.length !== 1) {
+          // Gemini has no parallel_tool_calls switch. Reject the whole turn before
+          // executing anything, and allow one correction within the existing round limit.
+          if (this.config.protocol !== 'gemini' || correctedParallelTurn)
+            throw new SynonymError('INVALID_ANALYSIS')
+          correctedParallelTurn = true
+          messages.push({ ...message, role: 'assistant' })
+          for (const call of message.tool_calls) {
+            messages.push({
+              role: 'tool',
+              tool_call_id: call.id,
+              content: JSON.stringify({ error: 'SINGLE_TOOL_CALL_REQUIRED' })
+            })
+          }
+          continue
+        }
         const call = message.tool_calls[0]
-        if (ids.has(call.id)) throw new SynonymError('INVALID_ANALYSIS')
-        ids.add(call.id)
         let args: unknown
         try {
           args = JSON.parse(call.function.arguments)

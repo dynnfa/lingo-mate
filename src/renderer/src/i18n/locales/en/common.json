@@ -48,6 +48,8 @@
       "formTitleCreate": "Add model",
       "formTitleEdit": "Edit model",
       "protocolLabel": "API type",
+      "protocolGemini": "Gemini",
+      "geminiBaseUrlPlaceholder": "https://generativelanguage.googleapis.com/v1beta",
       "protocolOpenAICompatible": "OpenAI-compatible",
       "baseUrlLabel": "Base URL",
       "baseUrlPlaceholder": "e.g. https://api.example.com/v1",
