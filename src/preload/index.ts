@@ -53,6 +53,13 @@ import {
   listVocabularyResultSchema,
   VOCABULARY_CHANNELS
 } from '../shared/vocabulary'
+import {
+  deletePhraseInputSchema,
+  deletePhraseResultSchema,
+  listPhraseInputSchema,
+  listPhraseResultSchema,
+  PHRASE_CHANNELS
+} from '../shared/phrase'
 
 const api: LingoMateApi = {
   preferences: {
@@ -132,6 +139,18 @@ const api: LingoMateApi = {
       const input = deleteVocabularyInputSchema.parse(rawInput)
       const result: unknown = await ipcRenderer.invoke(VOCABULARY_CHANNELS.delete, input)
       return deleteVocabularyResultSchema.parse(result)
+    }
+  },
+  phrase: {
+    async list(rawInput) {
+      const input = listPhraseInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(PHRASE_CHANNELS.list, input)
+      return listPhraseResultSchema.parse(result)
+    },
+    async delete(rawInput) {
+      const input = deletePhraseInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(PHRASE_CHANNELS.delete, input)
+      return deletePhraseResultSchema.parse(result)
     }
   },
   conversation: {

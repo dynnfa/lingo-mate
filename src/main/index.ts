@@ -52,6 +52,8 @@ import { LlmUsageStatisticsService } from '../core/llm/llm-usage-statistics'
 import { registerUsageIpc } from './usage-ipc'
 import { registerVocabularyIpc } from './vocabulary-ipc'
 import { VocabularyManagementService } from '../core/learning/vocabulary/vocabulary-management'
+import { registerPhraseIpc } from './phrase-ipc'
+import { PhraseManagementService } from '../core/learning/phrase/phrase-management'
 
 let database: Database.Database | undefined
 let conversationModule: ConversationModule | undefined
@@ -188,6 +190,9 @@ app.whenReady().then(() => {
   // /phrase 与 /vocabulary 共用模型配置快照解析与超时策略；用量登记为
   // phrase_analysis，由 LlmClient 按调用上下文自动记账。
   const phraseRepository = new SqlitePhraseRepository(database)
+  // 已记录页的短语列表与删除：复用短语收录仓储，经管理服务暴露窄接口；
+  // 删除只作用于 phrase 记录，不改写历史会话与收录批次报告。
+  registerPhraseIpc(new PhraseManagementService(phraseRepository), rendererUrl)
   const phraseSkill = new PhraseConversationSkill(
     phraseRepository,
     (timeoutMs) =>

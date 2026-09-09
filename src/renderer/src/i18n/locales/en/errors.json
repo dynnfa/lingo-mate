@@ -66,5 +66,11 @@
     "invalidInput": "The vocabulary request is invalid.",
     "untrustedSource": "Recorded vocabulary is only available from the application window.",
     "unknown": "Something went wrong. Please try again later."
+  },
+  "phrase": {
+    "storageFailed": "Couldn't access your saved phrases. Please try again later.",
+    "invalidInput": "The phrase request is invalid.",
+    "untrustedSource": "Recorded phrases are only available from the application window.",
+    "unknown": "Something went wrong. Please try again later."
   }
 }

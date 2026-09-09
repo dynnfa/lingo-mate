@@ -103,3 +103,70 @@ export type PhraseItemResult = z.infer<typeof phraseItemResultSchema>
 export function isPhraseBatch(report: unknown): report is PhraseBatch {
   return phraseBatchSchema.safeParse(report).success
 }
+
+// ── 已记录页短语管理（列表与删除）IPC 协议 ──
+// 条目以 phrase 文本为唯一主键：删除输入与分页游标都只校验、不转换，
+// 保证与 SQLite 的 phrase COLLATE BINARY 精确匹配规则一致。
+export const PHRASE_CHANNELS = {
+  list: 'phrase:list',
+  delete: 'phrase:delete'
+} as const
+
+export const PHRASE_MANAGEMENT_ERROR_CODES = [
+  'UNTRUSTED_SOURCE',
+  'INVALID_INPUT',
+  'STORAGE_FAILED',
+  'UNKNOWN_ERROR'
+] as const
+export type PhraseManagementErrorCode = (typeof PHRASE_MANAGEMENT_ERROR_CODES)[number]
+export const phraseManagementErrorSchema = z.strictObject({
+  code: z.enum(PHRASE_MANAGEMENT_ERROR_CODES)
+})
+export type PhraseManagementError = z.infer<typeof phraseManagementErrorSchema>
+
+// 主键文本：限制非空（trim 后非空白）与最大长度，但不修改值本身。
+const phraseKeySchema = z
+  .string()
+  .min(1)
+  .max(PHRASE_MAX_LENGTH)
+  .refine((value) => value.trim().length > 0)
+
+// 列表输入：limit 默认 50、最多 100；cursor 为上一页最后一条短语文本。
+export const listPhraseInputSchema = z.strictObject({
+  limit: z.number().int().min(1).max(100).default(50),
+  cursor: phraseKeySchema.optional()
+})
+export type ListPhraseInput = z.input<typeof listPhraseInputSchema>
+
+// 分页结果：entries 按 phrase COLLATE BINARY 升序；nextCursor 缺省表示没有后续页。
+export const phrasePageSchema = z.strictObject({
+  entries: z.array(phraseEntrySchema),
+  nextCursor: phraseKeySchema.optional()
+})
+export type PhrasePage = z.infer<typeof phrasePageSchema>
+
+export const listPhraseResultSchema = z.discriminatedUnion('status', [
+  z.strictObject({
+    status: z.literal('ok'),
+    entries: z.array(phraseEntrySchema),
+    nextCursor: phraseKeySchema.optional()
+  }),
+  z.strictObject({ status: z.literal('error'), error: phraseManagementErrorSchema })
+])
+export type ListPhraseResult = z.infer<typeof listPhraseResultSchema>
+
+// 删除只接受完整 phrase 主键：按原文精确删除，不做模糊匹配或大小写转换。
+export const deletePhraseInputSchema = z.strictObject({ phrase: phraseKeySchema })
+export type DeletePhraseInput = z.input<typeof deletePhraseInputSchema>
+
+// 目标不存在时返回成功且 deleted: false，保证重复请求幂等。
+export const deletePhraseResultSchema = z.discriminatedUnion('status', [
+  z.strictObject({ status: z.literal('ok'), phrase: phraseKeySchema, deleted: z.boolean() }),
+  z.strictObject({ status: z.literal('error'), error: phraseManagementErrorSchema })
+])
+export type DeletePhraseResult = z.infer<typeof deletePhraseResultSchema>
+
+export interface PhraseApi {
+  list(input: ListPhraseInput): Promise<ListPhraseResult>
+  delete(input: DeletePhraseInput): Promise<DeletePhraseResult>
+}

@@ -1,16 +1,21 @@
-import { useEffect, useRef, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { PhraseDetail } from './PhraseDetail'
 import { VocabularyDetail } from './VocabularyDetail'
 
 interface RecordedPageProps {
   onExit: () => void
 }
 
-// 已记录页骨架：左侧菜单当前仅有词汇一项并默认选中，右侧渲染词汇详情。
+type RecordedSection = 'vocabulary' | 'phrase'
+
+// 已记录页骨架：左侧菜单含词汇与短语两项，默认选中词汇，右侧渲染对应详情。
+// 切换菜单即卸载另一详情：视图状态不跨菜单保留，重新进入时读取最新列表。
 // 进入时焦点移至返回按钮；Escape 退出；退出后由调用方把焦点还给「已记录」入口。
 export function RecordedPage({ onExit }: RecordedPageProps): React.JSX.Element {
   const { t } = useTranslation('common')
   const backButtonRef = useRef<HTMLButtonElement>(null)
+  const [section, setSection] = useState<RecordedSection>('vocabulary')
 
   useEffect(() => {
     backButtonRef.current?.focus()
@@ -40,13 +45,21 @@ export function RecordedPage({ onExit }: RecordedPageProps): React.JSX.Element {
           <h2 className="recorded-title">{t('recorded.title')}</h2>
         </div>
         <nav aria-label={t('recorded.menuLabel')} className="recorded-menu-list">
-          <button aria-current="true" className="recorded-menu-item" type="button">
-            {t('recorded.sections.vocabulary')}
-          </button>
+          {(['vocabulary', 'phrase'] as const).map((item) => (
+            <button
+              aria-current={section === item ? 'true' : undefined}
+              className="recorded-menu-item"
+              key={item}
+              onClick={() => setSection(item)}
+              type="button"
+            >
+              {t(`recorded.sections.${item}`)}
+            </button>
+          ))}
         </nav>
       </aside>
       <section className="recorded-detail">
-        <VocabularyDetail />
+        {section === 'vocabulary' ? <VocabularyDetail /> : <PhraseDetail />}
       </section>
     </main>
   )
