@@ -10,7 +10,6 @@ import type {
   VocabularyEntry
 } from '../../../../shared/vocabulary'
 import { createI18n } from '../../i18n'
-import { formatDateTime } from '../../i18n/formatters'
 import { VocabularyDetail } from '../VocabularyDetail'
 
 // 组件测试固定 zh-CN 渲染；断言基于真实资源文本与可访问名称。
@@ -105,7 +104,6 @@ describe('VocabularyDetail table', () => {
       '释义',
       '概念说明',
       '例句',
-      '记录时间',
       '操作'
     ])
 
@@ -116,8 +114,6 @@ describe('VocabularyDetail table', () => {
     for (const sentence of apple.exampleSentences ?? []) {
       expect(row.getByText(sentence)).toBeInTheDocument()
     }
-    // 记录时间按界面语言与本地时区格式化，不显示 ISO 原文。
-    expect(row.getByText(formatDateTime('zh-CN', apple.createdAt))).toBeInTheDocument()
     expect(row.getByRole('button', { name: '删除 apple' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '加载更多' })).not.toBeInTheDocument()
   })
@@ -159,7 +155,6 @@ describe('VocabularyDetail table', () => {
       'Meaning',
       'Concept',
       'Examples',
-      'Recorded at',
       'Actions'
     ])
   })

@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent, type SyntheticEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent, type SyntheticEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { translateConversationStatus } from './status-messages'
 import { MarkdownMessage } from './MarkdownMessage'
@@ -20,6 +20,7 @@ interface ConversationPanelProps {
   status: ConversationStatus
   generating: boolean
   composerLocked: boolean
+  composerFocusRequest: number
   onSend: (text: string) => boolean | void | Promise<boolean | void>
   onRunSkill?: (input: {
     skillId: SelectedConversationSkillId
@@ -40,6 +41,7 @@ export function ConversationPanel({
   status,
   generating,
   composerLocked,
+  composerFocusRequest,
   onSend,
   onRunSkill,
   onCancel,
@@ -56,6 +58,13 @@ export function ConversationPanel({
   const [dismissal, setDismissal] = useState<PickerDismissal>('none')
   const [highlightedActionId, setHighlightedActionId] = useState<string | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const handledFocusRequestRef = useRef(0)
+
+  useEffect(() => {
+    if (composerFocusRequest <= handledFocusRequestRef.current || composerLocked) return
+    handledFocusRequestRef.current = composerFocusRequest
+    inputRef.current?.focus()
+  }, [composerFocusRequest, composerLocked])
 
   const triggerQuery = parseSlashTrigger(draft)
   const filterQuery = composing ? compositionQuery : triggerQuery

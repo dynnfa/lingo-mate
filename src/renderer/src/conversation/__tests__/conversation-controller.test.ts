@@ -45,7 +45,7 @@ function apiStub(overrides: Partial<ConversationApi>): ConversationApi {
     throw new Error(`${name} not configured for this test`)
   }
   return {
-    create: unconfigured('create'),
+    create: async () => ({ status: 'ok', conversation: summary(SESSION_A) }),
     list: unconfigured('list'),
     load: unconfigured('load'),
     send: unconfigured('send'),
@@ -121,6 +121,7 @@ describe('ConversationController transitions', () => {
     let listCalls = 0
     const controller = new ConversationController(
       apiStub({
+        create: async () => ({ status: 'ok', conversation: summary(SESSION_C) }),
         list: async () => {
           listCalls += 1
           return listCalls === 1 ? firstList.promise : secondList.promise
@@ -139,7 +140,7 @@ describe('ConversationController transitions', () => {
     await first
 
     const state = controller.getState()
-    expect(state.sessionId).toBe(SESSION_B)
+    expect(state.sessionId).toBe(SESSION_C)
     expect(state.conversations.map((conversation) => conversation.sessionId)).toEqual([SESSION_B])
     expect(state.phase).toBe('ready')
   })

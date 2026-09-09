@@ -39,6 +39,8 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
   const state = useSyncExternalStore(controller.subscribe, controller.getState)
   const [activeView, setActiveView] = useState<AppView>('conversation')
   const [preferenceNoticeVisible, setPreferenceNoticeVisible] = useState(initialPreferenceError)
+  // 启动焦点请求会在会话加载完成、输入框解锁后执行。
+  const [composerFocusRequest, setComposerFocusRequest] = useState(1)
   const settingsButtonRef = useRef<HTMLButtonElement>(null)
   const recordedButtonRef = useRef<HTMLButtonElement>(null)
   const practiceButtonRef = useRef<HTMLButtonElement>(null)
@@ -67,6 +69,15 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
 
   const generating = isGenerating(state)
   const composerLocked = state.phase !== 'ready' || generating || state.commandPending
+
+  const startNewConversation = async (): Promise<void> => {
+    const previousSessionId = controller.getState().sessionId
+    await controller.startNewConversation()
+    const nextState = controller.getState()
+    if (nextState.phase === 'ready' && nextState.sessionId !== previousSessionId) {
+      setComposerFocusRequest((request) => request + 1)
+    }
+  }
 
   return (
     <>
@@ -111,7 +122,7 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
               aria-label={t('common:sidebar.newSession')}
               className="new-session"
               disabled={state.phase !== 'ready' || state.commandPending}
-              onClick={() => void controller.startNewConversation()}
+              onClick={() => void startNewConversation()}
               title={t('common:sidebar.newSession')}
               type="button"
             >
@@ -170,6 +181,7 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
           status={state.status}
           generating={generating || state.commandPending}
           composerLocked={composerLocked}
+          composerFocusRequest={composerFocusRequest}
           onSend={(text) => controller.send(text)}
           onRunSkill={(input) => controller.runSkill(input)}
           onCancel={() => void controller.cancel()}

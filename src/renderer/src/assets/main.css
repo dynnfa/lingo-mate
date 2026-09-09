@@ -289,10 +289,17 @@ body {
   border-bottom: none;
 }
 
-.vocabulary-cell-term,
 .phrase-cell-phrase,
 .synonym-cell-word {
   overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+/* 单词列收缩到最长单词的宽度：nowrap 抬高该列最小内容宽度，
+   width: 1px 阻止富余空间摊给该列，宽度由最长单词决定。 */
+.vocabulary-cell-term {
+  width: 1px;
+  white-space: nowrap;
   font-weight: 600;
 }
 
@@ -325,11 +332,6 @@ body {
 .synonym-table tbody:last-of-type tr:last-child td,
 .synonym-table tbody:last-of-type .synonym-group-meaning {
   border-bottom: none;
-}
-
-.vocabulary-cell-date {
-  white-space: nowrap;
-  color: var(--color-text-status);
 }
 
 .vocabulary-example-list {

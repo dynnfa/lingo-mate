@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { normalizeI18nLocale } from '../i18n'
-import { formatDateTime } from '../i18n/formatters'
 import type {
   VocabularyCursor,
   VocabularyEntry,
@@ -14,8 +12,7 @@ type VocabularyLoadState = 'loading' | 'ready' | 'error'
 // 已记录页 Vocabulary 详情：读取收藏词汇以表格展示，最右侧操作列支持
 // 按 id 单条删除。请求与删除状态集中在本组件，不经由对话控制器。
 export function VocabularyDetail(): React.JSX.Element {
-  const { t, i18n } = useTranslation(['common', 'errors'])
-  const locale = normalizeI18nLocale(i18n.resolvedLanguage)
+  const { t } = useTranslation(['common', 'errors'])
 
   const [loadState, setLoadState] = useState<VocabularyLoadState>('loading')
   const [entries, setEntries] = useState<VocabularyEntry[]>([])
@@ -242,7 +239,6 @@ export function VocabularyDetail(): React.JSX.Element {
                   <th scope="col">{t('recorded.vocabulary.columnMeaning')}</th>
                   <th scope="col">{t('recorded.vocabulary.columnConcept')}</th>
                   <th scope="col">{t('recorded.vocabulary.columnExamples')}</th>
-                  <th scope="col">{t('recorded.vocabulary.columnCreatedAt')}</th>
                   <th className="vocabulary-actions-column" scope="col">
                     {t('recorded.vocabulary.columnActions')}
                   </th>
@@ -265,9 +261,6 @@ export function VocabularyDetail(): React.JSX.Element {
                       ) : (
                         missing()
                       )}
-                    </td>
-                    <td className="vocabulary-cell-date">
-                      {formatDateTime(locale, entry.createdAt)}
                     </td>
                     <td className="vocabulary-actions-column vocabulary-actions-cell">
                       <button
