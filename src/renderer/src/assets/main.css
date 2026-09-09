@@ -53,9 +53,10 @@ body {
   display: none;
 }
 
-/* 已记录页与设置页共用左右分栏骨架和菜单交互样式，选择器并列共享纯布局规则。 */
+/* 已记录页、设置页与练习页共用左右分栏骨架和菜单交互样式，选择器并列共享纯布局规则。 */
 .settings-page,
-.recorded-page {
+.recorded-page,
+.practice-page {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
   width: 100%;
@@ -64,7 +65,8 @@ body {
 }
 
 .settings-menu,
-.recorded-menu {
+.recorded-menu,
+.practice-menu {
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -74,7 +76,8 @@ body {
 }
 
 .settings-menu-header,
-.recorded-menu-header {
+.recorded-menu-header,
+.practice-menu-header {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -83,7 +86,8 @@ body {
 }
 
 .settings-back-button,
-.recorded-back-button {
+.recorded-back-button,
+.practice-back-button {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -97,7 +101,8 @@ body {
 }
 
 .settings-back-button svg,
-.recorded-back-button svg {
+.recorded-back-button svg,
+.practice-back-button svg {
   flex-shrink: 0;
   width: 16px;
   height: 16px;
@@ -109,7 +114,8 @@ body {
 }
 
 .settings-title,
-.recorded-title {
+.recorded-title,
+.practice-title {
   padding: 0 8px;
   color: var(--color-text-muted);
   font-size: 12px;
@@ -117,7 +123,8 @@ body {
 }
 
 .settings-menu-list,
-.recorded-menu-list {
+.recorded-menu-list,
+.practice-menu-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -125,7 +132,8 @@ body {
 }
 
 .settings-menu-item,
-.recorded-menu-item {
+.recorded-menu-item,
+.practice-menu-item {
   padding: 6px 10px;
   color: var(--color-text-session);
   background: transparent;
@@ -135,7 +143,8 @@ body {
 }
 
 .settings-menu-item[aria-current='true'],
-.recorded-menu-item[aria-current='true'] {
+.recorded-menu-item[aria-current='true'],
+.practice-menu-item[aria-current='true'] {
   color: var(--color-text-active);
   background: var(--color-surface-active);
 }
@@ -146,8 +155,9 @@ body {
   padding: 32px 40px;
 }
 
-/* 已记录页右侧内容容器：本阶段仅占位，供后续词汇列表接入。 */
-.recorded-detail {
+/* 已记录页/练习页右侧内容容器：本阶段仅占位，供后续内容接入。 */
+.recorded-detail,
+.practice-detail {
   min-width: 0;
   overflow-y: auto;
 }
@@ -706,8 +716,10 @@ button.new-session {
 .settings-button:hover,
 .settings-back-button:hover,
 .recorded-back-button:hover,
+.practice-back-button:hover,
 .settings-menu-item:hover,
 .recorded-menu-item:hover,
+.practice-menu-item:hover,
 .new-session:hover {
   background: var(--color-surface-hover);
 }
@@ -1393,13 +1405,15 @@ textarea:disabled {
   }
 
   .settings-page,
-  .recorded-page {
+  .recorded-page,
+  .practice-page {
     grid-template-columns: 210px minmax(0, 1fr);
   }
 
   .session-sidebar,
   .settings-menu,
-  .recorded-menu {
+  .recorded-menu,
+  .practice-menu {
     padding-inline: 10px;
   }
 
@@ -1433,7 +1447,8 @@ textarea:disabled {
 @media (max-width: 520px) {
   .chat-shell,
   .settings-page,
-  .recorded-page {
+  .recorded-page,
+  .practice-page {
     grid-template-columns: 150px minmax(0, 1fr);
   }
 

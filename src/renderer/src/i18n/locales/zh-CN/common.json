@@ -145,6 +145,11 @@
       "vocabulary": "词汇"
     }
   },
+  "practice": {
+    "title": "开始练习",
+    "back": "返回",
+    "menuLabel": "练习菜单"
+  },
   "preferences": {
     "startupError": "无法读取语言偏好，已使用默认语言。",
     "dismiss": "知道了"
