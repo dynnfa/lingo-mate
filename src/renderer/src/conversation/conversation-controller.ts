@@ -44,7 +44,7 @@ export class ConversationController {
     }
   }
 
-  // 启动恢复策略：list → 打开最近会话；空库时 create → load。
+  // 启动时加载历史列表，然后创建并打开空白草稿。
   async initialize(): Promise<void> {
     const transitionId = ++this.transitionId
     this.dispatch({ type: 'loadPhaseStarted', status: { kind: 'restoring' } })
@@ -62,12 +62,6 @@ export class ConversationController {
       }
 
       this.dispatch({ type: 'conversationsListed', conversations: listed.conversations })
-      const latest = listed.conversations[0]
-      if (latest) {
-        await this.openSession(latest.sessionId, transitionId)
-        return
-      }
-
       const created = await this.api.create()
       if (!this.isCurrentTransition(transitionId)) return
 

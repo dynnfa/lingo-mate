@@ -161,6 +161,7 @@ function installApiMock(
       | ListConversationsResult
       | Promise<ListConversationsResult>
       | (() => ListConversationsResult | Promise<ListConversationsResult>)
+    startupCreate?: CreateConversationResult
     create?: CreateConversationResult | Promise<CreateConversationResult>
     load?: (sessionId: string) => LoadConversationResult | Promise<LoadConversationResult>
     send?: (
@@ -227,6 +228,9 @@ function installApiMock(
     conversation: {
       async create() {
         mock.calls.create += 1
+        if (mock.calls.create === 1) {
+          return setup.startupCreate ?? { status: 'ok', conversation: summary(SESSION_A, NOW) }
+        }
         return setup.create ?? { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
       },
       async list() {
@@ -313,8 +317,9 @@ afterEach(() => {
 })
 
 describe('App conversation recovery', () => {
-  it('opens the most recent conversation and renders its history with canonical ids', async () => {
+  it('starts with a blank draft and opens history only when selected', async () => {
     const mock = installApiMock({
+      startupCreate: { status: 'ok', conversation: summary(SESSION_C, NOW) },
       list: {
         status: 'ok',
         conversations: [
@@ -344,7 +349,7 @@ describe('App conversation recovery', () => {
                 }
               ]
             }
-          : { status: 'error', error: { code: 'NOT_FOUND', resource: 'conversation' } }
+          : { status: 'ok', conversation: summary(sessionId, NOW), messages: [] }
     })
 
     renderApp()
@@ -353,7 +358,16 @@ describe('App conversation recovery', () => {
       expect(document.querySelector('main')?.getAttribute('data-phase')).toBe('ready')
     })
 
-    expect(mock.calls.load).toEqual([SESSION_A])
+    expect(mock.calls.create).toBe(1)
+    expect(mock.calls.load).toEqual([SESSION_C])
+    expect(screen.getByText('从一句话开始')).toBeInTheDocument()
+    expect(screen.getByLabelText('练习内容')).toHaveFocus()
+    expect(screen.queryByText('Hello')).not.toBeInTheDocument()
+    expect(sessionButton(SESSION_A)).toHaveAttribute('aria-pressed', 'false')
+    expect(sessionButton(SESSION_B)).toHaveAttribute('aria-pressed', 'false')
+    expect(document.querySelector(`[data-session-id="${SESSION_C}"]`)).toBeNull()
+
+    fireEvent.click(sessionButton(SESSION_A))
     expect(await screen.findByText('Hello')).toBeInTheDocument()
     expect(screen.getByText('Hi there')).toBeInTheDocument()
     expect(sessionButton(SESSION_A)).toHaveAttribute('aria-pressed', 'true')
@@ -382,6 +396,7 @@ describe('App conversation recovery', () => {
     expect(mock.calls.create).toBe(1)
     expect(mock.calls.load).toEqual([SESSION_A])
     expect(screen.getByLabelText('练习内容')).toBeEnabled()
+    expect(screen.getByLabelText('练习内容')).toHaveFocus()
   })
 
   it('shows a generated title in the conversation list', async () => {
@@ -865,12 +880,13 @@ describe('App conversation switching', () => {
     )
     await waitFor(() => expect(mock.calls.load).toContain(SESSION_B))
     expect(document.querySelector(`[data-session-id="${SESSION_B}"]`)).toBeNull()
-    expect(mock.calls.create).toBe(1)
+    expect(mock.calls.create).toBe(2)
     expect(mock.calls.load).toEqual([SESSION_A, SESSION_B])
     expect(sessionButton(SESSION_A)).toHaveAttribute('aria-pressed', 'false')
     expect(
       within(screen.getByRole('region', { name: '对话记录' })).getByText('从一句话开始')
     ).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('练习内容')).toHaveFocus())
   })
 
   it('keeps an unsent draft when switching to another conversation', async () => {

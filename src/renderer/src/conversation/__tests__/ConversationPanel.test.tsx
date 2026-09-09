@@ -30,6 +30,7 @@ function panelElement(props: Partial<Parameters<typeof ConversationPanel>[0]>): 
         status={props.status ?? ({ kind: 'ready' } satisfies ConversationStatus)}
         generating={props.generating ?? false}
         composerLocked={props.composerLocked ?? false}
+        composerFocusRequest={props.composerFocusRequest ?? 0}
         onSend={props.onSend ?? (() => {})}
         onRunSkill={props.onRunSkill ?? (() => {})}
         onCancel={props.onCancel ?? (() => {})}
@@ -110,6 +111,30 @@ describe('ConversationPanel rendering', () => {
 })
 
 describe('ConversationPanel composer', () => {
+  it('waits for the composer to unlock before handling the startup focus request', () => {
+    const { view } = renderPanel({ composerFocusRequest: 1, composerLocked: true })
+    const input = screen.getByLabelText('练习内容')
+
+    expect(input).toBeDisabled()
+    expect(input).not.toHaveFocus()
+    view.rerender(panelElement({ composerFocusRequest: 1, composerLocked: false }))
+    expect(input).toHaveFocus()
+  })
+
+  it('focuses the composer once for each explicit focus request', () => {
+    const { view } = renderPanel()
+    const input = screen.getByLabelText('练习内容')
+
+    expect(input).not.toHaveFocus()
+    view.rerender(panelElement({ composerFocusRequest: 1 }))
+    expect(input).toHaveFocus()
+
+    input.blur()
+    view.rerender(panelElement({ composerFocusRequest: 1, composerLocked: true }))
+    view.rerender(panelElement({ composerFocusRequest: 1, composerLocked: false }))
+    expect(input).not.toHaveFocus()
+  })
+
   it('does not send a locked or whitespace-only draft', () => {
     const { view, callbacks } = renderPanel()
 
@@ -905,6 +930,7 @@ describe('ConversationPanel picker language switch', () => {
           status={{ kind: 'ready' }}
           generating={false}
           composerLocked={false}
+          composerFocusRequest={0}
           onSend={() => {}}
           onCancel={() => {}}
           onRetry={() => {}}
