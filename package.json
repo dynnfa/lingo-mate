@@ -31,7 +31,10 @@
     "i18next": "^26.4.2",
     "openai": "^7.9.0",
     "react-i18next": "^17.0.13",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.18.3",
+    "remark-breaks": "^4.0.0",
+    "remark-gfm": "^4.0.1",
     "zod": "^4.5.4",
     "zustand": "^5.0.15"
   },

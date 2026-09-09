@@ -2,7 +2,11 @@ import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ModelConfigForm } from './ModelConfigForm'
 import { ModelsTable } from './ModelsTable'
-import { modelsDeleteErrorKey, modelsSetActiveErrorKey } from './models-messages'
+import {
+  modelsDeleteErrorKey,
+  modelsSetActiveErrorKey,
+  modelsTestOutcomeKey
+} from './models-messages'
 import type { ModelsSettingsState } from './useModelsSettings'
 
 // 设置页“模型”区块：表格化管理已保存的 LLM 配置。表格只展示已保存记录，
@@ -14,7 +18,8 @@ export function ModelsSettings({
   state: ModelsSettingsState
 }): React.JSX.Element | null {
   const { t } = useTranslation(['common', 'errors'])
-  const { loadState, retryLoad, list, editSession, deleteTarget, discardPrompt } = state
+  const { loadState, retryLoad, list, editSession, deleteTarget, discardPrompt, rowTestDialog } =
+    state
   // 焦点管理：关闭表单后焦点回到来源按钮；删除成功后移至下一行操作按钮，
   // 空列表时移至新增入口。
   const addButtonRef = useRef<HTMLButtonElement>(null)
@@ -40,6 +45,18 @@ export function ModelsSettings({
     wasDeletingRef.current = deleting
   }, [deleteTarget, state.deleteState.kind])
 
+  // 测试弹窗打开时焦点移入弹窗按钮：触发行的“测试连通”随测试开始被禁用，
+  // 焦点会落到 body，使挂在 <main> 上的 Escape 分层收不到按键。
+  const testDialogButtonRef = useRef<HTMLButtonElement>(null)
+  const wasTestDialogOpenRef = useRef(false)
+  useEffect(() => {
+    const dialogOpen = rowTestDialog !== undefined
+    if (dialogOpen && !wasTestDialogOpenRef.current) {
+      testDialogButtonRef.current?.focus()
+    }
+    wasTestDialogOpenRef.current = dialogOpen
+  }, [rowTestDialog])
+
   if (loadState === 'loading') {
     return <p className="models-loading">{t('common:settings.models.loading')}</p>
   }
@@ -59,6 +76,16 @@ export function ModelsSettings({
 
   if (list === undefined) return null
   const empty = list.configs.length === 0
+
+  // 行测试结果弹窗：标明被测配置，状态文案随测试进度在弹窗内更新。
+  const rowTestTarget =
+    rowTestDialog !== undefined
+      ? list.configs.find((config) => config.id === rowTestDialog.configId)
+      : undefined
+  const rowTestFailed = rowTestDialog?.outcome.status === 'failed'
+  const rowTestMessageKey =
+    rowTestDialog !== undefined ? modelsTestOutcomeKey(rowTestDialog.outcome) : undefined
+  const rowTestMessage = rowTestMessageKey !== undefined ? t(rowTestMessageKey) : undefined
 
   const beginCreateFromButton = (event: React.MouseEvent<HTMLButtonElement>): void => {
     formOpenerRef.current = event.currentTarget
@@ -135,7 +162,6 @@ export function ModelsSettings({
         onDelete={requestDeleteFromButton}
         onEdit={beginEditFromButton}
         onTest={state.testRow}
-        rowTests={state.rowTests}
       />
 
       <button
@@ -220,6 +246,36 @@ export function ModelsSettings({
               type="button"
             >
               {t('common:settings.models.discardConfirmDiscard')}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {rowTestDialog !== undefined ? (
+        <div aria-labelledby="models-test-dialog-title" className="settings-confirm" role="dialog">
+          <h3 id="models-test-dialog-title">{t('common:settings.models.testDialogTitle')}</h3>
+          {rowTestTarget !== undefined ? (
+            <p>
+              {t('common:settings.models.testDialogTarget', {
+                modelId: rowTestTarget.modelId,
+                baseUrl: rowTestTarget.baseUrl
+              })}
+            </p>
+          ) : null}
+          {rowTestMessage !== undefined ? (
+            <p
+              aria-live="polite"
+              className={rowTestFailed ? 'settings-error' : undefined}
+              role="status"
+            >
+              {rowTestMessage}
+            </p>
+          ) : null}
+          <div className="settings-confirm-actions">
+            <button onClick={state.closeRowTestDialog} ref={testDialogButtonRef} type="button">
+              {rowTestDialog.outcome.status === 'running'
+                ? t('common:settings.models.cancelButton')
+                : t('common:settings.models.testDialogClose')}
             </button>
           </div>
         </div>

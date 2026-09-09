@@ -63,10 +63,13 @@ test('manages multiple saved models from the Settings > Models table end to end'
       await expect(rowB.getByText('未配置')).toBeVisible()
       await expect(window.locator('#models-active-config')).toContainText('model-a')
 
-      // 测试指定行：结果只属于该行
+      // 测试指定行：结果在弹窗中展示被测配置，关闭后不残留
       await rowB.getByRole('button', { name: '测试连通' }).click()
-      await expect(rowB.getByText('成功')).toBeVisible({ timeout: 15_000 })
-      await expect(rowA.getByText('未测试')).toBeVisible()
+      const testDialog = window.getByRole('dialog', { name: '连接测试' })
+      await expect(testDialog).toContainText('model-b', { timeout: 15_000 })
+      await expect(testDialog).toContainText('连接测试成功。')
+      await testDialog.getByRole('button', { name: '关闭' }).click()
+      await expect(testDialog).toBeHidden()
 
       // 编辑第一条：不回填密钥，保存后行更新且当前选择保持
       await rowA.getByRole('button', { name: '编辑' }).click()
