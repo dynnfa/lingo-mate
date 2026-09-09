@@ -334,3 +334,97 @@ describe('phrase repository on the v9 schema', () => {
     ).toBe(0)
   })
 })
+
+describe('phrase repository list and delete', () => {
+  function seed(database: Database.Database, phrases: string[]): SqlitePhraseRepository {
+    const repository = new SqlitePhraseRepository(database)
+    for (const phrase of phrases) commit(database, [content(phrase)])
+    return repository
+  }
+
+  it('lists pages in stable BINARY order with no overlap or gap across cursors', () => {
+    const database = open()
+    const repository = seed(database, [
+      'apples',
+      'Zebra',
+      'apple',
+      'Break even',
+      'look forward to',
+      'break even'
+    ])
+
+    // BINARY 排序：大小写敏感且按字节序，'Zebra' < 'apple'，'apple' < 'apples'。
+    const first = repository.list({ limit: 2 })
+    expect(first.entries.map((entry) => entry.phrase)).toEqual(['Break even', 'Zebra'])
+    expect(first.nextCursor).toBe('Zebra')
+
+    const second = repository.list({ limit: 2, cursor: first.nextCursor })
+    expect(second.entries.map((entry) => entry.phrase)).toEqual(['apple', 'apples'])
+    expect(second.nextCursor).toBe('apples')
+
+    const third = repository.list({ limit: 2, cursor: second.nextCursor })
+    expect(third.entries.map((entry) => entry.phrase)).toEqual(['break even', 'look forward to'])
+    expect(third.nextCursor).toBeUndefined()
+
+    // 末页恰好取满且没有下一页时，nextCursor 缺省而不是补一个空游标。
+    const exact = repository.list({ limit: 6 })
+    expect(exact.entries).toHaveLength(6)
+    expect(exact.nextCursor).toBeUndefined()
+  })
+
+  it('deletes exactly one entry by its verbatim primary key', () => {
+    const database = open()
+    const repository = seed(database, ['look forward to', 'LOOK FORWARD TO', 'look forward!'])
+
+    expect(repository.deleteByPhrase('look forward to')).toBe(true)
+    // 大小写不同、前缀相近的短语不受影响。
+    expect(repository.findExisting(['LOOK FORWARD TO', 'look forward!']).size).toBe(2)
+    expect(repository.findExisting(['look forward to']).size).toBe(0)
+    // 目标已不存在：幂等返回 false。
+    expect(repository.deleteByPhrase('look forward to')).toBe(false)
+    expect(repository.deleteByPhrase('missing')).toBe(false)
+  })
+
+  it('keeps paging by value after the cursor row is deleted', () => {
+    const database = open()
+    const repository = seed(database, ['a phrase', 'b phrase', 'c phrase'])
+
+    const first = repository.list({ limit: 1 })
+    expect(first.nextCursor).toBe('a phrase')
+    expect(repository.deleteByPhrase('a phrase')).toBe(true)
+
+    // 游标行已删除：值比较不受影响，下一页从 b phrase 继续。
+    const second = repository.list({ limit: 2, cursor: first.nextCursor })
+    expect(second.entries.map((entry) => entry.phrase)).toEqual(['b phrase', 'c phrase'])
+    expect(second.nextCursor).toBeUndefined()
+  })
+
+  it('preserves conversation history and batch reports when deleting phrases', () => {
+    const database = open()
+    const repository = seed(database, ['look forward to'])
+
+    expect(repository.deleteByPhrase('look forward to')).toBe(true)
+    expect(
+      (
+        database.prepare('SELECT COUNT(*) AS count FROM conversation_messages').get() as {
+          count: number
+        }
+      ).count
+    ).toBe(1)
+    const execution = database
+      .prepare('SELECT batch_json FROM conversation_skill_executions')
+      .get() as {
+      batch_json: string | null
+    }
+    expect(execution.batch_json).toContain('"saved":1')
+  })
+
+  it('wraps list and delete storage failures as STORAGE_FAILED', () => {
+    const database = open()
+    const repository = seed(database, ['look forward to'])
+    database.exec('DROP TABLE phrase')
+
+    expect(() => repository.list({})).toThrow('STORAGE_FAILED')
+    expect(() => repository.deleteByPhrase('look forward to')).toThrow('STORAGE_FAILED')
+  })
+})

@@ -140,7 +140,8 @@
     "back": "返回",
     "menuLabel": "已记录词汇菜单",
     "sections": {
-      "vocabulary": "词汇"
+      "vocabulary": "词汇",
+      "phrase": "短语"
     },
     "vocabulary": {
       "detailTitle": "词汇",
@@ -169,6 +170,30 @@
       "deleteDialogConfirm": "删除",
       "deleting": "删除中…",
       "deleteSucceeded": "已删除「{{term}}」"
+    },
+    "phrase": {
+      "detailTitle": "短语",
+      "tableCaption": "已收藏短语列表",
+      "columnPhrase": "短语",
+      "columnExplantation": "解释",
+      "columnExample": "例句",
+      "columnActions": "操作",
+      "loading": "正在加载短语…",
+      "loadErrorTitle": "短语读取失败",
+      "retry": "重试",
+      "emptyTitle": "还没有收藏短语",
+      "emptyBody": "在对话中使用 /phrase 命令收藏短语后，会在这里展示。",
+      "loadMore": "加载更多",
+      "loadingMore": "正在加载更多…",
+      "loadMoreFailed": "加载更多失败",
+      "deleteButton": "删除",
+      "deleteButtonLabel": "删除 {{phrase}}",
+      "deleteDialogTitle": "删除短语",
+      "deleteDialogBody": "将删除收藏记录「{{phrase}}」。历史会话消息保持不变。",
+      "deleteDialogCancel": "取消",
+      "deleteDialogConfirm": "删除",
+      "deleting": "删除中…",
+      "deleteSucceeded": "已删除「{{phrase}}」"
     }
   },
   "practice": {

@@ -66,5 +66,11 @@
     "invalidInput": "词汇请求无效。",
     "untrustedSource": "已记录词汇只能从应用窗口访问。",
     "unknown": "发生未知错误，请稍后重试。"
+  },
+  "phrase": {
+    "storageFailed": "访问本地短语数据失败，请稍后重试。",
+    "invalidInput": "短语请求无效。",
+    "untrustedSource": "已记录短语只能从应用窗口访问。",
+    "unknown": "发生未知错误，请稍后重试。"
   }
 }

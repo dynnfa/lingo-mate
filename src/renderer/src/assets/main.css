@@ -175,8 +175,9 @@ body {
   border: 0;
 }
 
-/* ── 已记录页词汇详情：标题、横向滚动表格、底部加载区与删除确认 ── */
-.vocabulary-detail {
+/* ── 已记录页词汇/短语详情：标题、横向滚动表格、底部加载区与删除确认 ── */
+.vocabulary-detail,
+.phrase-detail {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -185,12 +186,14 @@ body {
   padding: 24px 28px 16px;
 }
 
-.vocabulary-detail-header h2 {
+.vocabulary-detail-header h2,
+.phrase-detail-header h2 {
   font-size: 16px;
   font-weight: 600;
 }
 
-.vocabulary-state {
+.vocabulary-state,
+.phrase-state {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -200,24 +203,28 @@ body {
   font-size: 13px;
 }
 
-.vocabulary-state[role='alert'] {
+.vocabulary-state[role='alert'],
+.phrase-state[role='alert'] {
   color: var(--color-text-secondary);
 }
 
-.vocabulary-state-title {
+.vocabulary-state-title,
+.phrase-state-title {
   color: var(--color-text);
   font-size: 14px;
   font-weight: 600;
 }
 
-.vocabulary-state button {
+.vocabulary-state button,
+.phrase-state button {
   padding: 6px 14px;
   color: var(--color-text-secondary);
   background: var(--color-surface-secondary);
   font-size: 12px;
 }
 
-.vocabulary-table-scroll {
+.vocabulary-table-scroll,
+.phrase-table-scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
@@ -226,7 +233,8 @@ body {
   background: var(--color-surface);
 }
 
-.vocabulary-table {
+.vocabulary-table,
+.phrase-table {
   width: 100%;
   min-width: 860px;
   border-collapse: separate;
@@ -234,8 +242,14 @@ body {
   font-size: 13px;
 }
 
+.phrase-table {
+  min-width: 640px;
+}
+
 .vocabulary-table th,
-.vocabulary-table td {
+.vocabulary-table td,
+.phrase-table th,
+.phrase-table td {
   padding: 10px 12px;
   border-bottom: 1px solid var(--color-border-header);
   text-align: left;
@@ -243,7 +257,8 @@ body {
   line-height: 1.55;
 }
 
-.vocabulary-table thead th {
+.vocabulary-table thead th,
+.phrase-table thead th {
   position: sticky;
   top: 0;
   z-index: 1;
@@ -254,16 +269,19 @@ body {
   white-space: nowrap;
 }
 
-.vocabulary-table tbody tr:last-child td {
+.vocabulary-table tbody tr:last-child td,
+.phrase-table tbody tr:last-child td {
   border-bottom: none;
 }
 
-.vocabulary-cell-term {
+.vocabulary-cell-term,
+.phrase-cell-phrase {
   overflow-wrap: anywhere;
   font-weight: 600;
 }
 
-.vocabulary-cell-prewrap {
+.vocabulary-cell-prewrap,
+.phrase-cell-prewrap {
   max-width: 320px;
   white-space: pre-line;
   overflow-wrap: anywhere;
@@ -287,30 +305,35 @@ body {
 }
 
 /* 操作列 sticky 在最右侧并带独立背景，长内容横向滚动时删除入口仍可见。 */
-.vocabulary-actions-column {
+.vocabulary-actions-column,
+.phrase-actions-column {
   position: sticky;
   right: 0;
   background: var(--color-surface);
   box-shadow: -1px 0 0 var(--color-border-header);
 }
 
-.vocabulary-actions-cell {
+.vocabulary-actions-cell,
+.phrase-actions-cell {
   white-space: nowrap;
 }
 
-.vocabulary-delete-button {
+.vocabulary-delete-button,
+.phrase-delete-button {
   padding: 4px 10px;
   color: var(--color-text-secondary);
   background: transparent;
   font-size: 12px;
 }
 
-.vocabulary-delete-button:hover {
+.vocabulary-delete-button:hover,
+.phrase-delete-button:hover {
   color: var(--color-text);
   background: var(--color-surface-hover);
 }
 
-.vocabulary-footer {
+.vocabulary-footer,
+.phrase-footer {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -318,23 +341,27 @@ body {
   min-height: 34px;
 }
 
-.vocabulary-footer-status {
+.vocabulary-footer-status,
+.phrase-footer-status {
   color: var(--color-text-status);
   font-size: 12px;
 }
 
-.vocabulary-load-more-button {
+.vocabulary-load-more-button,
+.phrase-load-more-button {
   padding: 6px 16px;
   color: var(--color-text-secondary);
   background: var(--color-surface-secondary);
   font-size: 12px;
 }
 
-.vocabulary-load-more-button:hover {
+.vocabulary-load-more-button:hover,
+.phrase-load-more-button:hover {
   background: var(--color-surface-hover);
 }
 
-.vocabulary-more-error {
+.vocabulary-more-error,
+.phrase-more-error {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -343,11 +370,13 @@ body {
   font-size: 12px;
 }
 
-.vocabulary-more-error .vocabulary-state-title {
+.vocabulary-more-error .vocabulary-state-title,
+.phrase-more-error .phrase-state-title {
   font-size: 13px;
 }
 
-.vocabulary-more-error button {
+.vocabulary-more-error button,
+.phrase-more-error button {
   padding: 4px 12px;
   color: var(--color-text-secondary);
   background: var(--color-surface-secondary);

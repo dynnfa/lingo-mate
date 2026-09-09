@@ -140,7 +140,8 @@
     "back": "Back",
     "menuLabel": "Recorded vocabulary menu",
     "sections": {
-      "vocabulary": "Vocabulary"
+      "vocabulary": "Vocabulary",
+      "phrase": "Phrases"
     },
     "vocabulary": {
       "detailTitle": "Vocabulary",
@@ -169,6 +170,30 @@
       "deleteDialogConfirm": "Delete",
       "deleting": "Deleting…",
       "deleteSucceeded": "Deleted \"{{term}}\""
+    },
+    "phrase": {
+      "detailTitle": "Phrases",
+      "tableCaption": "Saved phrase entries",
+      "columnPhrase": "Phrase",
+      "columnExplantation": "Explanation",
+      "columnExample": "Example",
+      "columnActions": "Actions",
+      "loading": "Loading phrases…",
+      "loadErrorTitle": "Couldn't load phrases",
+      "retry": "Retry",
+      "emptyTitle": "No saved phrases yet",
+      "emptyBody": "Save phrases with the /phrase command in a conversation, and they'll appear here.",
+      "loadMore": "Load more",
+      "loadingMore": "Loading more…",
+      "loadMoreFailed": "Couldn't load more",
+      "deleteButton": "Delete",
+      "deleteButtonLabel": "Delete {{phrase}}",
+      "deleteDialogTitle": "Delete phrase",
+      "deleteDialogBody": "This will delete the saved record for \"{{phrase}}\". Conversation history stays unchanged.",
+      "deleteDialogCancel": "Cancel",
+      "deleteDialogConfirm": "Delete",
+      "deleting": "Deleting…",
+      "deleteSucceeded": "Deleted \"{{phrase}}\""
     }
   },
   "practice": {

@@ -4,7 +4,7 @@ import type { ModelsApi } from './models'
 import type { PreferencesApi } from './preferences'
 import type { UsageApi } from './usage'
 import type { VocabularyApi, VocabularyBatch } from './vocabulary'
-import type { PhraseBatch } from './phrase'
+import type { PhraseApi, PhraseBatch } from './phrase'
 
 export const CONVERSATION_CHANNELS = {
   create: 'conversation:create',
@@ -237,4 +237,5 @@ export interface LingoMateApi {
   models: ModelsApi
   usage: UsageApi
   vocabulary: VocabularyApi
+  phrase: PhraseApi
 }

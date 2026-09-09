@@ -28,6 +28,7 @@ function toEntry(stored: PhraseInsertContent): PhraseEntry {
 }
 
 // 内存仓储：以规范化 phrase 为唯一键，模拟事务内的复查与冲突语义。
+// list/delete 与 SQLite 实现一致：默认字符串比较即 BINARY 规则，游标为上一页末条原文。
 export function memoryRepository(): PhraseRepository & { contents: PhraseInsertContent[] } {
   const contents: PhraseInsertContent[] = []
   const save = (values: PhraseInsertContent[]): PhraseSaveStatus[] =>
@@ -48,6 +49,23 @@ export function memoryRepository(): PhraseRepository & { contents: PhraseInsertC
       }
       return found
     },
-    saveBatchWithResult: (_executionId, values, finalize) => finalize(save(values))
+    saveBatchWithResult: (_executionId, values, finalize) => finalize(save(values)),
+    list: ({ limit, cursor }) => {
+      const pageSize = limit ?? 50
+      const sorted = [...contents].sort((a, b) => (a.phrase < b.phrase ? -1 : 1))
+      const after = cursor ? sorted.filter((item) => item.phrase > cursor) : sorted
+      const page = after.slice(0, pageSize)
+      const hasMore = after.length > pageSize && page.length > 0
+      return {
+        entries: page.map(toEntry),
+        ...(hasMore ? { nextCursor: page[page.length - 1].phrase } : {})
+      }
+    },
+    deleteByPhrase: (phrase) => {
+      const index = contents.findIndex((item) => item.phrase === phrase)
+      if (index === -1) return false
+      contents.splice(index, 1)
+      return true
+    }
   }
 }
