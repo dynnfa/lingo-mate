@@ -112,7 +112,8 @@ describe('CONVERSATION_ACTIONS catalog', () => {
       'practice',
       'concept',
       'vocabulary',
-      'phrase'
+      'phrase',
+      'synonym'
     ])
     expect(new Set(CONVERSATION_ACTIONS.map((action) => action.command)).size).toBe(
       CONVERSATION_ACTIONS.length

@@ -41,7 +41,7 @@ function panelElement(props: Partial<Parameters<typeof ConversationPanel>[0]>): 
 
 interface PanelCallbacks {
   onSend: Mock<(text: string) => void>
-  onRunSkill: Mock<(input: { skillId: 'vocabulary' | 'phrase'; text: string }) => void>
+  onRunSkill: Mock<(input: { skillId: 'vocabulary' | 'phrase' | 'synonym'; text: string }) => void>
   onCancel: Mock<() => void>
   onRetry: Mock<(messageId: string) => void>
 }
@@ -52,7 +52,8 @@ function renderPanel(props: Partial<Parameters<typeof ConversationPanel>[0]> = {
 } {
   const callbacks: PanelCallbacks = {
     onSend: vi.fn<(text: string) => void>(),
-    onRunSkill: vi.fn<(input: { skillId: 'vocabulary' | 'phrase'; text: string }) => void>(),
+    onRunSkill:
+      vi.fn<(input: { skillId: 'vocabulary' | 'phrase' | 'synonym'; text: string }) => void>(),
     onCancel: vi.fn<() => void>(),
     onRetry: vi.fn<(messageId: string) => void>()
   }
@@ -228,7 +229,7 @@ describe('ConversationPanel slash trigger and filtering', () => {
 
     const listbox = screen.getByRole('listbox', { name: '可用行动' })
     expect(listbox).toBeInTheDocument()
-    expect(pickerOptions()).toHaveLength(6)
+    expect(pickerOptions()).toHaveLength(7)
     // 首次打开默认高亮第一项
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-translate')
   })
@@ -343,9 +344,11 @@ describe('ConversationPanel picker keyboard selection', () => {
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-phrase')
     fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-synonym')
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-translate')
     fireEvent.keyDown(input, { key: 'ArrowUp' })
-    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-phrase')
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-synonym')
   })
 
   it('selects the highlighted action with Enter without sending and keeps focus in the input', () => {
@@ -476,6 +479,30 @@ describe('ConversationPanel picker keyboard selection', () => {
     })
     expect(callbacks.onSend).not.toHaveBeenCalled()
     expect(input).toHaveValue('')
+  })
+
+  it('submits typed and picker-selected synonym commands using the business API', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/synonym adequate, decent')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/例如：\/synonym/)).toBeInTheDocument()
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(callbacks.onRunSkill).toHaveBeenLastCalledWith({
+      skillId: 'synonym',
+      text: 'adequate, decent'
+    })
+    fireEvent.change(input, { target: { value: '/synonym' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(input).toHaveValue('/synonym ')
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(screen.getByRole('alert')).toHaveTextContent('请在 /synonym 后输入')
+    fireEvent.change(input, { target: { value: '/synonym good，nice' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(callbacks.onRunSkill).toHaveBeenLastCalledWith({
+      skillId: 'synonym',
+      text: 'good，nice'
+    })
+    expect(callbacks.onSend).not.toHaveBeenCalled()
   })
 
   it('submits a directly typed /phrase command as a skill without the picker', () => {
@@ -759,7 +786,7 @@ describe('ConversationPanel picker closing and reopen suppression', () => {
 
     fireEvent.change(input, { target: { value: '/' } })
     expect(input).toHaveAttribute('aria-expanded', 'true')
-    expect(pickerOptions()).toHaveLength(6)
+    expect(pickerOptions()).toHaveLength(7)
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-translate')
 
     fireEvent.keyDown(input, { key: 'Enter' })
@@ -833,7 +860,7 @@ describe('ConversationPanel picker input method composition', () => {
     fireEvent.change(input, { target: { value: '/翻' } })
 
     // 组合期间不刷新候选
-    expect(pickerOptions()).toHaveLength(6)
+    expect(pickerOptions()).toHaveLength(7)
 
     // 组合确认键不选择候选、不发送
     fireEvent.keyDown(input, { key: 'Enter', isComposing: true })

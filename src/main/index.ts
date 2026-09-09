@@ -1,3 +1,8 @@
+import { SqliteSynonymRepository } from '../database/sqlite-synonym-repository'
+import { SynonymModule } from '../core/learning/synonym/synonym-module'
+import { SynonymConversationSkill } from '../core/learning/synonym/synonym-conversation-skill'
+import { LlmSynonymAnalyzer } from '../core/llm/llm-synonym-analyzer'
+import { createSynonymFeedbackFormatter } from './synonym-feedback'
 import type Database from 'better-sqlite3'
 import { randomUUID } from 'node:crypto'
 import { openDatabase } from '../database/database'
@@ -29,7 +34,12 @@ import {
   ModelConnectionTester,
   CONNECTION_TEST_TIMEOUT_MS
 } from '../core/llm/model-connection-tester'
-import { ModelConfigService } from '../core/llm/model-config'
+import { SynonymError } from '../core/learning/synonym/parse-synonym-input'
+import {
+  ModelConfigValidationError,
+  ModelNotConfiguredError,
+  ModelConfigService
+} from '../core/llm/model-config'
 import type { LanguageModel } from '../core/llm/language-model'
 import { SqliteConversationRepository } from '../database/sqlite-conversation-repository'
 import { registerConversationIpc } from './conversation-ipc'
@@ -179,9 +189,28 @@ app.whenReady().then(() => {
       new LlmPhraseAnalyzer(modelsService.resolveSnapshot(), timeoutMs, createLlmClient),
     createPhraseFeedbackFormatter()
   )
+  const synonymSkill = new SynonymConversationSkill(
+    new SynonymModule(new SqliteSynonymRepository(database), (timeoutMs) => {
+      try {
+        return new LlmSynonymAnalyzer(modelsService.resolveSnapshot(), timeoutMs, createLlmClient)
+      } catch (cause) {
+        throw new SynonymError(
+          cause instanceof ModelNotConfiguredError
+            ? 'MODEL_NOT_CONFIGURED'
+            : cause instanceof ModelConfigValidationError &&
+                cause.code === 'CREDENTIAL_DECRYPT_FAILED'
+              ? 'CREDENTIAL_DECRYPT_FAILED'
+              : 'MODEL_ERROR',
+          { cause }
+        )
+      }
+    }),
+    createSynonymFeedbackFormatter()
+  )
   const conversationSkills = new Map<ConversationSkillId, ConversationSkill>([
     [vocabularySkill.skillId, vocabularySkill],
-    [phraseSkill.skillId, phraseSkill]
+    [phraseSkill.skillId, phraseSkill],
+    [synonymSkill.skillId, synonymSkill]
   ])
   conversationModule = new ConversationModule(
     conversationModel,

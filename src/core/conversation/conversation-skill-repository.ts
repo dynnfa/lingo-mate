@@ -1,3 +1,4 @@
+import type { SynonymBatch } from '../../shared/synonym'
 import type { SupportedLocale } from '../../shared/preferences'
 import type { RunConversationSkillInput } from '../../shared/conversation'
 import type { VocabularyBatch } from '../../shared/vocabulary'
@@ -31,6 +32,7 @@ interface StoredSkillExecutionBase {
 export type StoredConversationSkillExecution =
   | (StoredSkillExecutionBase & { skillId: 'vocabulary'; batch?: VocabularyBatch })
   | (StoredSkillExecutionBase & { skillId: 'phrase'; batch?: PhraseBatch })
+  | (StoredSkillExecutionBase & { skillId: 'synonym'; batch?: SynonymBatch })
 
 export interface ConversationSkillRepository {
   // The visible user message and its typed invocation are one durable fact.

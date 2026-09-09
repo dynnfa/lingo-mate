@@ -3,24 +3,22 @@
 // 类型化会话 skill 提交，不作为普通聊天发送。
 
 export type ConversationActionId =
-  'translate' | 'polish' | 'practice' | 'concept' | 'vocabulary' | 'phrase'
-export type SelectedConversationSkillId = 'vocabulary' | 'phrase'
+  'translate' | 'polish' | 'practice' | 'concept' | 'vocabulary' | 'phrase' | 'synonym'
+export type SelectedConversationSkillId = 'vocabulary' | 'phrase' | 'synonym'
 
 export const VOCABULARY_COMMAND_PREFIX = '/vocabulary'
 export const PHRASE_COMMAND_PREFIX = '/phrase'
 
-// 命令名（含斜杠）到技能的映射：直接输入完整命令时据此提交。
-// 首版仅 phrase 支持直接输入；vocabulary 仍需从选择器选择。
-const TYPED_SKILL_COMMANDS: ReadonlyArray<{
-  skillId: SelectedConversationSkillId
-  prefix: string
-  pattern: RegExp
-}> = [{ skillId: 'phrase', prefix: PHRASE_COMMAND_PREFIX, pattern: /^\/phrase\s/u }]
+// 各技能命令（含斜杠）的前缀与完整命令模式：选择器建立的技能据此校验草稿，
+// 支持直接输入的技能据此判定提交。命令元数据只在此处维护。
+const SKILL_COMMANDS: Record<SelectedConversationSkillId, { prefix: string; pattern: RegExp }> = {
+  synonym: { prefix: '/synonym', pattern: /^\/synonym\s/u },
+  phrase: { prefix: PHRASE_COMMAND_PREFIX, pattern: /^\/phrase\s/u },
+  vocabulary: { prefix: VOCABULARY_COMMAND_PREFIX, pattern: /^\/vocabulary\s/u }
+}
 
-const skillCommandPattern = (skillId: SelectedConversationSkillId): RegExp =>
-  skillId === 'phrase' ? /^\/phrase\s/u : /^\/vocabulary\s/u
-const skillCommandPrefix = (skillId: SelectedConversationSkillId): string =>
-  skillId === 'phrase' ? PHRASE_COMMAND_PREFIX : VOCABULARY_COMMAND_PREFIX
+// 支持直接输入完整命令提交的技能；vocabulary 仍需从选择器选择。
+const TYPED_SKILL_IDS = ['synonym', 'phrase'] as const
 
 export type SkillDraftResult =
   { status: 'ok'; text: string } | { status: 'empty' } | { status: 'invalid-prefix' }
@@ -30,10 +28,8 @@ export function isSelectedSkillDraft(
   selectedSkillId: SelectedConversationSkillId | null
 ): boolean {
   if (selectedSkillId === null) return true
-  return (
-    draft === skillCommandPrefix(selectedSkillId) ||
-    skillCommandPattern(selectedSkillId).test(draft)
-  )
+  const { prefix, pattern } = SKILL_COMMANDS[selectedSkillId]
+  return draft === prefix || pattern.test(draft)
 }
 
 export function extractSkillDraft(
@@ -41,7 +37,7 @@ export function extractSkillDraft(
   selectedSkillId: SelectedConversationSkillId | null
 ): SkillDraftResult {
   if (selectedSkillId === null) return { status: 'invalid-prefix' }
-  const prefix = skillCommandPattern(selectedSkillId).exec(draft)?.[0]
+  const prefix = SKILL_COMMANDS[selectedSkillId].pattern.exec(draft)?.[0]
   if (!prefix) return { status: 'invalid-prefix' }
   // 短语参数支持多行：trim 只去掉首尾空白，行结构与行内空格原样保留。
   const text = draft.slice(prefix.length).trim()
@@ -49,7 +45,7 @@ export function extractSkillDraft(
 }
 
 // 提交时的技能判定：优先沿用选择器建立的技能；未选择时，完整输入的
-// /phrase 命令也按技能提交。
+// /phrase 与 /synonym 命令也按技能提交。
 export function resolveSkillSubmission(
   draft: string,
   selectedSkillId: SelectedConversationSkillId | null
@@ -57,7 +53,8 @@ export function resolveSkillSubmission(
   if (selectedSkillId !== null && isSelectedSkillDraft(draft, selectedSkillId)) {
     return selectedSkillId
   }
-  for (const { prefix, pattern, skillId } of TYPED_SKILL_COMMANDS) {
+  for (const skillId of TYPED_SKILL_IDS) {
+    const { prefix, pattern } = SKILL_COMMANDS[skillId]
     if (draft === prefix || pattern.test(draft)) return skillId
   }
   return null
@@ -68,6 +65,8 @@ export function resolveSkillSubmission(
 export type ConversationActionTextKey =
   | 'conversation:actionPicker.actions.vocabulary.name'
   | 'conversation:actionPicker.actions.vocabulary.description'
+  | 'conversation:actionPicker.actions.synonym.name'
+  | 'conversation:actionPicker.actions.synonym.description'
   | 'conversation:actionPicker.actions.phrase.name'
   | 'conversation:actionPicker.actions.phrase.description'
   | 'conversation:actionPicker.actions.translate.name'
@@ -125,15 +124,22 @@ export const CONVERSATION_ACTIONS: readonly ConversationActionMeta[] = [
     command: 'phrase',
     nameKey: 'conversation:actionPicker.actions.phrase.name',
     descriptionKey: 'conversation:actionPicker.actions.phrase.description'
+  },
+  {
+    id: 'synonym',
+    command: 'synonym',
+    nameKey: 'conversation:actionPicker.actions.synonym.name',
+    descriptionKey: 'conversation:actionPicker.actions.synonym.description'
   }
 ]
 
 // 仅半角 `/` 作为首字符触发；不做 trim，前导空格与全角斜杠都不算。
 // 返回值为 `/` 之后的查询词，不符合前缀时为 undefined。
 export function parseSlashTrigger(draft: string): string | undefined {
-  // 完整 concept / phrase 命令进入参数阶段后直接发送，不再作为选择器查询。
+  // 完整 concept 命令与可直输技能命令进入参数阶段后直接发送，不再作为选择器查询。
   if (/^\/concept\s/u.test(draft)) return undefined
-  if (/^\/phrase\s/u.test(draft)) return undefined
+  if (TYPED_SKILL_IDS.some((skillId) => SKILL_COMMANDS[skillId].pattern.test(draft)))
+    return undefined
   return draft.startsWith('/') ? draft.slice(1) : undefined
 }
 

@@ -26,30 +26,45 @@ type IpcFailureKey =
 
 // 技能相关状态的文案 key：显式枚举，保持类型检查覆盖。
 type SkillStatusKeys = {
-  analyzing: 'conversation:status.analyzingVocabulary' | 'conversation:status.analyzingPhrase'
-  committing: 'conversation:status.committingVocabulary' | 'conversation:status.committingPhrase'
+  analyzing:
+    | 'conversation:status.analyzingVocabulary'
+    | 'conversation:status.analyzingPhrase'
+    | 'conversation:status.analyzingSynonym'
+  committing:
+    | 'conversation:status.committingVocabulary'
+    | 'conversation:status.committingPhrase'
+    | 'conversation:status.committingSynonym'
   descriptionFailed:
     | 'conversation:status.descriptionFailedVocabulary'
     | 'conversation:status.descriptionFailedPhrase'
+    | 'conversation:status.descriptionFailedSynonym'
   descriptionCancelled:
     | 'conversation:status.descriptionCancelledVocabulary'
     | 'conversation:status.descriptionCancelledPhrase'
+    | 'conversation:status.descriptionCancelledSynonym'
 }
 
-const skillKeys = (skillId: 'vocabulary' | 'phrase' | undefined): SkillStatusKeys =>
-  skillId === 'phrase'
+const skillKeys = (skillId: 'vocabulary' | 'phrase' | 'synonym' | undefined): SkillStatusKeys =>
+  skillId === 'synonym'
     ? {
-        analyzing: 'conversation:status.analyzingPhrase',
-        committing: 'conversation:status.committingPhrase',
-        descriptionFailed: 'conversation:status.descriptionFailedPhrase',
-        descriptionCancelled: 'conversation:status.descriptionCancelledPhrase'
+        analyzing: 'conversation:status.analyzingSynonym',
+        committing: 'conversation:status.committingSynonym',
+        descriptionFailed: 'conversation:status.descriptionFailedSynonym',
+        descriptionCancelled: 'conversation:status.descriptionCancelledSynonym'
       }
-    : {
-        analyzing: 'conversation:status.analyzingVocabulary',
-        committing: 'conversation:status.committingVocabulary',
-        descriptionFailed: 'conversation:status.descriptionFailedVocabulary',
-        descriptionCancelled: 'conversation:status.descriptionCancelledVocabulary'
-      }
+    : skillId === 'phrase'
+      ? {
+          analyzing: 'conversation:status.analyzingPhrase',
+          committing: 'conversation:status.committingPhrase',
+          descriptionFailed: 'conversation:status.descriptionFailedPhrase',
+          descriptionCancelled: 'conversation:status.descriptionCancelledPhrase'
+        }
+      : {
+          analyzing: 'conversation:status.analyzingVocabulary',
+          committing: 'conversation:status.committingVocabulary',
+          descriptionFailed: 'conversation:status.descriptionFailedVocabulary',
+          descriptionCancelled: 'conversation:status.descriptionCancelledVocabulary'
+        }
 
 export function translateConversationStatus(
   t: StatusTFunction,

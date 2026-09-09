@@ -18,12 +18,18 @@
     "descriptionCancelledPhrase": "短语已保存，但结果描述已取消。你可以只重试结果描述。",
     "cancelled": "已取消，可重试。",
     "protocolError": "会话协议异常，已忽略一条身份不一致的消息。",
-    "generatingTitle": "正在生成对话标题…"
+    "generatingTitle": "正在生成对话标题…",
+    "analyzingSynonym": "正在分析近义词组…",
+    "committingSynonym": "正在保存近义词…",
+    "descriptionFailedSynonym": "近义词结果已保存，可重试恢复报告。",
+    "descriptionCancelledSynonym": "报告已中断，已收录的近义词保留。"
   },
   "composer": {
     "vocabularyRequired": "请在 /vocabulary 后输入一个或多个英语单词或短语。",
     "phraseRequired": "请在 /phrase 后输入一个或多个英语短语。",
-    "phraseHint": "每行一个短语，可批量收录；短语内部可包含空格与标点。"
+    "phraseHint": "每行一个短语，可批量收录；短语内部可包含空格与标点。",
+    "synonymRequired": "请在 /synonym 后输入英语单词，以逗号分隔。",
+    "synonymHint": "例如：/synonym adequate, decent；已收录的单词会跳过。"
   },
   "actionPicker": {
     "listLabel": "可用行动",
@@ -52,6 +58,10 @@
       "phrase": {
         "name": "收录短语",
         "description": "批量解析并收录英语短语与习惯表达，每行一个。"
+      },
+      "synonym": {
+        "name": "近义词分组",
+        "description": "按共同语义收录英语单词，使用逗号分隔。"
       }
     }
   }

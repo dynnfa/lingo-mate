@@ -1,0 +1,22 @@
+{
+  "summary": "近义词处理结果：",
+  "saved": "{{word}}：已收录；{{meaning}}；用法区别：{{distinction}}",
+  "existing": "{{word}}：已存在，跳过",
+  "duplicate": "{{word}}：本次输入重复，未另行收录",
+  "unrecognized": "{{word}}：无法识别为英语单词",
+  "cancelled": "{{word}}：已取消，未处理",
+  "failed": "{{word}}：{{error}}",
+  "errors": {
+    "INVALID_INPUT": "输入无效",
+    "MODEL_NOT_CONFIGURED": "请先配置模型",
+    "CREDENTIAL_DECRYPT_FAILED": "无法解密模型凭据",
+    "MODEL_ERROR": "模型请求失败",
+    "INVALID_ANALYSIS": "工具响应不符合协议",
+    "TOOL_CALL_NOT_SUPPORTED": "模型不支持工具调用",
+    "TIMEOUT": "处理超时",
+    "CANCELLED": "已取消",
+    "STORAGE_FAILED": "保存失败",
+    "SCAN_LIMIT": "候选查询超过上限",
+    "ROUND_LIMIT": "工具调用轮数超过上限"
+  }
+}

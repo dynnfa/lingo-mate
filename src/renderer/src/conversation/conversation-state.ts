@@ -150,6 +150,7 @@ function skillOfRequest(
   const content = state.messages.find(
     (message) => message.messageId === active.userMessageId
   )?.content
+  if (content?.startsWith('/synonym ')) return 'synonym'
   if (content?.startsWith('/phrase ')) return 'phrase'
   if (content?.startsWith('/vocabulary ')) return 'vocabulary'
   return undefined

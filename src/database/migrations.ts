@@ -324,6 +324,101 @@ export const MIGRATIONS: Migration[] = [
         CREATE INDEX llm_request_usage_started_at ON llm_request_usage (started_at);
       `)
     }
+  },
+  {
+    version: 10,
+    up: (database) => {
+      database.exec(`
+        CREATE TABLE synonym_group (
+          id TEXT PRIMARY KEY NOT NULL,
+          meaning TEXT NOT NULL CHECK(length(trim(meaning)) BETWEEN 1 AND 2000)
+        );
+        CREATE TABLE synonym (
+          id TEXT PRIMARY KEY NOT NULL,
+          word TEXT NOT NULL UNIQUE CHECK(length(trim(word)) BETWEEN 1 AND 100),
+          meaning TEXT NOT NULL CHECK(length(trim(meaning)) BETWEEN 1 AND 2000),
+          groupid TEXT NOT NULL REFERENCES synonym_group(id),
+          distinction TEXT NOT NULL CHECK(length(trim(distinction)) BETWEEN 1 AND 2000)
+        );
+        CREATE INDEX synonym_groupid ON synonym(groupid);
+      `)
+      database.exec(`
+        CREATE TABLE conversation_skill_executions_v10 (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          user_message_id TEXT NOT NULL UNIQUE,
+          assistant_message_id TEXT,
+          skill_id TEXT NOT NULL CHECK(skill_id IN ('vocabulary', 'phrase', 'synonym')),
+          arguments_json TEXT NOT NULL CHECK(json_valid(arguments_json)),
+          explanation_language TEXT NOT NULL CHECK(explanation_language IN ('zh-CN', 'en')),
+          phase TEXT NOT NULL CHECK(phase IN (
+            'started', 'analyzing', 'committing', 'summarizing', 'completed',
+            'cancelled', 'failed', 'description_failed', 'description_cancelled'
+          )),
+          batch_json TEXT CHECK(batch_json IS NULL OR json_valid(batch_json)),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (session_id) REFERENCES conversations (id),
+          FOREIGN KEY (user_message_id) REFERENCES conversation_messages (id),
+          FOREIGN KEY (assistant_message_id) REFERENCES conversation_messages (id)
+        );
+        INSERT INTO conversation_skill_executions_v10
+          (id, session_id, user_message_id, assistant_message_id, skill_id, arguments_json,
+           explanation_language, phase, batch_json, created_at, updated_at)
+        SELECT id, session_id, user_message_id, assistant_message_id, skill_id, arguments_json,
+               explanation_language, phase, batch_json, created_at, updated_at
+        FROM conversation_skill_executions
+        ORDER BY rowid;
+      `)
+      copyCountCheck(database, 'conversation_skill_executions', 'conversation_skill_executions_v10')
+      database.exec(`
+        DROP TABLE conversation_skill_executions;
+        ALTER TABLE conversation_skill_executions_v10 RENAME TO conversation_skill_executions;
+        CREATE INDEX conversation_skill_executions_session
+          ON conversation_skill_executions (session_id, created_at);
+      `)
+
+      database.exec(`
+        CREATE TABLE llm_request_usage_v10 (
+          id TEXT PRIMARY KEY,
+          operation TEXT NOT NULL CHECK (operation IN (
+            'conversation', 'vocabulary_analysis', 'phrase_analysis', 'synonym_analysis', 'connection_test'
+          )),
+          model_id TEXT NOT NULL,
+          response_model_id TEXT,
+          started_at INTEGER NOT NULL,
+          finished_at INTEGER,
+          status TEXT NOT NULL CHECK (status IN (
+            'started', 'completed', 'failed', 'cancelled', 'interrupted'
+          )),
+          input_tokens INTEGER CHECK (input_tokens IS NULL OR (
+            typeof(input_tokens) = 'integer' AND input_tokens >= 0 AND input_tokens <= 9007199254740991
+          )),
+          output_tokens INTEGER CHECK (output_tokens IS NULL OR (
+            typeof(output_tokens) = 'integer' AND output_tokens >= 0 AND output_tokens <= 9007199254740991
+          )),
+          total_tokens INTEGER CHECK (total_tokens IS NULL OR (
+            typeof(total_tokens) = 'integer' AND total_tokens >= 0 AND total_tokens <= 9007199254740991
+          )),
+          usage_status TEXT NOT NULL CHECK (usage_status IN (
+            'reported', 'derived', 'partial', 'missing', 'invalid'
+          )),
+          error_code TEXT
+        );
+        INSERT INTO llm_request_usage_v10
+          SELECT * FROM llm_request_usage ORDER BY rowid;
+      `)
+      copyCountCheck(database, 'llm_request_usage', 'llm_request_usage_v10')
+      database.exec(`
+        DROP TABLE llm_request_usage;
+        ALTER TABLE llm_request_usage_v10 RENAME TO llm_request_usage;
+        CREATE INDEX llm_request_usage_model_started_at
+          ON llm_request_usage (model_id, started_at);
+        CREATE INDEX llm_request_usage_started_at ON llm_request_usage (started_at);
+      `)
+      if ((database.pragma('foreign_key_check') as unknown[]).length)
+        throw new Error('Invalid synonym migration foreign keys')
+    }
   }
 ]
 

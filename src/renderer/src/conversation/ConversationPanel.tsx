@@ -85,7 +85,7 @@ export function ConversationPanel({
   // 首版行动契约：选择仅填入命令模板进入待输入状态，不发送；
   // 替换后的草稿仍以 `/` 开头，用锁定抑制避免完成后立即弹回。
   const selectAction = (action: ConversationActionMeta): void => {
-    if (action.id === 'vocabulary' || action.id === 'phrase') {
+    if (action.id === 'vocabulary' || action.id === 'phrase' || action.id === 'synonym') {
       setSelectedSkillId(action.id)
       setDraft(`/${action.command} `)
       setComposerError(null)
@@ -187,9 +187,11 @@ export function ConversationPanel({
       if (parsed.status !== 'ok') {
         setComposerError(
           t(
-            activeSkillId === 'phrase'
-              ? 'conversation:composer.phraseRequired'
-              : 'conversation:composer.vocabularyRequired'
+            activeSkillId === 'synonym'
+              ? 'conversation:composer.synonymRequired'
+              : activeSkillId === 'phrase'
+                ? 'conversation:composer.phraseRequired'
+                : 'conversation:composer.vocabularyRequired'
           )
         )
         return
@@ -301,9 +303,11 @@ export function ConversationPanel({
             }}
             onKeyDown={handleInputKeyDown}
             placeholder={
-              activeSkillId === 'phrase'
-                ? t('conversation:composer.phraseHint')
-                : t('common:composer.placeholder')
+              activeSkillId === 'synonym'
+                ? t('conversation:composer.synonymHint')
+                : activeSkillId === 'phrase'
+                  ? t('conversation:composer.phraseHint')
+                  : t('common:composer.placeholder')
             }
             ref={inputRef}
             role="combobox"

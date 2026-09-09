@@ -133,7 +133,7 @@
       "tableRequests": "请求数",
       "tableStatus": "状态",
       "emptyTitle": "尚无用量记录",
-      "emptyBody": "开始对话或解析词汇后，这里会显示模型的 token 用量。",
+      "emptyBody": "对话、词汇、短语或近义词分析调用模型后，这里会显示 Token 用量。",
       "emptyTimeline": "时间轴范围：{{start}} 至 {{end}}"
     }
   },

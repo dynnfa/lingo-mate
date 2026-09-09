@@ -103,7 +103,8 @@ describe('vocabulary conversation integration', () => {
       loaded.messages[0].messageId
     )
     expect(execution?.phase).toBe('completed')
-    expect(execution?.batch?.counts).toMatchObject({ saved: 2, duplicate: 1 })
+    if (execution?.skillId !== 'vocabulary') throw new Error('Unexpected skill report')
+    expect(execution.batch?.counts).toMatchObject({ saved: 2, duplicate: 1 })
     expect(analyze).toHaveBeenCalledTimes(2)
   })
 

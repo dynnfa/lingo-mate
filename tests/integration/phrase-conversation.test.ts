@@ -118,7 +118,8 @@ describe('phrase conversation integration', () => {
       loaded.messages[0].messageId
     )
     expect(execution).toMatchObject({ skillId: 'phrase', phase: 'completed' })
-    expect(execution?.batch?.counts).toMatchObject({ saved: 2, duplicate: 1 })
+    if (execution?.skillId !== 'phrase') throw new Error('Unexpected skill report')
+    expect(execution.batch?.counts).toMatchObject({ saved: 2, duplicate: 1 })
 
     // 再次提交同一短语：全部已存在，零模型请求
     const second = await waitForTerminal((emit) =>

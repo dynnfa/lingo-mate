@@ -1,3 +1,4 @@
+import type { SynonymBatch } from './synonym'
 import { z } from 'zod'
 import type { ModelsApi } from './models'
 import type { PreferencesApi } from './preferences'
@@ -52,7 +53,7 @@ export const sendMessageInputSchema = z.object({
   text: z.string().trim().min(1).max(4_000)
 })
 
-export const conversationSkillIdSchema = z.enum(['vocabulary', 'phrase'])
+export const conversationSkillIdSchema = z.enum(['vocabulary', 'phrase', 'synonym'])
 export type ConversationSkillId = z.infer<typeof conversationSkillIdSchema>
 
 // 会话技能参数：vocabulary 与 phrase 首版共用同一形状；逐技能的输入
@@ -190,7 +191,7 @@ export type SendMessageInput = z.infer<typeof sendMessageInputSchema>
 export type RunConversationSkillInput = z.infer<typeof runConversationSkillInputSchema>
 export type ConversationSkillArguments = z.infer<typeof conversationSkillArgumentsSchema>
 // 技能执行报告的持久化形状：按 skillId 对应各自的批次结构，读取方负责判别。
-export type ConversationSkillReport = VocabularyBatch | PhraseBatch
+export type ConversationSkillReport = VocabularyBatch | PhraseBatch | SynonymBatch
 export type RetryMessageInput = z.infer<typeof retryMessageInputSchema>
 export type CancelMessageInput = z.infer<typeof cancelMessageInputSchema>
 export type SendMessageResult = z.infer<typeof sendMessageResultSchema>

@@ -3,7 +3,11 @@
 // usage 以提供方返回为准，缺失值用 NULL 表达未知，不伪造计费用量。
 
 export type LlmRequestOperation =
-  'conversation' | 'vocabulary_analysis' | 'phrase_analysis' | 'connection_test'
+  | 'conversation'
+  | 'vocabulary_analysis'
+  | 'phrase_analysis'
+  | 'synonym_analysis'
+  | 'connection_test'
 
 export type LlmRequestStatus = 'started' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
 

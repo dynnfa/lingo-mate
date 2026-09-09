@@ -133,7 +133,7 @@
       "tableRequests": "Requests",
       "tableStatus": "Status",
       "emptyTitle": "No usage recorded yet",
-      "emptyBody": "Token usage appears here after conversations or vocabulary analyses call the model.",
+      "emptyBody": "Token usage appears here after conversations, vocabulary, phrase or synonym analyses call the model.",
       "emptyTimeline": "Timeline covered: {{start}} – {{end}}"
     }
   },
