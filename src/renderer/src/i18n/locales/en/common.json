@@ -141,6 +141,34 @@
     "menuLabel": "Recorded vocabulary menu",
     "sections": {
       "vocabulary": "Vocabulary"
+    },
+    "vocabulary": {
+      "detailTitle": "Vocabulary",
+      "tableCaption": "Saved vocabulary entries",
+      "columnTerm": "Word",
+      "columnPhonetic": "Phonetic",
+      "columnMeaning": "Meaning",
+      "columnConcept": "Concept",
+      "columnExamples": "Examples",
+      "columnCreatedAt": "Recorded at",
+      "columnActions": "Actions",
+      "emptyValue": "—",
+      "loading": "Loading vocabulary…",
+      "loadErrorTitle": "Couldn't load vocabulary",
+      "retry": "Retry",
+      "emptyTitle": "No saved vocabulary yet",
+      "emptyBody": "Save words with the /vocabulary command in a conversation, and they'll appear here.",
+      "loadMore": "Load more",
+      "loadingMore": "Loading more…",
+      "loadMoreFailed": "Couldn't load more",
+      "deleteButton": "Delete",
+      "deleteButtonLabel": "Delete {{term}}",
+      "deleteDialogTitle": "Delete word",
+      "deleteDialogBody": "This will delete the saved record for \"{{term}}\". Conversation history stays unchanged.",
+      "deleteDialogCancel": "Cancel",
+      "deleteDialogConfirm": "Delete",
+      "deleting": "Deleting…",
+      "deleteSucceeded": "Deleted \"{{term}}\""
     }
   },
   "practice": {

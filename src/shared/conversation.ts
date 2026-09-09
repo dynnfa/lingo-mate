@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { ModelsApi } from './models'
 import type { PreferencesApi } from './preferences'
 import type { UsageApi } from './usage'
-import type { VocabularyBatch } from './vocabulary'
+import type { VocabularyApi, VocabularyBatch } from './vocabulary'
 import type { PhraseBatch } from './phrase'
 
 export const CONVERSATION_CHANNELS = {
@@ -236,4 +236,5 @@ export interface LingoMateApi {
   preferences: PreferencesApi
   models: ModelsApi
   usage: UsageApi
+  vocabulary: VocabularyApi
 }

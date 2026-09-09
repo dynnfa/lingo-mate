@@ -33,7 +33,7 @@ test('exposes the conversation skill and preferences interfaces from the sandbox
       const exposedApiKeys = await window.evaluate(() =>
         Object.keys((globalThis as typeof globalThis & { api?: object }).api ?? {}).sort()
       )
-      expect(exposedApiKeys).toEqual(['conversation', 'models', 'preferences', 'usage'])
+      expect(exposedApiKeys).toEqual(['conversation', 'models', 'preferences', 'usage', 'vocabulary'])
 
       // 用量窄接口：只暴露聚合读取，不暴露通用 invoke 或任意时间范围
       const exposedUsageKeys = await window.evaluate(() =>
@@ -42,6 +42,15 @@ test('exposes the conversation skill and preferences interfaces from the sandbox
         ).sort()
       )
       expect(exposedUsageKeys).toEqual(['getOverview'])
+
+      // 词汇窄接口：只暴露列表与删除，不暴露通用 invoke 或任意 SQL
+      const exposedVocabularyKeys = await window.evaluate(() =>
+        Object.keys(
+          (globalThis as typeof globalThis & { api?: { vocabulary?: object } }).api?.vocabulary ??
+            {}
+        ).sort()
+      )
+      expect(exposedVocabularyKeys).toEqual(['delete', 'list'])
 
       const conversationKeys = await window.evaluate(() =>
         Object.keys(

@@ -141,6 +141,34 @@
     "menuLabel": "已记录词汇菜单",
     "sections": {
       "vocabulary": "词汇"
+    },
+    "vocabulary": {
+      "detailTitle": "词汇",
+      "tableCaption": "已收藏词汇列表",
+      "columnTerm": "单词",
+      "columnPhonetic": "音标",
+      "columnMeaning": "释义",
+      "columnConcept": "概念说明",
+      "columnExamples": "例句",
+      "columnCreatedAt": "记录时间",
+      "columnActions": "操作",
+      "emptyValue": "—",
+      "loading": "正在加载词汇…",
+      "loadErrorTitle": "词汇读取失败",
+      "retry": "重试",
+      "emptyTitle": "还没有收藏词汇",
+      "emptyBody": "在对话中使用 /vocabulary 命令收藏单词后，会在这里展示。",
+      "loadMore": "加载更多",
+      "loadingMore": "正在加载更多…",
+      "loadMoreFailed": "加载更多失败",
+      "deleteButton": "删除",
+      "deleteButtonLabel": "删除 {{term}}",
+      "deleteDialogTitle": "删除单词",
+      "deleteDialogBody": "将删除收藏记录「{{term}}」。历史会话消息保持不变。",
+      "deleteDialogCancel": "取消",
+      "deleteDialogConfirm": "删除",
+      "deleting": "删除中…",
+      "deleteSucceeded": "已删除「{{term}}」"
     }
   },
   "practice": {

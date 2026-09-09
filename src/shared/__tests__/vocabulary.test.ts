@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   addVocabularyBatchInputSchema,
+  deleteVocabularyInputSchema,
+  deleteVocabularyResultSchema,
   listVocabularyInputSchema,
-  vocabularyEntrySchema
+  listVocabularyResultSchema,
+  vocabularyEntrySchema,
+  vocabularyPageSchema,
+  VOCABULARY_CHANNELS
 } from '../vocabulary'
 
 describe('vocabulary schemas', () => {
@@ -108,5 +113,89 @@ describe('batch response integrity', () => {
         items: [valid.items[0], { ...valid.items[1], sourceInputIndex: 1 }]
       }).success
     ).toBe(false)
+  })
+})
+
+const ENTRY = {
+  id: '11111111-1111-4111-8111-111111111111',
+  term: 'apple',
+  phonetic: '/ˈæpəl/',
+  meaning: '苹果，一种水果。',
+  concept: '苹果果实。',
+  exampleSentences: ['I ate an apple after lunch.'],
+  createdAt: '2026-09-07T00:00:00.000Z'
+}
+
+describe('vocabulary management protocol', () => {
+  it('defines stable domain-named channels', () => {
+    expect(VOCABULARY_CHANNELS).toEqual({ list: 'vocabulary:list', delete: 'vocabulary:delete' })
+  })
+
+  it('accepts a complete page and omits nextCursor when absent', () => {
+    expect(
+      vocabularyPageSchema.parse({
+        entries: [ENTRY],
+        nextCursor: { createdAt: ENTRY.createdAt, id: ENTRY.id }
+      })
+    ).toEqual({
+      entries: [ENTRY],
+      nextCursor: { createdAt: ENTRY.createdAt, id: ENTRY.id }
+    })
+    expect(vocabularyPageSchema.parse({ entries: [] })).toEqual({ entries: [] })
+    expect(vocabularyPageSchema.safeParse({ entries: [], nextCursor: null }).success).toBe(false)
+  })
+
+  it('validates list results as an ok/error discriminated union', () => {
+    expect(listVocabularyResultSchema.parse({ status: 'ok', entries: [ENTRY] })).toEqual({
+      status: 'ok',
+      entries: [ENTRY]
+    })
+    expect(
+      listVocabularyResultSchema.parse({
+        status: 'error',
+        error: { code: 'STORAGE_FAILED' }
+      })
+    ).toEqual({ status: 'error', error: { code: 'STORAGE_FAILED' } })
+    for (const value of [
+      { status: 'ok', entries: [{ ...ENTRY, term: 1 }] },
+      { status: 'ok' },
+      { status: 'error', error: { code: 'MODEL_ERROR' } },
+      { status: 'error', error: { code: 'STORAGE_FAILED', sql: 'select' } },
+      { status: 'pending' }
+    ]) {
+      expect(listVocabularyResultSchema.safeParse(value).success).toBe(false)
+    }
+  })
+
+  it('rejects delete inputs outside a bare record UUID', () => {
+    expect(deleteVocabularyInputSchema.parse({ id: ENTRY.id })).toEqual({ id: ENTRY.id })
+    for (const value of [
+      { id: 'not-a-uuid' },
+      { term: 'apple' },
+      { id: ENTRY.id, term: 'apple' },
+      {}
+    ]) {
+      expect(deleteVocabularyInputSchema.safeParse(value).success).toBe(false)
+    }
+  })
+
+  it('validates delete results and keeps missing targets idempotent', () => {
+    expect(
+      deleteVocabularyResultSchema.parse({ status: 'ok', id: ENTRY.id, deleted: true })
+    ).toEqual({ status: 'ok', id: ENTRY.id, deleted: true })
+    expect(
+      deleteVocabularyResultSchema.parse({ status: 'ok', id: ENTRY.id, deleted: false })
+    ).toEqual({ status: 'ok', id: ENTRY.id, deleted: false })
+    expect(
+      deleteVocabularyResultSchema.parse({ status: 'error', error: { code: 'INVALID_INPUT' } })
+    ).toEqual({ status: 'error', error: { code: 'INVALID_INPUT' } })
+    for (const value of [
+      { status: 'ok', id: ENTRY.id },
+      { status: 'ok', id: 'not-a-uuid', deleted: true },
+      { status: 'ok', id: ENTRY.id, deleted: 'yes', term: 'apple' },
+      { status: 'error', error: { code: 'CANCELLED' } }
+    ]) {
+      expect(deleteVocabularyResultSchema.safeParse(value).success).toBe(false)
+    }
   })
 })

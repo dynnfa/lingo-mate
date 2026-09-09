@@ -1,11 +1,12 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { VocabularyDetail } from './VocabularyDetail'
 
 interface RecordedPageProps {
   onExit: () => void
 }
 
-// 已记录页骨架：左侧菜单当前仅有词汇一项并默认选中，右侧是预留给词汇列表的空白容器。
+// 已记录页骨架：左侧菜单当前仅有词汇一项并默认选中，右侧渲染词汇详情。
 // 进入时焦点移至返回按钮；Escape 退出；退出后由调用方把焦点还给「已记录」入口。
 export function RecordedPage({ onExit }: RecordedPageProps): React.JSX.Element {
   const { t } = useTranslation('common')
@@ -44,7 +45,9 @@ export function RecordedPage({ onExit }: RecordedPageProps): React.JSX.Element {
           </button>
         </nav>
       </aside>
-      <section className="recorded-detail" />
+      <section className="recorded-detail">
+        <VocabularyDetail />
+      </section>
     </main>
   )
 }

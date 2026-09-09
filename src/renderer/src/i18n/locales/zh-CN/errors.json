@@ -60,5 +60,11 @@
     "invalidInput": "用量请求无效。",
     "untrustedSource": "只能从应用窗口访问用量统计。",
     "unknown": "发生未知错误，请稍后重试。"
+  },
+  "vocabulary": {
+    "storageFailed": "访问本地词汇数据失败，请稍后重试。",
+    "invalidInput": "词汇请求无效。",
+    "untrustedSource": "已记录词汇只能从应用窗口访问。",
+    "unknown": "发生未知错误，请稍后重试。"
   }
 }

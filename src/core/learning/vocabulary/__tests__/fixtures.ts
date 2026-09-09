@@ -79,6 +79,12 @@ export function memoryRepository(): VocabularyRepository & { commands: Vocabular
     },
     saveBatch: save,
     saveBatchWithResult: (_executionId, values, finalize) => finalize(save(values)),
-    list: () => ({ entries: commands.map((command) => toEntry(command.parameters)) })
+    list: () => ({ entries: commands.map((command) => toEntry(command.parameters)) }),
+    deleteById: (id) => {
+      const index = commands.findIndex((command) => command.parameters.id === id)
+      if (index === -1) return false
+      commands.splice(index, 1)
+      return true
+    }
   }
 }

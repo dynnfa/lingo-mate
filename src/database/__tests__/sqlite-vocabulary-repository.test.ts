@@ -259,6 +259,106 @@ describe('vocabulary repository on the v5 schema', () => {
     database.exec('UPDATE vocabulary SET example_sentences = NULL')
     expect(repository.list({}).entries[0]?.exampleSentences).toBeNull()
   })
+  it('deletes exactly one record by id and keeps same-term history intact', () => {
+    const database = open()
+    const repository = new SqliteVocabularyRepository(database)
+    const stamp = '2026-09-07T00:00:00.000Z'
+    const first = insertCommand('apple', {
+      id: '10000000-0000-4000-8000-000000000001',
+      createdAt: stamp
+    })
+    repository.saveBatch([first])
+    // 直接写入同 term 的历史第二行，模拟迁移遗留的同名记录。
+    const second = insertCommand('apple', {
+      id: '10000000-0000-4000-8000-000000000002',
+      createdAt: '2026-09-08T00:00:00.000Z'
+    })
+    database.prepare(VOCABULARY_INSERT_SQL).run(second.parameters)
+
+    expect(repository.deleteById(first.parameters.id)).toBe(true)
+    expect(database.prepare('SELECT COUNT(*) AS count FROM vocabulary').get()).toMatchObject({
+      count: 1
+    })
+    expect(repository.list({}).entries.map((entry) => entry.id)).toEqual([second.parameters.id])
+    expect(repository.find('apple')?.id).toBe(second.parameters.id)
+  })
+  it('treats deleting a missing id as an idempotent no-op', () => {
+    const database = open()
+    const repository = new SqliteVocabularyRepository(database)
+    const command = insertCommand('apple')
+    repository.saveBatch([command])
+
+    expect(repository.deleteById('99999999-9999-4999-8999-999999999999')).toBe(false)
+    expect(database.prepare('SELECT COUNT(*) AS count FROM vocabulary').get()).toMatchObject({
+      count: 1
+    })
+    expect(repository.deleteById(command.parameters.id)).toBe(true)
+    expect(repository.deleteById(command.parameters.id)).toBe(false)
+  })
+  it('wraps delete storage failures as STORAGE_FAILED', () => {
+    const database = open()
+    const repository = new SqliteVocabularyRepository(database)
+    database.exec('DROP TABLE vocabulary')
+    expect(() => repository.deleteById('11111111-1111-4111-8111-111111111111')).toThrow(
+      'STORAGE_FAILED'
+    )
+  })
+  it('keeps keyset pagination usable after the cursor row is deleted', () => {
+    const database = open()
+    const repository = new SqliteVocabularyRepository(database)
+    const stamp = '2026-09-07T00:00:00.000Z'
+    const commands = ['apple', 'banana', 'orange', 'peach'].map((term, index) =>
+      insertCommand(term, { createdAt: stamp, id: `10000000-0000-4000-8000-00000000000${index}` })
+    )
+    repository.saveBatch(commands)
+    const page1 = repository.list({ limit: 2 })
+    expect(page1.entries.map((entry) => entry.term)).toEqual(['peach', 'orange'])
+    // 删除游标行（orange）后按原游标继续读取，仍能拿到剩余两行。
+    expect(repository.deleteById(page1.nextCursor?.id as string)).toBe(true)
+    const page2 = repository.list({ limit: 2, cursor: page1.nextCursor })
+    expect(page2.entries.map((entry) => entry.term)).toEqual(['banana', 'apple'])
+    expect(page2.nextCursor).toBeUndefined()
+  })
+  it('deleting vocabulary records leaves conversations and skill reports untouched', () => {
+    const database = open()
+    const repository = new SqliteVocabularyRepository(database)
+    const stamp = new Date().toISOString()
+    const sessionId = randomUUID()
+    const messageId = randomUUID()
+    const executionId = randomUUID()
+    database
+      .prepare('INSERT INTO conversations VALUES (?, ?, ?, ?)')
+      .run(sessionId, stamp, stamp, 'Test title')
+    database
+      .prepare('INSERT INTO conversation_messages VALUES (?, ?, ?, ?, ?)')
+      .run(messageId, sessionId, 'user', '/vocabulary apple', stamp)
+    database
+      .prepare(
+        `INSERT INTO conversation_skill_executions
+         (id, session_id, user_message_id, skill_id, arguments_json, explanation_language,
+          phase, batch_json, created_at, updated_at)
+         VALUES (?, ?, ?, 'vocabulary', ?, 'en', 'summarizing', ?, ?, ?)`
+      )
+      .run(
+        executionId,
+        sessionId,
+        messageId,
+        JSON.stringify({ text: 'apple', wordLanguage: 'en' }),
+        JSON.stringify({ saved: 1 }),
+        stamp,
+        stamp
+      )
+    const command = insertCommand('apple')
+    repository.saveBatch([command])
+
+    expect(repository.deleteById(command.parameters.id)).toBe(true)
+    expect(
+      database.prepare('SELECT COUNT(*) AS count FROM conversation_messages').get()
+    ).toMatchObject({ count: 1 })
+    expect(
+      database.prepare('SELECT batch_json FROM conversation_skill_executions').get()
+    ).toMatchObject({ batch_json: JSON.stringify({ saved: 1 }) })
+  })
   it('commits vocabulary and the durable batch report atomically, including zero inserts', () => {
     const database = open()
     const repository = new SqliteVocabularyRepository(database)
