@@ -5,6 +5,7 @@ import '@testing-library/jest-dom/vitest'
 import { I18nextProvider } from 'react-i18next'
 import type { VocabularyApi } from '../../../../shared/vocabulary'
 import type { PhraseApi } from '../../../../shared/phrase'
+import type { SynonymApi } from '../../../../shared/synonym'
 import { createI18n } from '../../i18n'
 import { RecordedPage } from '../RecordedPage'
 
@@ -30,6 +31,12 @@ const emptyPhraseApi: PhraseApi = {
   }
 }
 
+const emptySynonymApi: SynonymApi = {
+  async list() {
+    return { status: 'ok', groups: [], nextCursor: null }
+  }
+}
+
 const entry = {
   id: '11111111-1111-4111-8111-111111111111',
   term: 'apple',
@@ -47,7 +54,11 @@ const phraseEntry = {
 }
 
 function renderPage(onExit: () => void = vi.fn()): () => void {
-  vi.stubGlobal('api', { vocabulary: emptyVocabularyApi, phrase: emptyPhraseApi })
+  vi.stubGlobal('api', {
+    vocabulary: emptyVocabularyApi,
+    phrase: emptyPhraseApi,
+    synonym: emptySynonymApi
+  })
   render(
     <I18nextProvider i18n={i18n}>
       <RecordedPage onExit={onExit} />
@@ -63,16 +74,18 @@ afterEach(() => {
 })
 
 describe('RecordedPage', () => {
-  it('renders the vocabulary and phrase menu items with vocabulary selected by default', () => {
+  it('renders the vocabulary, phrase and synonym menu items with vocabulary selected by default', () => {
     renderPage()
 
     const menu = screen.getByRole('navigation', { name: '已记录词汇菜单' })
     const items = within(menu).getAllByRole('button')
-    expect(items).toHaveLength(2)
+    expect(items).toHaveLength(3)
     expect(items[0]).toHaveTextContent('词汇')
     expect(items[1]).toHaveTextContent('短语')
+    expect(items[2]).toHaveTextContent('近义词')
     expect(items[0]).toHaveAttribute('aria-current', 'true')
     expect(items[1]).not.toHaveAttribute('aria-current')
+    expect(items[2]).not.toHaveAttribute('aria-current')
     expect(screen.getByRole('main', { name: '已记录词汇' })).toBeInTheDocument()
   })
 
@@ -95,7 +108,8 @@ describe('RecordedPage', () => {
           phraseCalls.list += 1
           return { status: 'ok', entries: [phraseEntry] }
         }
-      }
+      },
+      synonym: emptySynonymApi
     })
     render(
       <I18nextProvider i18n={i18n}>
@@ -115,6 +129,58 @@ describe('RecordedPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '短语' }))
     expect(await screen.findByRole('heading', { name: '短语' })).toBeInTheDocument()
     expect(phraseCalls.list).toBe(2)
+  })
+
+  it('switches to the synonym detail and reloads on re-entry', async () => {
+    const synonymCalls = { list: 0 }
+    vi.stubGlobal('api', {
+      vocabulary: emptyVocabularyApi,
+      phrase: emptyPhraseApi,
+      synonym: {
+        ...emptySynonymApi,
+        async list() {
+          synonymCalls.list += 1
+          return {
+            status: 'ok',
+            groups: [
+              {
+                id: '22222222-2222-4222-8222-222222222222',
+                meaning: '足够好',
+                words: [
+                  {
+                    id: '33333333-3333-4333-8333-333333333333',
+                    word: 'sufficient',
+                    meaning: '足够的',
+                    distinction: '数量上足够',
+                    groupid: '22222222-2222-4222-8222-222222222222'
+                  }
+                ]
+              }
+            ],
+            nextCursor: null
+          }
+        }
+      }
+    })
+    render(
+      <I18nextProvider i18n={i18n}>
+        <RecordedPage onExit={vi.fn()} />
+      </I18nextProvider>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '近义词' }))
+    expect(await screen.findByRole('heading', { name: '近义词' })).toBeInTheDocument()
+    expect(await screen.findByText('sufficient')).toBeInTheDocument()
+    expect(screen.getByText('足够好')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '词汇' })).not.toBeInTheDocument()
+    expect(synonymCalls.list).toBe(1)
+
+    // 切回词汇：近义词视图卸载，重新进入时再次读取最新分组。
+    fireEvent.click(screen.getByRole('button', { name: '词汇' }))
+    expect(await screen.findByRole('heading', { name: '词汇' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '近义词' }))
+    expect(await screen.findByText('sufficient')).toBeInTheDocument()
+    expect(synonymCalls.list).toBe(2)
   })
 
   it('marks the active menu item with aria-current while switching', async () => {
@@ -171,7 +237,8 @@ describe('RecordedPage', () => {
           return { status: 'ok', entries: [entry] }
         }
       },
-      phrase: emptyPhraseApi
+      phrase: emptyPhraseApi,
+      synonym: emptySynonymApi
     })
     const onExit = vi.fn()
     render(
@@ -199,5 +266,6 @@ describe('RecordedPage', () => {
     const menu = within(screen.getByRole('navigation', { name: 'Recorded vocabulary menu' }))
     expect(menu.getByRole('button', { name: 'Vocabulary' })).toHaveAttribute('aria-current', 'true')
     expect(menu.getByRole('button', { name: 'Phrases' })).not.toHaveAttribute('aria-current')
+    expect(menu.getByRole('button', { name: 'Synonyms' })).not.toHaveAttribute('aria-current')
   })
 })

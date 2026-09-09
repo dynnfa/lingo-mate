@@ -38,6 +38,7 @@ test('exposes the conversation skill and preferences interfaces from the sandbox
         'models',
         'phrase',
         'preferences',
+        'synonym',
         'usage',
         'vocabulary'
       ])
@@ -66,6 +67,14 @@ test('exposes the conversation skill and preferences interfaces from the sandbox
         ).sort()
       )
       expect(exposedPhraseKeys).toEqual(['delete', 'list'])
+
+      // 近义词窄接口：只暴露分组列表读取，不暴露通用 invoke 或任意 SQL
+      const exposedSynonymKeys = await window.evaluate(() =>
+        Object.keys(
+          (globalThis as typeof globalThis & { api?: { synonym?: object } }).api?.synonym ?? {}
+        ).sort()
+      )
+      expect(exposedSynonymKeys).toEqual(['list'])
 
       const conversationKeys = await window.evaluate(() =>
         Object.keys(

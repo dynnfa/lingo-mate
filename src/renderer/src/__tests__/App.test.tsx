@@ -24,6 +24,7 @@ import type { ModelsApi } from '../../../shared/models'
 import type { UsageApi } from '../../../shared/usage'
 import type { VocabularyApi } from '../../../shared/vocabulary'
 import type { PhraseApi } from '../../../shared/phrase'
+import type { SynonymApi } from '../../../shared/synonym'
 import App from '../App'
 import { createI18n } from '../i18n'
 
@@ -122,6 +123,15 @@ function phraseApiStub(): PhraseApi {
   }
 }
 
+// App 测试不进入已记录近义词详情；提供稳定空结果桩，避免页面挂起。
+function synonymApiStub(): SynonymApi {
+  return {
+    async list() {
+      return { status: 'ok', groups: [], nextCursor: null }
+    }
+  }
+}
+
 function summary(sessionId: string, updatedAt: string): ConversationSummary {
   return { sessionId, title: null, createdAt: '2026-09-01T08:00:00.000Z', updatedAt }
 }
@@ -213,6 +223,7 @@ function installApiMock(
     usage: usageApiStub(),
     vocabulary: vocabularyApiStub(),
     phrase: phraseApiStub(),
+    synonym: synonymApiStub(),
     conversation: {
       async create() {
         mock.calls.create += 1

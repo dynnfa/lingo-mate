@@ -72,5 +72,11 @@
     "invalidInput": "短语请求无效。",
     "untrustedSource": "已记录短语只能从应用窗口访问。",
     "unknown": "发生未知错误，请稍后重试。"
+  },
+  "synonym": {
+    "storageFailed": "访问本地近义词数据失败，请稍后重试。",
+    "invalidInput": "近义词请求无效。",
+    "untrustedSource": "已记录近义词只能从应用窗口访问。",
+    "unknown": "发生未知错误，请稍后重试。"
   }
 }

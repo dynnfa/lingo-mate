@@ -1,4 +1,4 @@
-import type { SynonymBatch } from './synonym'
+import type { SynonymApi, SynonymBatch } from './synonym'
 import { z } from 'zod'
 import type { ModelsApi } from './models'
 import type { PreferencesApi } from './preferences'
@@ -238,4 +238,5 @@ export interface LingoMateApi {
   usage: UsageApi
   vocabulary: VocabularyApi
   phrase: PhraseApi
+  synonym: SynonymApi
 }

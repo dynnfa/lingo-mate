@@ -3,8 +3,11 @@ import type Database from 'better-sqlite3'
 import {
   synonymBatchSchema,
   synonymEntrySchema,
+  synonymGroupPageSchema,
+  synonymListInputSchema,
   type SynonymBatch,
-  type SynonymEntry
+  type SynonymEntry,
+  type SynonymListInput
 } from '../shared/synonym'
 import type {
   SynonymRepository,
@@ -52,6 +55,33 @@ export class SqliteSynonymRepository implements SynonymRepository {
       if (JSON.stringify(page).length > 60000) throw new SynonymError('SCAN_LIMIT')
       return page
     })
+  }
+  listGroups(raw: SynonymListInput): SynonymGroupPage {
+    return this.storage(() =>
+      this.database.transaction(() => {
+        const { cursor } = synonymListInputSchema.parse(raw)
+        // 界面列表：取 5 个非空组并额外探测一组判断后续页；不继承
+        // 模型扫描的词数与字符预算，一页必须返回完整组。
+        const rows = this.database
+          .prepare(
+            `SELECT id, meaning FROM synonym_group
+               WHERE id > ? AND EXISTS (SELECT 1 FROM synonym WHERE groupid = synonym_group.id)
+               ORDER BY id LIMIT 6`
+          )
+          .all(cursor ?? '') as Array<{ id: string; meaning: string }>
+        const groups = rows.slice(0, 5).map((group) => ({
+          ...group,
+          words: this.database
+            .prepare('SELECT * FROM synonym WHERE groupid = ? ORDER BY word, id')
+            .all(group.id)
+            .map((row) => synonymEntrySchema.parse(row))
+        }))
+        return synonymGroupPageSchema.parse({
+          groups,
+          nextCursor: rows.length > 5 ? groups.at(-1)!.id : null
+        })
+      })()
+    )
   }
   saveReport(executionId: string, report: SynonymBatch): void {
     this.storage(() => {

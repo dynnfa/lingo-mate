@@ -54,6 +54,8 @@ import { registerVocabularyIpc } from './vocabulary-ipc'
 import { VocabularyManagementService } from '../core/learning/vocabulary/vocabulary-management'
 import { registerPhraseIpc } from './phrase-ipc'
 import { PhraseManagementService } from '../core/learning/phrase/phrase-management'
+import { registerSynonymIpc } from './synonym-ipc'
+import { SynonymManagementService } from '../core/learning/synonym/synonym-management'
 
 let database: Database.Database | undefined
 let conversationModule: ConversationModule | undefined
@@ -199,8 +201,12 @@ app.whenReady().then(() => {
       new LlmPhraseAnalyzer(modelsService.resolveSnapshot(), timeoutMs, createLlmClient),
     createPhraseFeedbackFormatter()
   )
+  const synonymRepository = new SqliteSynonymRepository(database)
+  // 已记录页的近义词分组列表：复用近义词收藏仓储，经管理服务暴露窄接口；
+  // 读取不影响收藏流程，也不改写历史会话与收藏批次报告。
+  registerSynonymIpc(new SynonymManagementService(synonymRepository), rendererUrl)
   const synonymSkill = new SynonymConversationSkill(
-    new SynonymModule(new SqliteSynonymRepository(database), (timeoutMs) => {
+    new SynonymModule(synonymRepository, (timeoutMs) => {
       try {
         return new LlmSynonymAnalyzer(modelsService.resolveSnapshot(), timeoutMs, createLlmClient)
       } catch (cause) {

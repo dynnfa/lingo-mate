@@ -60,6 +60,11 @@ import {
   listPhraseResultSchema,
   PHRASE_CHANNELS
 } from '../shared/phrase'
+import {
+  synonymListInputSchema,
+  synonymListResultSchema,
+  SYNONYM_CHANNELS
+} from '../shared/synonym'
 
 const api: LingoMateApi = {
   preferences: {
@@ -151,6 +156,13 @@ const api: LingoMateApi = {
       const input = deletePhraseInputSchema.parse(rawInput)
       const result: unknown = await ipcRenderer.invoke(PHRASE_CHANNELS.delete, input)
       return deletePhraseResultSchema.parse(result)
+    }
+  },
+  synonym: {
+    async list(rawInput) {
+      const input = synonymListInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(SYNONYM_CHANNELS.list, input)
+      return synonymListResultSchema.parse(result)
     }
   },
   conversation: {

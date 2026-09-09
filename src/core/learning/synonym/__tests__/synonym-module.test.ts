@@ -20,6 +20,7 @@ function repository(): SynonymRepository {
   return {
     findExisting: () => new Map(),
     findGroups: () => ({ groups: [], nextCursor: null }),
+    listGroups: () => ({ groups: [], nextCursor: null }),
     saveWord: vi.fn(),
     saveReport: vi.fn()
   }
