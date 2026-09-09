@@ -145,6 +145,11 @@
       "vocabulary": "Vocabulary"
     }
   },
+  "practice": {
+    "title": "Start practicing",
+    "back": "Back",
+    "menuLabel": "Practice menu"
+  },
   "preferences": {
     "startupError": "Couldn't load your language preference. Using the default language.",
     "dismiss": "Dismiss"

@@ -8,11 +8,12 @@ import { formatDateTime } from './i18n/formatters'
 import { normalizeI18nLocale } from './i18n'
 import { RecordedPage } from './recorded/RecordedPage'
 import { SettingsPage } from './settings/SettingsPage'
+import { PracticePage } from './practice/PracticePage'
 import type { ConversationSummary } from '../../shared/conversation'
 
 type AppTFunction = TFunction<['common', 'conversation', 'errors']>
 
-type AppView = 'conversation' | 'settings' | 'recorded'
+type AppView = 'conversation' | 'settings' | 'recorded' | 'practice'
 
 // 翻译完整模板并显式传入当前界面 locale 格式化的时间，不拼接词语。
 function formatConversationLabel(
@@ -40,6 +41,7 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
   const [preferenceNoticeVisible, setPreferenceNoticeVisible] = useState(initialPreferenceError)
   const settingsButtonRef = useRef<HTMLButtonElement>(null)
   const recordedButtonRef = useRef<HTMLButtonElement>(null)
+  const practiceButtonRef = useRef<HTMLButtonElement>(null)
   const previousViewRef = useRef<AppView>('conversation')
 
   useEffect(() => {
@@ -56,6 +58,8 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
         settingsButtonRef.current?.focus()
       } else if (previousView === 'recorded') {
         recordedButtonRef.current?.focus()
+      } else if (previousView === 'practice') {
+        practiceButtonRef.current?.focus()
       }
     }
     previousViewRef.current = activeView
@@ -89,7 +93,12 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
               </svg>
               {t('common:sidebar.menuRecorded')}
             </button>
-            <button className="sidebar-menu-item" type="button">
+            <button
+              className="sidebar-menu-item"
+              onClick={() => setActiveView('practice')}
+              ref={practiceButtonRef}
+              type="button"
+            >
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="m8 4 12 8-12 8V4Z" />
               </svg>
@@ -173,6 +182,9 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
       ) : null}
       {activeView === 'recorded' ? (
         <RecordedPage onExit={() => setActiveView('conversation')} />
+      ) : null}
+      {activeView === 'practice' ? (
+        <PracticePage onExit={() => setActiveView('conversation')} />
       ) : null}
     </>
   )
