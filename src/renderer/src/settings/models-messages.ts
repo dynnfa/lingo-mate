@@ -1,4 +1,5 @@
 import type { ModelsErrorCode } from '../../../shared/models'
+import type { ModelsTestOutcome } from './useModelsSettings'
 
 type ModelsErrorKey =
   | 'errors:models.untrustedSource'
@@ -58,4 +59,19 @@ export function modelsDeleteErrorKey(code: ModelsErrorCode): ModelsErrorKey {
 // 保存当前模型选择失败使用切换语境文案，其余码保持原语义。
 export function modelsSetActiveErrorKey(code: ModelsErrorCode): ModelsErrorKey {
   return code === 'MODELS_WRITE_FAILED' ? 'errors:models.setActiveFailed' : modelsErrorKey(code)
+}
+
+// 测试状态文案：行测试弹窗与草稿表单共用同一映射；idle 未开始，无文案。
+type ModelsTestOutcomeKey =
+  | 'common:settings.models.testRunning'
+  | 'common:settings.models.testSucceeded'
+  | 'common:settings.models.testStateCancelled'
+  | ModelsErrorKey
+
+export function modelsTestOutcomeKey(outcome: ModelsTestOutcome): ModelsTestOutcomeKey | undefined {
+  if (outcome.status === 'running') return 'common:settings.models.testRunning'
+  if (outcome.status === 'succeeded') return 'common:settings.models.testSucceeded'
+  if (outcome.status === 'cancelled') return 'common:settings.models.testStateCancelled'
+  if (outcome.status === 'failed') return modelsErrorKey(outcome.code)
+  return undefined
 }

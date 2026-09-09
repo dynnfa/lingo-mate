@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { modelsErrorKey } from './models-messages'
+import { modelsErrorKey, modelsTestOutcomeKey } from './models-messages'
 import type { ModelsSettingsState } from './useModelsSettings'
 
 // 新增／编辑复用的配置表单：编辑按配置 ID 加载非敏感字段，密码框始终为空。
@@ -16,13 +16,8 @@ export function ModelConfigForm({ state }: { state: ModelsSettingsState }): Reac
     if (saveState.kind === 'failed') return t(modelsErrorKey(saveState.code))
     return undefined
   })()
-  const testMessage = (() => {
-    if (draftTest.status === 'running') return t('common:settings.models.testRunning')
-    if (draftTest.status === 'succeeded') return t('common:settings.models.testSucceeded')
-    if (draftTest.status === 'cancelled') return t('common:settings.models.testStateCancelled')
-    if (draftTest.status === 'failed') return t(modelsErrorKey(draftTest.code))
-    return undefined
-  })()
+  const testMessageKey = modelsTestOutcomeKey(draftTest)
+  const testMessage = testMessageKey !== undefined ? t(testMessageKey) : undefined
 
   return (
     <form

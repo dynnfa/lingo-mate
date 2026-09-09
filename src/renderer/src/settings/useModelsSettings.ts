@@ -37,6 +37,9 @@ export type ModelsTestOutcome =
 export type ModelsDeleteState =
   { kind: 'idle' } | { kind: 'deleting' } | { kind: 'failed'; code: ModelsErrorCode }
 
+// 行测试结果弹窗：打开后随测试进度更新 outcome；关闭时测试仍在途则先取消。
+export type RowTestDialog = { configId: ModelConfigId; outcome: ModelsTestOutcome }
+
 export type ModelsSetActiveState =
   { kind: 'idle' } | { kind: 'saving' } | { kind: 'failed'; code: ModelsErrorCode }
 
@@ -124,7 +127,7 @@ export interface ModelsSettingsState {
   deleteTarget: ModelConfigSummary | undefined
   deleteState: ModelsDeleteState
   setActiveState: ModelsSetActiveState
-  rowTests: Record<ModelConfigId, ModelsTestOutcome>
+  rowTestDialog: RowTestDialog | undefined
   draftTest: ModelsTestOutcome
   activeTest: ActiveTest | undefined
   discardPrompt: DiscardIntent | undefined
@@ -140,6 +143,7 @@ export interface ModelsSettingsState {
   confirmDelete: () => void
   setActive: (configId: ModelConfigId) => void
   testRow: (configId: ModelConfigId) => void
+  closeRowTestDialog: () => void
   testDraft: () => void
   cancelActiveTest: () => void
   // Escape 分层处理：优先关闭本区块确认层或编辑表单；返回 false 表示未消费。
@@ -156,7 +160,7 @@ export function useModelsSettings(): ModelsSettingsState {
   const [deleteTarget, setDeleteTarget] = useState<ModelConfigSummary | undefined>(undefined)
   const [deleteState, setDeleteState] = useState<ModelsDeleteState>({ kind: 'idle' })
   const [activeSelectionState, setActiveState] = useState<ModelsSetActiveState>({ kind: 'idle' })
-  const [rowTests, setRowTests] = useState<Record<ModelConfigId, ModelsTestOutcome>>({})
+  const [rowTestDialog, setRowTestDialog] = useState<RowTestDialog | undefined>(undefined)
   const [draftTest, setDraftTest] = useState<ModelsTestOutcome>({ status: 'idle' })
   const [activeTest, setActiveTest] = useState<ActiveTest | undefined>(undefined)
   const [discardPrompt, setDiscardPrompt] = useState<DiscardIntent | undefined>(undefined)
@@ -180,7 +184,7 @@ export function useModelsSettings(): ModelsSettingsState {
           setDeleteTarget(undefined)
           setDeleteState({ kind: 'idle' })
           setActiveState({ kind: 'idle' })
-          setRowTests({})
+          setRowTestDialog(undefined)
           setDraftTest({ status: 'idle' })
           setDiscardPrompt(undefined)
           setLoadState('ready')
@@ -351,8 +355,10 @@ export function useModelsSettings(): ModelsSettingsState {
           setList(result.list)
           listRef.current = result.list
           if (session.mode === 'edit') {
-            // 编辑保存后清除此行旧测试结果。
-            setRowTests((current) => ({ ...current, [session.configId]: { status: 'idle' } }))
+            // 编辑保存后旧配置的测试结果失效，关闭仍指向它的结果弹窗。
+            setRowTestDialog((current) =>
+              current?.configId === session.configId ? undefined : current
+            )
           }
           closeForm()
           return
@@ -399,11 +405,8 @@ export function useModelsSettings(): ModelsSettingsState {
         if (result.status === 'ok') {
           setList(result.list)
           listRef.current = result.list
-          setRowTests((current) => {
-            const next = { ...current }
-            delete next[target.id]
-            return next
-          })
+          // 被删除配置的测试结果弹窗一并关闭。
+          setRowTestDialog((current) => (current?.configId === target.id ? undefined : current))
           // 被删除目标是当前编辑对象时，对应草稿一并清理。
           if (editSession.mode === 'edit' && editSession.configId === target.id) {
             closeForm()
@@ -451,10 +454,12 @@ export function useModelsSettings(): ModelsSettingsState {
         return
       }
       if (!listRef.current?.configs.some((config) => config.id === configId)) return
-      setRowTests((currentTests) => ({
-        ...currentTests,
-        [configId]: testOutcomeFromResult(result)
-      }))
+      // 弹窗已被用户关闭时不重新打开，仅释放测试锁。
+      setRowTestDialog((dialog) =>
+        dialog?.configId === configId
+          ? { configId, outcome: testOutcomeFromResult(result) }
+          : dialog
+      )
       activeTestRef.current = undefined
       setActiveTest(undefined)
     },
@@ -469,7 +474,7 @@ export function useModelsSettings(): ModelsSettingsState {
       const test: ActiveTest = { kind: 'row', configId, requestId }
       activeTestRef.current = test
       setActiveTest(test)
-      setRowTests((current) => ({ ...current, [configId]: { status: 'running', requestId } }))
+      setRowTestDialog({ configId, outcome: { status: 'running', requestId } })
       window.api.models
         .testSavedConnection({ configId, requestId })
         .then((result) => applyRowTestResult(configId, requestId, result))
@@ -547,11 +552,20 @@ export function useModelsSettings(): ModelsSettingsState {
     })
   }, [])
 
+  // 关闭行测试结果弹窗；测试仍在途时先请求取消，结果落地后释放测试锁。
+  const closeRowTestDialog = useCallback((): void => {
+    if (rowTestDialog === undefined) return
+    if (rowTestDialog.outcome.status === 'running') {
+      cancelActiveTest()
+    }
+    setRowTestDialog(undefined)
+  }, [cancelActiveTest, rowTestDialog])
+
   // 页面卸载（退出 Settings）时清理在途测试；Main 侧 sender 销毁同样会中止。
   useEffect(() => cancelActiveTest, [cancelActiveTest])
 
-  // Escape 分层：先关确认层（删除确认、弃改确认），再处理编辑表单；一次按键
-  // 只执行一个动作，避免同时触发多个层级。
+  // Escape 分层：先关确认层（删除确认、弃改确认），再关测试结果弹窗，最后处理
+  // 编辑表单；一次按键只执行一个动作，避免同时触发多个层级。
   const consumeEscape = useCallback((): boolean => {
     if (deleteTarget !== undefined) {
       cancelDelete()
@@ -561,12 +575,25 @@ export function useModelsSettings(): ModelsSettingsState {
       keepEditing()
       return true
     }
+    if (rowTestDialog !== undefined) {
+      closeRowTestDialog()
+      return true
+    }
     if (editSession.mode !== 'closed') {
       requestCloseForm()
       return true
     }
     return false
-  }, [cancelDelete, deleteTarget, discardPrompt, editSession, keepEditing, requestCloseForm])
+  }, [
+    cancelDelete,
+    closeRowTestDialog,
+    deleteTarget,
+    discardPrompt,
+    editSession,
+    keepEditing,
+    requestCloseForm,
+    rowTestDialog
+  ])
 
   return {
     loadState,
@@ -582,7 +609,7 @@ export function useModelsSettings(): ModelsSettingsState {
     deleteTarget,
     deleteState,
     setActiveState: activeSelectionState,
-    rowTests,
+    rowTestDialog,
     draftTest,
     activeTest,
     discardPrompt,
@@ -598,6 +625,7 @@ export function useModelsSettings(): ModelsSettingsState {
     confirmDelete,
     setActive,
     testRow,
+    closeRowTestDialog,
     testDraft,
     cancelActiveTest,
     consumeEscape

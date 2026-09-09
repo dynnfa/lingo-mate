@@ -1,6 +1,7 @@
 import { useRef, useState, type KeyboardEvent, type SyntheticEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { translateConversationStatus } from './status-messages'
+import { MarkdownMessage } from './MarkdownMessage'
 import { ACTION_PICKER_ID, ConversationActionPicker } from './ConversationActionPicker'
 import {
   CONVERSATION_ACTIONS,
@@ -250,7 +251,7 @@ export function ConversationPanel({
               key={message.messageId}
             >
               <span>{message.role === 'user' ? t('common:messages.userRole') : 'Lingo Mate'}</span>
-              <p>{message.content || '…'}</p>
+              <MarkdownMessage content={message.content} />
               {message.role === 'user' && message.retryable && !composerLocked ? (
                 <button
                   className="secondary retry"

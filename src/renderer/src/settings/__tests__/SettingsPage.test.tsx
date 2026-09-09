@@ -365,7 +365,7 @@ describe('SettingsPage', () => {
     const headers = within(table)
       .getAllByRole('columnheader')
       .map((header) => header.textContent)
-    expect(headers).toEqual(['Model ID', 'Base URL', '协议', 'API Key', '测试状态', '操作'])
+    expect(headers).toEqual(['Model ID', 'Base URL', 'API Key', '操作'])
 
     const rows = within(table).getAllByRole('row')
     expect(rows).toHaveLength(4) // 表头 + 3 行
@@ -376,12 +376,12 @@ describe('SettingsPage', () => {
     expect(within(rows[3]).getByText('密钥不可用，请重新配置')).toBeInTheDocument()
     // 长地址保留完整内容于 title
     expect(within(rows[2]).getByTitle('http://127.0.0.1:9000/v1')).toBeInTheDocument()
-    // 最右列提供三个动作
+    // 最右列提供三个动作；表格内不再展示协议与测试状态
     for (const row of rows.slice(1)) {
       expect(within(row).getByRole('button', { name: '删除' })).toBeInTheDocument()
       expect(within(row).getByRole('button', { name: '编辑' })).toBeInTheDocument()
       expect(within(row).getByRole('button', { name: '测试连通' })).toBeInTheDocument()
-      expect(within(row).getByText('未测试')).toBeInTheDocument()
+      expect(within(row).queryByText('OpenAI 兼容')).not.toBeInTheDocument()
     }
   })
 
@@ -701,7 +701,7 @@ describe('SettingsPage', () => {
     expect(screen.queryByText('请选择当前使用的模型。')).not.toBeInTheDocument()
   })
 
-  it('attributes row test results per config and isolates late callbacks', async () => {
+  it('shows a row test result in a dialog identifying the tested config', async () => {
     const { api, calls } = modelsApiStub({
       initialList: { activeConfigId: CONFIG_A, configs: [KEYLESS_REMOTE, KEYED_LOCAL] },
       testResult: 'authFailed'
@@ -710,24 +710,73 @@ describe('SettingsPage', () => {
     renderPage()
     await openModels()
 
-    const rows = screen.getAllByRole('row')
-    fireEvent.click(within(rows[1]).getByRole('button', { name: '测试连通' }))
+    fireEvent.click(within(screen.getAllByRole('row')[1]).getByRole('button', { name: '测试连通' }))
 
     await waitFor(() => {
       expect(calls.testSaved).toHaveLength(1)
     })
+    const dialog = await screen.findByRole('dialog', { name: '连接测试' })
+    // 弹窗标明被测配置，表格内不再展示逐行测试状态
     expect(
-      await within(screen.getAllByRole('row')[1]).findByText('鉴权失败，请检查 API Key。')
+      within(dialog).getByText('测试对象：gpt-test（https://api.example.com/v1）')
     ).toBeInTheDocument()
-    // 其他行保持未测试
-    expect(within(screen.getAllByRole('row')[2]).getByText('未测试')).toBeInTheDocument()
+    expect(within(dialog).getByText('鉴权失败，请检查 API Key。')).toBeInTheDocument()
+    expect(within(screen.getAllByRole('row')[2]).queryByText('未测试')).not.toBeInTheDocument()
 
-    // 编辑保存后清除此行旧测试结果（需先有修改，保存按钮才可用）
-    fireEvent.click(within(screen.getAllByRole('row')[1]).getByRole('button', { name: '编辑' }))
-    fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: 'gpt-renamed' } })
-    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    // 关闭弹窗后可再次发起测试
+    fireEvent.click(within(dialog).getByRole('button', { name: '关闭' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(
+      within(screen.getAllByRole('row')[1]).getByRole('button', { name: '测试连通' })
+    ).toBeEnabled()
+  })
+
+  it('cancels the in-flight test when the result dialog is closed via Escape', async () => {
+    const { api, calls } = modelsApiStub({
+      initialList: { activeConfigId: CONFIG_A, configs: [KEYLESS_REMOTE] },
+      pendingTest: true
+    })
+    installApi(api)
+    renderPage()
+    await openModels()
+
+    fireEvent.click(screen.getByRole('button', { name: '测试连通' }))
+    const dialog = await screen.findByRole('dialog', { name: '连接测试' })
+    expect(within(dialog).getByText('正在测试连接…')).toBeInTheDocument()
+    // 弹窗打开即聚焦其按钮：触发按钮已禁用，焦点落在 body 会让 Escape 收不到
+    expect(within(dialog).getByRole('button', { name: '取消' })).toHaveFocus()
+
+    // Escape 关闭弹窗：在途测试被取消，锁定释放后可再次测试
+    fireEvent.keyDown(screen.getByRole('main', { name: '设置' }), { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     await waitFor(() => {
-      expect(within(screen.getAllByRole('row')[1]).getByText('未测试')).toBeInTheDocument()
+      expect(calls.cancel).toHaveLength(1)
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '测试连通' })).toBeEnabled()
+    })
+  })
+
+  it('cancels the in-flight test when the dialog cancel button is clicked', async () => {
+    const { api, calls } = modelsApiStub({
+      initialList: { activeConfigId: CONFIG_A, configs: [KEYLESS_REMOTE] },
+      pendingTest: true
+    })
+    installApi(api)
+    renderPage()
+    await openModels()
+
+    fireEvent.click(screen.getByRole('button', { name: '测试连通' }))
+    const dialog = await screen.findByRole('dialog', { name: '连接测试' })
+
+    // “取消”按钮关闭弹窗同样取消在途测试
+    fireEvent.click(within(dialog).getByRole('button', { name: '取消' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(calls.cancel).toHaveLength(1)
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '测试连通' })).toBeEnabled()
     })
   })
 
@@ -743,9 +792,9 @@ describe('SettingsPage', () => {
     const rows = screen.getAllByRole('row')
     fireEvent.click(within(rows[1]).getByRole('button', { name: '测试连通' }))
 
-    await waitFor(() => {
-      expect(within(screen.getAllByRole('row')[1]).getByText('测试中…')).toBeInTheDocument()
-    })
+    // 测试进度在弹窗中呈现
+    const dialog = await screen.findByRole('dialog', { name: '连接测试' })
+    expect(within(dialog).getByText('正在测试连接…')).toBeInTheDocument()
     const testedRow = screen.getAllByRole('row')[1]
     const otherRow = screen.getAllByRole('row')[2]
     expect(within(testedRow).getByRole('button', { name: '编辑' })).toBeDisabled()
@@ -761,9 +810,12 @@ describe('SettingsPage', () => {
     })
     expect(screen.queryByText('有未保存的修改')).not.toBeInTheDocument()
 
-    // 切回 Models：取消结果落地
+    // 切回 Models：取消结果落在弹窗中，关闭后可再次测试
     await openModels()
-    expect(await within(screen.getAllByRole('row')[1]).findByText('已取消')).toBeInTheDocument()
+    const reopenedDialog = await screen.findByRole('dialog', { name: '连接测试' })
+    expect(within(reopenedDialog).getByText('已取消')).toBeInTheDocument()
+    fireEvent.click(within(reopenedDialog).getByRole('button', { name: '关闭' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(
       within(screen.getAllByRole('row')[1]).getByRole('button', { name: '测试连通' })
     ).toBeEnabled()
@@ -792,8 +844,8 @@ describe('SettingsPage', () => {
       editTargetConfigId: CONFIG_B
     })
     expect(await screen.findByText('连接测试成功。')).toBeInTheDocument()
-    // 草稿结果不写入行状态
-    expect(within(screen.getAllByRole('row')[1]).getByText('未测试')).toBeInTheDocument()
+    // 草稿结果只留在表单内，不打开行测试弹窗
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
     // 修改表单后旧测试结果清除
     fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: 'gpt-other' } })

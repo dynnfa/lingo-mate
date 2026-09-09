@@ -1,0 +1,101 @@
+.markdown-message {
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+.message .markdown-message p {
+  white-space: normal;
+}
+
+.markdown-message :is(p, ul, ol, blockquote, pre, table, hr) {
+  margin: 0.75em 0;
+}
+
+.markdown-message > :first-child {
+  margin-top: 0;
+}
+
+.markdown-message > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-message :is(h1, h2, h3, h4, h5, h6) {
+  font-weight: 600;
+  margin: 1em 0 0.4em;
+  font-size: 1.1em;
+  line-height: 1.4;
+}
+
+.markdown-message h1 {
+  font-size: 1.4em;
+}
+.markdown-message h2 {
+  font-size: 1.2em;
+}
+.markdown-message :is(ul, ol) {
+  padding-left: 1.6em;
+}
+
+.markdown-message ul {
+  list-style: disc;
+}
+
+.markdown-message ol {
+  list-style: decimal;
+}
+
+.markdown-message :is(strong, th) {
+  font-weight: 600;
+}
+.markdown-message li + li {
+  margin-top: 0.25em;
+}
+
+.markdown-message blockquote {
+  border-left: 3px solid var(--color-border-message);
+  padding-left: 1em;
+  color: var(--color-text-label);
+}
+
+.markdown-message code {
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  background: var(--color-surface-user);
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+.markdown-message pre {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 12px;
+  border: 1px solid var(--color-border-message);
+  border-radius: 6px;
+  white-space: pre;
+}
+
+.markdown-message pre code {
+  padding: 0;
+  background: transparent;
+}
+.markdown-message a {
+  color: inherit;
+  text-decoration: underline;
+}
+.markdown-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.markdown-message table {
+  border-collapse: collapse;
+}
+.markdown-message :is(th, td) {
+  border: 1px solid var(--color-border-message);
+  padding: 6px 10px;
+}
+.markdown-message hr {
+  border: 0;
+  border-top: 1px solid var(--color-border-message);
+}
