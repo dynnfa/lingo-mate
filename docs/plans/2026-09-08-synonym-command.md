@@ -1,7 +1,7 @@
 # /synonym 近义词分组功能计划
 
 - 日期：2026-09-08
-- 状态：待实施
+- 状态：已实施
 
 ## 目标与范围
 
@@ -32,22 +32,22 @@ LLM 只决定调用哪个工具及其参数。SQL、ID 生成、校验、事务�
 
 ### synonym_group
 
-| 字段 | 类型与约束 | 含义 |
-| --- | --- | --- |
-| id | TEXT PRIMARY KEY | 本地代码生成的 UUID |
+| 字段    | 类型与约束          | 含义                                           |
+| ------- | ------------------- | ---------------------------------------------- |
+| id      | TEXT PRIMARY KEY    | 本地代码生成的 UUID                            |
 | meaning | TEXT NOT NULL，非空 | 描述组内单词共有的语义，作为模型判断归组的依据 |
 
 group 表示一个共同语义，不只是词列表。例如 adequate 和 decent 可以在“达到基本要求、尚可”这个义项下归为同组；不表示两词在所有语境中都可互换。
 
 ### synonym
 
-| 字段 | 类型与约束 | 含义 |
-| --- | --- | --- |
-| id | TEXT PRIMARY KEY | 本地代码生成的 UUID |
-| meaning | TEXT NOT NULL，非空 | 单词在当前 group 下的具体词义 |
-| word | TEXT NOT NULL UNIQUE，非空 | 规范化后的单词，作为查重键 |
-| groupid | TEXT NOT NULL，外键指向 synonym_group(id) | 所属近义词组 |
-| distinction | TEXT NOT NULL，非空 | 与共同语义及组内其他词相比的语气、程度、语域或使用区别 |
+| 字段        | 类型与约束                                | 含义                                                   |
+| ----------- | ----------------------------------------- | ------------------------------------------------------ |
+| id          | TEXT PRIMARY KEY                          | 本地代码生成的 UUID                                    |
+| meaning     | TEXT NOT NULL，非空                       | 单词在当前 group 下的具体词义                          |
+| word        | TEXT NOT NULL UNIQUE，非空                | 规范化后的单词，作为查重键                             |
+| groupid     | TEXT NOT NULL，外键指向 synonym_group(id) | 所属近义词组                                           |
+| distinction | TEXT NOT NULL，非空                       | 与共同语义及组内其他词相比的语气、程度、语域或使用区别 |
 
 - 为 `synonym.groupid` 建索引，便于查询组内词条；开启并验证 SQLite 外键约束。
 - 单词唯一性由数据库保证，避免仅靠调用前查重导致重复插入。
@@ -119,4 +119,33 @@ Prompt 明确指定：word 使用目标学习语言；groupMeaning、meaning、d
 - Renderer 组件或 Playwright 测试：直接输入和选择器都能提交 `/synonym`，中英文文案完整，完成、失败、取消后退出运行状态；现有 `/vocabulary` 和普通对话不回归。
 - 测试放在模块 `__tests__/`，跨模块测试放在 `tests/integration/`，端到端测试放在 `tests/e2e/`。实施后运行相关测试及 `pnpm lint`、`pnpm typecheck`、`pnpm build`，再用 `pnpm dev` 手动检查完整流程。
 
-本次仅新增计划文档，不实施功能或修改数据库，不运行应用构建测试。
+## 实施记录（2026-09-09）
+
+- 基于实施时已有的 v9（含 `/phrase`）追加 v10，保留旧技能执行与用量记录；新增两张 synonym 业务表、外键、唯一约束与索引。
+- 新增规范化输入、逐词报告、共享串行批次服务、四个受约束工具、多轮 LLM 适配器与双语本地反馈。复用已有类型化 Preload API，无新增高权限 Renderer 接口。
+- 每词最长 60 秒、最多 52 轮工具响应；查询每页 5 组、最多 50 页，每组最多 100 词、单页 JSON 最多 60,000 字符。超限明确失败，不截断后据此创建组。
+- 逐词事务同时保存词条与报告；取消和部分失败保留已提交词。排队中的批次可立即取消；回复保存失败重试仅恢复已持久化报告。逐词报告使用 `saved`、`existing`、`duplicate`、`unrecognized`、`failed`、`cancelled` 状态；工具已有词响应使用 `skipped_existing`。
+- 用量页按现有聚合统计展示 `synonym_analysis`，同步扩展数据库 operation 约束与双语统计说明。
+
+验证结果：
+
+- `pnpm test`：67 个测试文件、796 项测试全部通过，覆盖输入、工具协议、多轮回传、迁移保留历史数据、事务回滚、幂等、并发串行、取消和回复恢复。
+- `pnpm lint`、`pnpm typecheck`、`pnpm build`：通过。构建仅有现有依赖的配置/注释警告。
+- Electron：`synonym-import` 新用例通过，`phrase-import`、`vocabulary-import`、`message-lifecycle` 共 12 项回归通过。
+- `pnpm dev`：在临时用户目录使用本地受控模型手动验证中文选择器、直接输入、逐词反馈、中文逗号与大小写去重；开发进程已停止。
+- 迁移与写入验证使用临时数据库，未改动日常用户数据库。模型协议使用受控响应验证，未调用外部真实模型；实际语义归组质量仍取决于用户配置的模型。
+
+### Review 修复（2026-09-09）
+
+- 报告新增可选 `finalized` 标记，区分逐词检查点与最终报告；只有明确为最终报告才直接恢复本地回复。重试检查点时保留已新增、已存在和未识别结果，对未完成词重新查重并继续执行。旧报告缺少标记时按检查点恢复，无需数据库迁移。
+- 预查重统一填入所有已存在词的结果，再进入模型处理；工具不支持时仅将尚待模型处理的词标记失败，不覆盖已存在词与本批重复词。
+- 新增 3 项集成回归：预查重失败后继续执行、部分提交后的检查点恢复、工具不支持与已有词混合输入。原回复保存失败后零模型调用的恢复测试继续通过。
+- `pnpm test`：67 个文件、799 项测试通过；`pnpm lint`、`pnpm typecheck`、`pnpm build` 通过。测试使用临时数据库和本地受控服务，本次未重跑 Electron 手动验收。
+
+### 逻辑简化（2026-09-09）
+
+- 三份领域同构的 `abortable-operation`（vocabulary、phrase、synonym）合并为 `src/core/learning/abortable-operation.ts` 的通用工厂，领域文件仅保留以错误类参数化的一行绑定，调用点签名不变。
+- `conversation-actions.ts` 收敛为单一 `SKILL_COMMANDS` 元数据表，`/synonym` 等命令前缀与模式只维护一处，替换三处嵌套三元与散落的字面量。
+- `SynonymModule.run` 改为接收已解析的输入项，消除对同一文本的重复解析。
+- `synonymWordSchema` 复用 `SYNONYM_MAX_LENGTH` 常量，单词上限不再双写。
+- 行为等价重构：`pnpm test` 68 个文件、802 项测试通过；`pnpm lint`、`pnpm typecheck` 通过。

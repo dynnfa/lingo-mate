@@ -1,3 +1,4 @@
+import { synonymBatchSchema } from '../shared/synonym'
 import type Database from 'better-sqlite3'
 import { runConversationSkillInputSchema } from '../shared/conversation'
 import { vocabularyBatchSchema } from '../shared/vocabulary'
@@ -35,7 +36,7 @@ interface SkillExecutionRow {
   session_id: string
   user_message_id: string
   assistant_message_id: string | null
-  skill_id: 'vocabulary' | 'phrase'
+  skill_id: 'vocabulary' | 'phrase' | 'synonym'
   arguments_json: string
   explanation_language: 'zh-CN' | 'en'
   phase: ConversationSkillPhase
@@ -270,6 +271,13 @@ function toStoredSkillExecution(row: SkillExecutionRow): StoredConversationSkill
     phase: row.phase,
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  }
+  if (row.skill_id === 'synonym') {
+    return {
+      ...common,
+      skillId: 'synonym',
+      ...(row.batch_json ? { batch: synonymBatchSchema.parse(JSON.parse(row.batch_json)) } : {})
+    }
   }
   if (row.skill_id === 'phrase') {
     return {

@@ -1,3 +1,4 @@
+import { SynonymError } from '../core/learning/synonym/parse-synonym-input'
 import { ModelConfigValidationError, ModelNotConfiguredError } from '../core/llm/model-config'
 import { ModelRequestError } from '../core/llm/llm-client'
 import {
@@ -22,6 +23,9 @@ export function toSafeRequestError(error: unknown): ConversationRequestError {
   if (error instanceof MessageNotFoundError) {
     return { code: 'NOT_FOUND', resource: 'message' }
   }
+
+  if (error instanceof SynonymError && error.code === 'INVALID_INPUT')
+    return { code: 'INVALID_INPUT' }
 
   if (error instanceof SkillLanguageMismatchError) {
     return { code: 'INVALID_INPUT' }

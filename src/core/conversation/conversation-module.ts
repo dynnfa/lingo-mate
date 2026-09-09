@@ -1,3 +1,4 @@
+import { SynonymError, parseSynonymInput } from '../learning/synonym/parse-synonym-input'
 import { randomUUID } from 'node:crypto'
 import { classifyModelRequestError, ModelRequestError } from '../llm/llm-client'
 import {
@@ -183,6 +184,7 @@ export class ConversationModule {
     emit: ConversationEventListener
   ): Promise<GenerationAccepted> {
     runConversationSkillInputSchema.parse(input)
+    if (input.skillId === 'synonym') parseSynonymInput(input.arguments.text)
     const skill = this.skills.get(input.skillId)
     if (!skill || !this.skillRepository) {
       throw new Error('Conversation skills are not configured')
@@ -218,9 +220,11 @@ export class ConversationModule {
       updatedAt: now
     }
     const execution: StoredConversationSkillExecution =
-      input.skillId === 'phrase'
-        ? { ...executionBase, skillId: 'phrase' }
-        : { ...executionBase, skillId: 'vocabulary' }
+      input.skillId === 'synonym'
+        ? { ...executionBase, skillId: 'synonym' }
+        : input.skillId === 'phrase'
+          ? { ...executionBase, skillId: 'phrase' }
+          : { ...executionBase, skillId: 'vocabulary' }
     const assistantMessageId = randomUUID()
     this.registerExecution(input.requestId, {
       controller: new AbortController(),
@@ -309,7 +313,10 @@ export class ConversationModule {
       }
       const active = this.activeRequests.get(input.requestId)
       if (!active) throw new Error('Skill retry is not registered')
-      if (skillExecution.batch) {
+      if (
+        skillExecution.batch &&
+        (skillExecution.skillId !== 'synonym' || skillExecution.batch.finalized === true)
+      ) {
         void this.retrySkillReply(
           generation,
           skillExecution,
@@ -555,6 +562,7 @@ export class ConversationModule {
         executionId: skillExecution.id,
         arguments: skillExecution.arguments,
         explanationLanguage: skillExecution.explanationLanguage,
+        previousReport: skillExecution.batch,
         signal: execution.controller.signal,
         onPhase: async (phase) => {
           await this.skillRepository!.setExecutionPhase(skillExecution.id, phase)
@@ -685,6 +693,16 @@ export class ConversationModule {
 
   // Core 只返回安全错误码，不负责界面翻译；内部原因留在产生处。
   private toSafeError(error: unknown): GenerationEventError {
+    if (error instanceof SynonymError) {
+      if (error.code === 'STORAGE_FAILED') return { code: 'PERSISTENCE_ERROR' }
+      if (
+        error.code === 'TOOL_CALL_NOT_SUPPORTED' ||
+        error.code === 'MODEL_NOT_CONFIGURED' ||
+        error.code === 'CREDENTIAL_DECRYPT_FAILED'
+      )
+        return { code: error.code }
+      return { code: 'MODEL_ERROR' }
+    }
     if (error instanceof ConversationPersistenceError) {
       return { code: 'PERSISTENCE_ERROR' }
     }

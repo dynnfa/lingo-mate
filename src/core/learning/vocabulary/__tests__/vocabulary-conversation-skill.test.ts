@@ -34,6 +34,7 @@ describe('VocabularyConversationSkill', () => {
 
     expect(result.outcome).toBe('completed')
     if (result.outcome !== 'completed') throw new Error('expected a completed report')
+    if (!('counts' in result.report)) throw new Error('Unexpected synonym report')
     expect(result.report.counts).toEqual({
       total: 4,
       saved: 2,

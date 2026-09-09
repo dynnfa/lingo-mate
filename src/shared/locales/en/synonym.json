@@ -1,0 +1,22 @@
+{
+  "summary": "Synonym results:",
+  "saved": "{{word}}: added; {{meaning}}; distinction: {{distinction}}",
+  "existing": "{{word}}: already saved, skipped",
+  "duplicate": "{{word}}: repeated input, no separate entry",
+  "unrecognized": "{{word}}: unrecognized English word",
+  "cancelled": "{{word}}: cancelled, not processed",
+  "failed": "{{word}}: {{error}}",
+  "errors": {
+    "INVALID_INPUT": "Invalid input",
+    "MODEL_NOT_CONFIGURED": "Configure a model first",
+    "CREDENTIAL_DECRYPT_FAILED": "Could not unlock model credentials",
+    "MODEL_ERROR": "Model request failed",
+    "INVALID_ANALYSIS": "Invalid tool response",
+    "TOOL_CALL_NOT_SUPPORTED": "Model does not support tools",
+    "TIMEOUT": "Timed out",
+    "CANCELLED": "Cancelled",
+    "STORAGE_FAILED": "Could not save entry",
+    "SCAN_LIMIT": "Candidate scan limit reached",
+    "ROUND_LIMIT": "Tool round limit reached"
+  }
+}
