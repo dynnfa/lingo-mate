@@ -72,5 +72,11 @@
     "invalidInput": "The phrase request is invalid.",
     "untrustedSource": "Recorded phrases are only available from the application window.",
     "unknown": "Something went wrong. Please try again later."
+  },
+  "synonym": {
+    "storageFailed": "Couldn't access your saved synonyms. Please try again later.",
+    "invalidInput": "The synonym request is invalid.",
+    "untrustedSource": "Recorded synonyms are only available from the application window.",
+    "unknown": "Something went wrong. Please try again later."
   }
 }

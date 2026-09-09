@@ -141,7 +141,8 @@
     "menuLabel": "Recorded vocabulary menu",
     "sections": {
       "vocabulary": "Vocabulary",
-      "phrase": "Phrases"
+      "phrase": "Phrases",
+      "synonym": "Synonyms"
     },
     "vocabulary": {
       "detailTitle": "Vocabulary",
@@ -194,6 +195,22 @@
       "deleteDialogConfirm": "Delete",
       "deleting": "Deleting…",
       "deleteSucceeded": "Deleted \"{{phrase}}\""
+    },
+    "synonym": {
+      "detailTitle": "Synonyms",
+      "tableCaption": "Saved synonym groups",
+      "columnGroupMeaning": "Group meaning",
+      "columnWord": "Word",
+      "columnMeaning": "Word meaning",
+      "columnDistinction": "Distinction",
+      "loading": "Loading synonyms…",
+      "loadErrorTitle": "Couldn't load synonyms",
+      "retry": "Retry",
+      "emptyTitle": "No saved synonyms yet",
+      "emptyBody": "Save synonyms with the /synonym command in a conversation, and they'll appear here.",
+      "loadMore": "Load more",
+      "loadingMore": "Loading more…",
+      "loadMoreFailed": "Couldn't load more"
     }
   },
   "practice": {

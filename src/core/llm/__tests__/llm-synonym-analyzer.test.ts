@@ -51,6 +51,7 @@ function setup(
   const repository: SynonymRepository = {
     findExisting: vi.fn(),
     findGroups: () => ({ groups: [], nextCursor: null }),
+    listGroups: vi.fn(),
     saveWord: vi.fn(),
     saveReport: vi.fn()
   }

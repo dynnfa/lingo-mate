@@ -141,7 +141,8 @@
     "menuLabel": "已记录词汇菜单",
     "sections": {
       "vocabulary": "词汇",
-      "phrase": "短语"
+      "phrase": "短语",
+      "synonym": "近义词"
     },
     "vocabulary": {
       "detailTitle": "词汇",
@@ -194,6 +195,22 @@
       "deleteDialogConfirm": "删除",
       "deleting": "删除中…",
       "deleteSucceeded": "已删除「{{phrase}}」"
+    },
+    "synonym": {
+      "detailTitle": "近义词",
+      "tableCaption": "已收藏近义词分组列表",
+      "columnGroupMeaning": "分组释义",
+      "columnWord": "单词",
+      "columnMeaning": "单词释义",
+      "columnDistinction": "用法区别",
+      "loading": "正在加载近义词…",
+      "loadErrorTitle": "近义词读取失败",
+      "retry": "重试",
+      "emptyTitle": "还没有收藏近义词",
+      "emptyBody": "在对话中使用 /synonym 命令收藏近义词后，会在这里展示。",
+      "loadMore": "加载更多",
+      "loadingMore": "正在加载更多…",
+      "loadMoreFailed": "加载更多失败"
     }
   },
   "practice": {

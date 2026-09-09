@@ -84,3 +84,61 @@ export function synonymOutcome(items: SynonymItemResult[]): SynonymBatch['outcom
   }).length
   return resolved === items.length ? 'completed' : resolved ? 'partial' : 'failed'
 }
+
+// ── 已记录页近义词管理（分组列表）IPC 协议 ──
+// 与收藏分析共用本文件的词条 schema，但管理入口只允许预定义的读取
+// channel，不暴露任意 SQL；错误结果只携带安全错误码。
+export const SYNONYM_CHANNELS = {
+  list: 'synonym:list'
+} as const
+
+export const SYNONYM_MANAGEMENT_ERROR_CODES = [
+  'UNTRUSTED_SOURCE',
+  'INVALID_INPUT',
+  'STORAGE_FAILED',
+  'UNKNOWN_ERROR'
+] as const
+export type SynonymManagementErrorCode = (typeof SYNONYM_MANAGEMENT_ERROR_CODES)[number]
+export const synonymManagementErrorSchema = z.strictObject({
+  code: z.enum(SYNONYM_MANAGEMENT_ERROR_CODES)
+})
+export type SynonymManagementError = z.infer<typeof synonymManagementErrorSchema>
+
+// 列表输入：游标为上一页最后一组的 UUID，分页以完整 group 为单位。
+export const synonymListInputSchema = z.strictObject({ cursor: z.uuid().optional() })
+export type SynonymListInput = z.input<typeof synonymListInputSchema>
+
+// 分组必须携带至少一条词条，且每条词条的 groupid 与所属组一致；
+// 释义相同但 ID 不同的组是两个组，由 id 而非 meaning 区分。
+export const synonymGroupSchema = z
+  .strictObject({
+    id: z.uuid(),
+    meaning: synonymTextSchema,
+    words: z.array(synonymEntrySchema).min(1)
+  })
+  .superRefine((group, ctx) => {
+    if (group.words.some((entry) => entry.groupid !== group.id))
+      ctx.addIssue({ code: 'custom', message: 'Synonym entry belongs to another group' })
+  })
+export type SynonymGroup = z.infer<typeof synonymGroupSchema>
+
+// 分页结果：groups 按组 ID 升序返回完整组；nextCursor 为 null 表示没有后续页。
+export const synonymGroupPageSchema = z.strictObject({
+  groups: z.array(synonymGroupSchema),
+  nextCursor: z.uuid().nullable()
+})
+export type SynonymGroupPage = z.infer<typeof synonymGroupPageSchema>
+
+export const synonymListResultSchema = z.discriminatedUnion('status', [
+  z.strictObject({
+    status: z.literal('ok'),
+    groups: z.array(synonymGroupSchema),
+    nextCursor: z.uuid().nullable()
+  }),
+  z.strictObject({ status: z.literal('error'), error: synonymManagementErrorSchema })
+])
+export type SynonymListResult = z.infer<typeof synonymListResultSchema>
+
+export interface SynonymApi {
+  list(input: SynonymListInput): Promise<SynonymListResult>
+}

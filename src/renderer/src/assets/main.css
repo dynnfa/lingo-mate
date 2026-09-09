@@ -175,9 +175,10 @@ body {
   border: 0;
 }
 
-/* ── 已记录页词汇/短语详情：标题、横向滚动表格、底部加载区与删除确认 ── */
+/* ── 已记录页词汇/短语/近义词详情：标题、横向滚动表格、底部加载区与删除确认 ── */
 .vocabulary-detail,
-.phrase-detail {
+.phrase-detail,
+.synonym-detail {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -187,13 +188,15 @@ body {
 }
 
 .vocabulary-detail-header h2,
-.phrase-detail-header h2 {
+.phrase-detail-header h2,
+.synonym-detail-header h2 {
   font-size: 16px;
   font-weight: 600;
 }
 
 .vocabulary-state,
-.phrase-state {
+.phrase-state,
+.synonym-state {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -204,19 +207,22 @@ body {
 }
 
 .vocabulary-state[role='alert'],
-.phrase-state[role='alert'] {
+.phrase-state[role='alert'],
+.synonym-state[role='alert'] {
   color: var(--color-text-secondary);
 }
 
 .vocabulary-state-title,
-.phrase-state-title {
+.phrase-state-title,
+.synonym-state-title {
   color: var(--color-text);
   font-size: 14px;
   font-weight: 600;
 }
 
 .vocabulary-state button,
-.phrase-state button {
+.phrase-state button,
+.synonym-state button {
   padding: 6px 14px;
   color: var(--color-text-secondary);
   background: var(--color-surface-secondary);
@@ -224,7 +230,8 @@ body {
 }
 
 .vocabulary-table-scroll,
-.phrase-table-scroll {
+.phrase-table-scroll,
+.synonym-table-scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
@@ -234,7 +241,8 @@ body {
 }
 
 .vocabulary-table,
-.phrase-table {
+.phrase-table,
+.synonym-table {
   width: 100%;
   min-width: 860px;
   border-collapse: separate;
@@ -246,10 +254,16 @@ body {
   min-width: 640px;
 }
 
+.synonym-table {
+  min-width: 720px;
+}
+
 .vocabulary-table th,
 .vocabulary-table td,
 .phrase-table th,
-.phrase-table td {
+.phrase-table td,
+.synonym-table th,
+.synonym-table td {
   padding: 10px 12px;
   border-bottom: 1px solid var(--color-border-header);
   text-align: left;
@@ -258,7 +272,8 @@ body {
 }
 
 .vocabulary-table thead th,
-.phrase-table thead th {
+.phrase-table thead th,
+.synonym-table thead th {
   position: sticky;
   top: 0;
   z-index: 1;
@@ -275,16 +290,41 @@ body {
 }
 
 .vocabulary-cell-term,
-.phrase-cell-phrase {
+.phrase-cell-phrase,
+.synonym-cell-word {
   overflow-wrap: anywhere;
   font-weight: 600;
 }
 
 .vocabulary-cell-prewrap,
-.phrase-cell-prewrap {
+.phrase-cell-prewrap,
+.synonym-cell-prewrap {
   max-width: 320px;
   white-space: pre-line;
   overflow-wrap: anywhere;
+}
+
+/* ── 近义词分组表格：跨行合并的组释义单元格与组间分隔 ──
+   组释义单元格保持原生表格布局（不使用 flex），通过 text-align 与
+   vertical-align 在合并区域内水平、垂直居中，居中位置随整组实际高度变化；
+   选择器带 .synonym-table 前缀以覆盖通用单元格的 left/top 对齐。 */
+.synonym-table .synonym-group-meaning {
+  max-width: 240px;
+  text-align: center;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+/* 组与组之间用更明显的边框区分；最后一组不带底边框。 */
+.synonym-table tbody:not(:last-of-type) tr:last-child td,
+.synonym-table tbody:not(:last-of-type) .synonym-group-meaning {
+  border-bottom: 2px solid var(--color-border-divider);
+}
+
+.synonym-table tbody:last-of-type tr:last-child td,
+.synonym-table tbody:last-of-type .synonym-group-meaning {
+  border-bottom: none;
 }
 
 .vocabulary-cell-date {
@@ -333,7 +373,8 @@ body {
 }
 
 .vocabulary-footer,
-.phrase-footer {
+.phrase-footer,
+.synonym-footer {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -342,13 +383,15 @@ body {
 }
 
 .vocabulary-footer-status,
-.phrase-footer-status {
+.phrase-footer-status,
+.synonym-footer-status {
   color: var(--color-text-status);
   font-size: 12px;
 }
 
 .vocabulary-load-more-button,
-.phrase-load-more-button {
+.phrase-load-more-button,
+.synonym-load-more-button {
   padding: 6px 16px;
   color: var(--color-text-secondary);
   background: var(--color-surface-secondary);
@@ -356,12 +399,14 @@ body {
 }
 
 .vocabulary-load-more-button:hover,
-.phrase-load-more-button:hover {
+.phrase-load-more-button:hover,
+.synonym-load-more-button:hover {
   background: var(--color-surface-hover);
 }
 
 .vocabulary-more-error,
-.phrase-more-error {
+.phrase-more-error,
+.synonym-more-error {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -371,12 +416,14 @@ body {
 }
 
 .vocabulary-more-error .vocabulary-state-title,
-.phrase-more-error .phrase-state-title {
+.phrase-more-error .phrase-state-title,
+.synonym-more-error .synonym-state-title {
   font-size: 13px;
 }
 
 .vocabulary-more-error button,
-.phrase-more-error button {
+.phrase-more-error button,
+.synonym-more-error button {
   padding: 4px 12px;
   color: var(--color-text-secondary);
   background: var(--color-surface-secondary);

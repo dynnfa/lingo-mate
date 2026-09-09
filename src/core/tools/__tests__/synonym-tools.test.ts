@@ -9,6 +9,7 @@ function setup(
   const repository: SynonymRepository = {
     findExisting: vi.fn(),
     findGroups: vi.fn(() => pages.shift()!),
+    listGroups: vi.fn(),
     saveWord: vi.fn(),
     saveReport: vi.fn()
   }
