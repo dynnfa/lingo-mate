@@ -143,6 +143,7 @@ function modelsApiStub(
       nextId += 1
       const created = config({
         id: `created-${nextId}`,
+        protocol: input.protocol,
         baseUrl: input.baseUrl,
         modelId: input.modelId,
         hasApiKey: input.credential.action === 'replace',
@@ -166,6 +167,7 @@ function modelsApiStub(
           item.id === input.configId
             ? {
                 ...item,
+                protocol: input.protocol,
                 baseUrl: input.baseUrl,
                 modelId: input.modelId,
                 hasApiKey:
@@ -383,6 +385,22 @@ describe('SettingsPage', () => {
       expect(within(row).getByRole('button', { name: '测试连通' })).toBeInTheDocument()
       expect(within(row).queryByText('OpenAI 兼容')).not.toBeInTheDocument()
     }
+  })
+
+  it('saves and reloads the Gemini protocol in the model form', async () => {
+    const { api, calls } = modelsApiStub()
+    installApi(api)
+    renderPage()
+    await openModels()
+    fireEvent.click(screen.getByRole('button', { name: '新增模型' }))
+    fireEvent.change(screen.getByRole('combobox', { name: '接口类型' }), {
+      target: { value: 'gemini' }
+    })
+    fillForm('https://example.com/gemini/v1beta', 'gemini-test')
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    await waitFor(() => expect(calls.create[0]).toMatchObject({ protocol: 'gemini' }))
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    expect(screen.getByRole('combobox', { name: '接口类型' })).toHaveValue('gemini')
   })
 
   it('creates a config from an empty form and auto-selects the first one as current', async () => {

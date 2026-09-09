@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   normalizeModelsBaseUrl,
   type CredentialUpdate,
+  type ModelProtocol,
   type ModelConfigId,
   type ModelConfigSummary,
   type ModelsConfigList,
@@ -11,6 +12,7 @@ import {
 } from '../../../shared/models'
 
 export interface ModelsDraft {
+  protocol: ModelProtocol
   baseUrl: string
   modelId: string
   // 密码框中本次输入的新密钥；只作为临时草稿单向提交，成功后清空，永不回填。
@@ -49,17 +51,29 @@ export type DiscardIntent =
 
 export type ModelsFieldIssues = Partial<Record<ModelsErrorField, ModelsErrorCode>>
 
-export type ModelsDraftField = 'baseUrl' | 'modelId' | 'apiKey' | 'removeStoredKey'
+export type ModelsDraftField = 'protocol' | 'baseUrl' | 'modelId' | 'apiKey' | 'removeStoredKey'
 
 // 活动测试标识：行测试与草稿测试共享每窗口一个限额；回调按此标识归属结果，
 // 取消或开启新测试后迟到回调不再覆盖状态。
 export type ActiveTest =
   { kind: 'row'; configId: ModelConfigId; requestId: string } | { kind: 'draft'; requestId: string }
 
-const EMPTY_DRAFT: ModelsDraft = { baseUrl: '', modelId: '', apiKey: '', removeStoredKey: false }
+const EMPTY_DRAFT: ModelsDraft = {
+  protocol: 'openai-compatible',
+  baseUrl: '',
+  modelId: '',
+  apiKey: '',
+  removeStoredKey: false
+}
 
 function draftFromSummary(summary: ModelConfigSummary): ModelsDraft {
-  return { baseUrl: summary.baseUrl, modelId: summary.modelId, apiKey: '', removeStoredKey: false }
+  return {
+    protocol: summary.protocol,
+    baseUrl: summary.baseUrl,
+    modelId: summary.modelId,
+    apiKey: '',
+    removeStoredKey: false
+  }
 }
 
 // 凭据意图由明确操作表达：勾选移除 → remove；输入了新密钥 → replace；否则 keep。
@@ -225,6 +239,7 @@ export function useModelsSettings(): ModelsSettingsState {
     if (editSession.mode === 'closed') return false
     if (editSession.mode === 'create') {
       return (
+        draft.protocol !== EMPTY_DRAFT.protocol ||
         draft.baseUrl.trim() !== '' ||
         draft.modelId.trim() !== '' ||
         draft.apiKey !== '' ||
@@ -234,6 +249,7 @@ export function useModelsSettings(): ModelsSettingsState {
     const target = editTarget
     if (target === undefined) return draft !== EMPTY_DRAFT
     return (
+      draft.protocol !== target.protocol ||
       draft.baseUrl !== target.baseUrl ||
       draft.modelId !== target.modelId ||
       draft.apiKey !== '' ||
@@ -337,7 +353,7 @@ export function useModelsSettings(): ModelsSettingsState {
       return
     }
     const payload = {
-      protocol: 'openai-compatible' as const,
+      protocol: draft.protocol,
       baseUrl: submitBaseUrl(draft),
       modelId: draft.modelId.trim(),
       credential: credentialIntentFromDraft(draft, editTarget)
@@ -506,7 +522,7 @@ export function useModelsSettings(): ModelsSettingsState {
     window.api.models
       .testDraftConnection({
         requestId,
-        protocol: 'openai-compatible',
+        protocol: draft.protocol,
         baseUrl: submitBaseUrl(draft),
         modelId: draft.modelId.trim(),
         credential: credentialIntentFromDraft(draft, editTarget),

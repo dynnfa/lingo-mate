@@ -11,8 +11,8 @@ export const MODELS_CHANNELS = {
   cancelTest: 'models:cancelTest'
 } as const
 
-// 首版只支持 OpenAI 兼容协议；展示与校验共用同一来源，不提供尚未实现的选项。
-export const MODEL_PROTOCOLS = ['openai-compatible'] as const
+// 展示与校验共用已实现的协议列表。
+export const MODEL_PROTOCOLS = ['openai-compatible', 'gemini'] as const
 export type ModelProtocol = (typeof MODEL_PROTOCOLS)[number]
 
 export const modelProtocolSchema = z.enum(MODEL_PROTOCOLS)

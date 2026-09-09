@@ -90,6 +90,31 @@ describe('synonym multi-turn adapter', () => {
   it.each([
     response('create_synonym_group_and_add_word', create),
     response('unknown', query),
+    {
+      choices: [
+        {
+          finish_reason: 'tool_calls',
+          message: {
+            content: null,
+            tool_calls: [
+              {
+                id: 'query',
+                type: 'function',
+                function: { name: 'find_synonym_groups', arguments: JSON.stringify(query) }
+              },
+              {
+                id: 'write',
+                type: 'function',
+                function: {
+                  name: 'create_synonym_group_and_add_word',
+                  arguments: JSON.stringify(create)
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
     response('find_synonym_groups', { ...query, word: 'other' }),
     { choices: [{ finish_reason: 'stop', message: { content: 'Saved successfully' } }] },
     {
