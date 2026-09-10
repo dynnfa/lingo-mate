@@ -2,8 +2,7 @@
 // 不包含 Prompt 或业务执行逻辑；技能选择（或完整命令输入）会转换为
 // 类型化会话 skill 提交，不作为普通聊天发送。
 
-export type ConversationActionId =
-  'translate' | 'polish' | 'practice' | 'concept' | 'vocabulary' | 'phrase' | 'synonym'
+export type ConversationActionId = 'concept' | 'vocabulary' | 'phrase' | 'synonym'
 export type SelectedConversationSkillId = 'vocabulary' | 'phrase' | 'synonym'
 
 export const VOCABULARY_COMMAND_PREFIX = '/vocabulary'
@@ -69,12 +68,6 @@ export type ConversationActionTextKey =
   | 'conversation:actionPicker.actions.synonym.description'
   | 'conversation:actionPicker.actions.phrase.name'
   | 'conversation:actionPicker.actions.phrase.description'
-  | 'conversation:actionPicker.actions.translate.name'
-  | 'conversation:actionPicker.actions.translate.description'
-  | 'conversation:actionPicker.actions.polish.name'
-  | 'conversation:actionPicker.actions.polish.description'
-  | 'conversation:actionPicker.actions.practice.name'
-  | 'conversation:actionPicker.actions.practice.description'
   | 'conversation:actionPicker.actions.concept.name'
   | 'conversation:actionPicker.actions.concept.description'
 
@@ -87,26 +80,9 @@ export interface ConversationActionMeta {
   readonly descriptionKey: ConversationActionTextKey
 }
 
-// 首版行动目录：数组顺序即展示顺序，过滤结果沿用该顺序。
+// 行动目录仅收录有真实引擎实现的命令（concept 专用提示词，vocabulary/phrase/synonym
+// 类型化技能）；数组顺序即展示顺序，过滤结果沿用该顺序。
 export const CONVERSATION_ACTIONS: readonly ConversationActionMeta[] = [
-  {
-    id: 'translate',
-    command: 'translate',
-    nameKey: 'conversation:actionPicker.actions.translate.name',
-    descriptionKey: 'conversation:actionPicker.actions.translate.description'
-  },
-  {
-    id: 'polish',
-    command: 'polish',
-    nameKey: 'conversation:actionPicker.actions.polish.name',
-    descriptionKey: 'conversation:actionPicker.actions.polish.description'
-  },
-  {
-    id: 'practice',
-    command: 'practice',
-    nameKey: 'conversation:actionPicker.actions.practice.name',
-    descriptionKey: 'conversation:actionPicker.actions.practice.description'
-  },
   {
     id: 'concept',
     command: 'concept',

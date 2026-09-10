@@ -21,7 +21,7 @@ test('opens the slash action picker above the composer and selects an action', a
 
     const picker = window.locator('.action-picker')
     await expect(picker).toBeVisible()
-    await expect(window.locator('.action-picker-option')).toHaveCount(6)
+    await expect(window.locator('.action-picker-option')).toHaveCount(4)
 
     // 弹层锚定输入行正上方并覆盖消息区域，不挤压消息布局
     const pickerBox = await picker.boundingBox()
@@ -36,11 +36,13 @@ test('opens the slash action picker above the composer and selects an action', a
       expect(Math.abs(pickerBox.width - rowBox.width)).toBeLessThan(3)
     }
 
-    // 键盘：下移高亮并 Enter 选择，焦点留在输入框
+    // 键盘：下移再上移高亮，Enter 选择，焦点留在输入框
     await input.press('ArrowDown')
-    await expect(window.locator('.action-picker-option.highlighted')).toHaveText(/润色/)
+    await expect(window.locator('.action-picker-option.highlighted')).toHaveText(/收藏词汇/)
+    await input.press('ArrowUp')
+    await expect(window.locator('.action-picker-option.highlighted')).toHaveText(/概念讲解/)
     await input.press('Enter')
-    await expect(input).toHaveValue('/polish ')
+    await expect(input).toHaveValue('/concept ')
     await expect(picker).toBeHidden()
     expect(await input.evaluate((el) => document.activeElement === el)).toBe(true)
 
@@ -48,14 +50,14 @@ test('opens the slash action picker above the composer and selects an action', a
     await input.type('这句话')
     await expect(picker).toBeHidden()
     await input.press('Enter')
-    await expect(window.locator('.message.user')).toContainText('/polish 这句话')
+    await expect(window.locator('.message.user')).toContainText('/concept 这句话')
 
     // 发送清空草稿后，新一轮 `/` 输入不应继承上一次选择的关闭抑制。
     await expect(input).toBeEnabled()
     await input.click()
     await input.fill('/')
     await expect(picker).toBeVisible()
-    await expect(window.locator('.action-picker-option.highlighted')).toHaveText(/翻译/)
+    await expect(window.locator('.action-picker-option.highlighted')).toHaveText(/概念讲解/)
 
     await app.close()
   })

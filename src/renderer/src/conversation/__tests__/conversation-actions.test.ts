@@ -11,12 +11,10 @@ import {
 
 // 模拟界面语言为 zh-CN 时本地化名称的解析；组件内由 i18n t 提供。
 const zhNames: Record<string, string> = {
-  translate: '翻译',
-  polish: '润色',
-  practice: '口语练习',
   concept: '概念讲解',
   vocabulary: '收藏词汇',
-  phrase: '收录短语'
+  phrase: '收录短语',
+  synonym: '近义词分组'
 }
 
 const resolveZhName = (action: ConversationActionMeta): string => zhNames[action.id] ?? ''
@@ -40,7 +38,7 @@ describe('parseSlashTrigger', () => {
   it('treats a leading half-width slash as the trigger and returns the query', () => {
     expect(parseSlashTrigger('/')).toBe('')
     expect(parseSlashTrigger('/tr')).toBe('tr')
-    expect(parseSlashTrigger('/translate 你好')).toBe('translate 你好')
+    expect(parseSlashTrigger('/note 你好')).toBe('note 你好')
   })
 
   it('does not trigger for non-leading slash, leading space or full-width slash', () => {
@@ -107,9 +105,6 @@ describe('skill command boundary', () => {
 describe('CONVERSATION_ACTIONS catalog', () => {
   it('lists stable unique ids and commands in display order', () => {
     expect(CONVERSATION_ACTIONS.map((action) => action.id)).toEqual([
-      'translate',
-      'polish',
-      'practice',
       'concept',
       'vocabulary',
       'phrase',
@@ -136,45 +131,45 @@ describe('filterConversationActions', () => {
   })
 
   it('matches command names case-insensitively', () => {
-    expect(filterConversationActions(CONVERSATION_ACTIONS, 'TRANSLATE', resolveZhName)).toEqual([
+    expect(filterConversationActions(CONVERSATION_ACTIONS, 'CONCEPT', resolveZhName)).toEqual([
       CONVERSATION_ACTIONS[0]
     ])
-    expect(filterConversationActions(CONVERSATION_ACTIONS, 'Pra', resolveZhName)).toEqual([
+    expect(filterConversationActions(CONVERSATION_ACTIONS, 'PHR', resolveZhName)).toEqual([
       CONVERSATION_ACTIONS[2]
     ])
   })
 
   it('matches localized names and keeps catalog order for multiple hits', () => {
-    expect(filterConversationActions(CONVERSATION_ACTIONS, '润', resolveZhName)).toEqual([
-      CONVERSATION_ACTIONS[1]
+    expect(filterConversationActions(CONVERSATION_ACTIONS, '概', resolveZhName)).toEqual([
+      CONVERSATION_ACTIONS[0]
     ])
-    expect(filterConversationActions(CONVERSATION_ACTIONS, '概念', resolveZhName)).toEqual([
+    expect(filterConversationActions(CONVERSATION_ACTIONS, '近义', resolveZhName)).toEqual([
       CONVERSATION_ACTIONS[3]
     ])
     // “收” 命中收藏词汇与收录短语的本地化名称，顺序沿用目录
     expect(filterConversationActions(CONVERSATION_ACTIONS, '收', resolveZhName)).toEqual([
-      CONVERSATION_ACTIONS[4],
-      CONVERSATION_ACTIONS[5]
+      CONVERSATION_ACTIONS[1],
+      CONVERSATION_ACTIONS[2]
     ])
-    // “t” 命中 translate、practice 与 concept 三个命令名，顺序沿用目录
-    expect(filterConversationActions(CONVERSATION_ACTIONS, 't', resolveZhName)).toEqual([
+    // “o” 命中 concept、vocabulary 与 synonym 三个命令名，顺序沿用目录
+    expect(filterConversationActions(CONVERSATION_ACTIONS, 'o', resolveZhName)).toEqual([
       CONVERSATION_ACTIONS[0],
-      CONVERSATION_ACTIONS[2],
+      CONVERSATION_ACTIONS[1],
       CONVERSATION_ACTIONS[3]
     ])
   })
 
   it('returns an empty list for queries that match nothing, including spaced queries', () => {
     expect(filterConversationActions(CONVERSATION_ACTIONS, 'xyz', resolveZhName)).toEqual([])
-    expect(filterConversationActions(CONVERSATION_ACTIONS, 'translate me', resolveZhName)).toEqual(
-      []
-    )
+    // 已移除的命令不再命中
+    expect(filterConversationActions(CONVERSATION_ACTIONS, 'translate', resolveZhName)).toEqual([])
+    expect(filterConversationActions(CONVERSATION_ACTIONS, 'concept me', resolveZhName)).toEqual([])
     expect(filterConversationActions(CONVERSATION_ACTIONS, ' ', resolveZhName)).toEqual([])
   })
 
   it('does not mutate the input catalog', () => {
     const before = [...CONVERSATION_ACTIONS]
-    filterConversationActions(CONVERSATION_ACTIONS, 'polish', resolveZhName)
+    filterConversationActions(CONVERSATION_ACTIONS, 'phrase', resolveZhName)
     expect([...CONVERSATION_ACTIONS]).toEqual(before)
   })
 })
