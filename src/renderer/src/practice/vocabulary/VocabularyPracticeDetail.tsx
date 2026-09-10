@@ -171,53 +171,59 @@ export function VocabularyPracticeDetail(): React.JSX.Element {
             </p>
           ) : null}
 
-          <ul className="vocabulary-practice-rows">
-            {state.entries.map((entry) => {
-              const reason = state.marks[entry.entryId]
-              const empty = submitBlocked && !(state.answers[entry.entryId] ?? '').trim()
-              return (
-                <li
-                  className={
-                    reason
-                      ? 'vocabulary-practice-row vocabulary-practice-row-marked'
-                      : 'vocabulary-practice-row'
-                  }
-                  key={entry.entryId}
-                >
-                  <span className="vocabulary-practice-term">{entry.term}</span>
-                  <div className="vocabulary-practice-answer">
-                    <textarea
-                      aria-invalid={reason || empty ? 'true' : undefined}
-                      aria-label={t('common:practice.vocabulary.answerLabel', {
-                        term: entry.term
-                      })}
-                      className={
-                        reason
-                          ? 'vocabulary-practice-input vocabulary-practice-input-marked'
-                          : 'vocabulary-practice-input'
-                      }
-                      id={answerId(entry.entryId)}
-                      maxLength={VOCABULARY_PRACTICE_MEANING_MAX_LENGTH}
-                      onChange={(event) => setAnswer(entry.entryId, event.target.value)}
-                      readOnly={locked}
-                      rows={2}
-                      value={state.answers[entry.entryId] ?? ''}
-                    />
-                    {reason ? (
-                      <p className="vocabulary-practice-mark-reason" role="alert">
-                        <span aria-hidden="true">⚠</span>
-                        <span className="sr-only">
-                          {t('common:practice.vocabulary.markedIconLabel')}
-                          {': '}
-                        </span>
-                        {reason}
-                      </p>
-                    ) : null}
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
+          <div className="vocabulary-practice-list">
+            <div className="vocabulary-practice-column-headers">
+              <span>{t('common:practice.vocabulary.termColumnLabel')}</span>
+              <span>{t('common:practice.vocabulary.meaningColumnLabel')}</span>
+            </div>
+            <ul className="vocabulary-practice-rows">
+              {state.entries.map((entry) => {
+                const reason = state.marks[entry.entryId]
+                const empty = submitBlocked && !(state.answers[entry.entryId] ?? '').trim()
+                return (
+                  <li
+                    className={
+                      reason
+                        ? 'vocabulary-practice-row vocabulary-practice-row-marked'
+                        : 'vocabulary-practice-row'
+                    }
+                    key={entry.entryId}
+                  >
+                    <span className="vocabulary-practice-term">{entry.term}</span>
+                    <div className="vocabulary-practice-answer">
+                      <input
+                        aria-invalid={reason || empty ? 'true' : undefined}
+                        aria-label={t('common:practice.vocabulary.answerLabel', {
+                          term: entry.term
+                        })}
+                        className={
+                          reason
+                            ? 'vocabulary-practice-input vocabulary-practice-input-marked'
+                            : 'vocabulary-practice-input'
+                        }
+                        id={answerId(entry.entryId)}
+                        maxLength={VOCABULARY_PRACTICE_MEANING_MAX_LENGTH}
+                        onChange={(event) => setAnswer(entry.entryId, event.target.value)}
+                        readOnly={locked}
+                        type="text"
+                        value={state.answers[entry.entryId] ?? ''}
+                      />
+                      {reason ? (
+                        <p className="vocabulary-practice-mark-reason" role="alert">
+                          <span aria-hidden="true">⚠</span>
+                          <span className="sr-only">
+                            {t('common:practice.vocabulary.markedIconLabel')}
+                            {': '}
+                          </span>
+                          {reason}
+                        </p>
+                      ) : null}
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
 
           {submitBlocked ? (
             <div className="vocabulary-practice-error" role="alert">

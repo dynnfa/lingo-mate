@@ -154,6 +154,11 @@ describe('VocabularyPracticeDetail', () => {
     expect(screen.getByText('apple')).toBeInTheDocument()
     expect(screen.getByText('banana')).toBeInTheDocument()
 
+    // 顶部列标题声明左右两列内容
+    const headers = screen.getByText('单词').closest('.vocabulary-practice-column-headers')
+    expect(headers).not.toBeNull()
+    expect(within(headers as HTMLElement).getByText('释义')).toBeInTheDocument()
+
     // 空答案提交被拦截
     fireEvent.click(screen.getByRole('button', { name: '提交审查' }))
     expect(screen.getByText('还有未填写的释义')).toBeInTheDocument()
@@ -190,7 +195,7 @@ describe('VocabularyPracticeDetail', () => {
     confirmCount()
     await waitFor(() => screen.getByText('banana'))
 
-    const answers = screen.getAllByRole('textbox') as HTMLTextAreaElement[]
+    const answers = screen.getAllByRole('textbox') as HTMLInputElement[]
     fireEvent.change(answers[0], { target: { value: '一种水果' } })
     fireEvent.change(answers[1], { target: { value: 'wrong' } })
     expect(answers[1].id).toContain('practice-meaning-')
@@ -226,7 +231,7 @@ describe('VocabularyPracticeDetail', () => {
     confirmCount()
     await waitFor(() => screen.getByText('apple'))
 
-    const input = screen.getAllByRole('textbox')[0] as HTMLTextAreaElement
+    const input = screen.getAllByRole('textbox')[0] as HTMLInputElement
     fireEvent.change(input, { target: { value: '一种水果' } })
     stub.respondReview({
       status: 'ok',
@@ -261,7 +266,7 @@ describe('VocabularyPracticeDetail', () => {
     confirmCount()
     await waitFor(() => screen.getByText('apple'))
 
-    const input = screen.getAllByRole('textbox')[0] as HTMLTextAreaElement
+    const input = screen.getAllByRole('textbox')[0] as HTMLInputElement
     fireEvent.change(input, { target: { value: '一种水果' } })
     stub.respondReview({ status: 'error', error: { code: 'MODEL_ERROR' } })
     fireEvent.click(screen.getByRole('button', { name: '提交审查' }))
@@ -286,7 +291,7 @@ describe('VocabularyPracticeDetail', () => {
     confirmCount()
     await waitFor(() => screen.getByText('apple'))
 
-    const input = screen.getAllByRole('textbox')[0] as HTMLTextAreaElement
+    const input = screen.getAllByRole('textbox')[0] as HTMLInputElement
     fireEvent.change(input, { target: { value: '一种水果' } })
     fireEvent.click(screen.getByRole('button', { name: '提交审查' }))
     expect(await screen.findByText('正在审查答案…')).toBeInTheDocument()
@@ -323,7 +328,7 @@ describe('VocabularyPracticeDetail', () => {
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '开始新一轮' }))
     await waitFor(() => screen.getByText('cherry'))
     expect(screen.queryByText('apple')).not.toBeInTheDocument()
-    expect((screen.getAllByRole('textbox')[0] as HTMLTextAreaElement).value).toBe('')
+    expect((screen.getAllByRole('textbox')[0] as HTMLInputElement).value).toBe('')
     expect(stub.calls.starts).toEqual([10, 10])
   })
 
