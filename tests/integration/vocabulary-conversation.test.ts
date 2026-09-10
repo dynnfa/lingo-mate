@@ -27,7 +27,7 @@ afterEach(() => {
 
 const unusedConversationModel: LanguageModel = {
   async *streamReply() {
-    yield 'unused'
+    yield { type: 'text' as const, delta: 'unused' }
   }
 }
 

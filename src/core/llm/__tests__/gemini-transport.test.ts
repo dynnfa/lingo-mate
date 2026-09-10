@@ -151,6 +151,48 @@ describe('Gemini transport through LlmClient', () => {
     expect(subject.finished[0].totalTokens).toBe(172)
   })
 
+  it('maps thought summary parts to reasoning_content and requests them when streaming', async () => {
+    const body =
+      `data: ${JSON.stringify({
+        candidates: [
+          { content: { parts: [{ text: '先想一下', thought: true, thoughtSignature: 'sig' }] } }
+        ]
+      })}\n\n` +
+      `data: ${JSON.stringify({
+        candidates: [{ content: { parts: [{ text: 'hello' }] } }]
+      })}\n\n` +
+      `data: ${JSON.stringify(reply([]))}\n\n`
+    const fetchMock = vi.fn(
+      async () => new Response(body, { headers: { 'content-type': 'text/event-stream' } })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const subject = client()
+    const chunks: LlmStreamChunk[] = []
+    for await (const chunk of subject.client.stream(params, context)) chunks.push(chunk)
+
+    // 流式请求显式开启思考摘要；签名与正文分片不混入思考。
+    const [, requestInit] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    const request = JSON.parse(String(requestInit.body)) as {
+      generationConfig: { includeThoughts?: boolean }
+    }
+    expect(request.generationConfig.includeThoughts).toBe(true)
+    expect(chunks[0].choices[0].delta).toMatchObject({ reasoning_content: '先想一下' })
+    expect(chunks[1].choices[0].delta).toMatchObject({ content: 'hello' })
+    expect((chunks[0].choices[0].delta as { content?: unknown }).content).toBe(null)
+    expect(chunks[2].choices[0].finish_reason).toBe('stop')
+  })
+
+  it('does not request thought summaries for non-streaming calls', async () => {
+    const fetchMock = vi.fn(async () => Response.json(reply()))
+    vi.stubGlobal('fetch', fetchMock)
+    await client().client.complete(params, context)
+    const [, requestInit] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    const request = JSON.parse(String(requestInit.body)) as {
+      generationConfig: { includeThoughts?: boolean }
+    }
+    expect(request.generationConfig.includeThoughts).toBeUndefined()
+  })
+
   it.each([401, 403, 404])('classifies HTTP %i errors', async (status) => {
     vi.stubGlobal(
       'fetch',

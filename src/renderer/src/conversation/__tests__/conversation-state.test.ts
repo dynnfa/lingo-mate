@@ -3,6 +3,7 @@ import type { ConversationEvent, ConversationMessage } from '../../../../shared/
 import {
   initialConversationState,
   isGenerating,
+  REASONING_PREVIEW_MAX_CODE_POINTS,
   reduceConversation,
   type ConversationState,
   type DisplayMessage
@@ -425,6 +426,215 @@ describe('conversation projection reducer', () => {
         ASSISTANT_MESSAGE_ID,
         otherGeneration.userMessage.messageId
       ])
+    })
+  })
+
+  describe('reasoning preview', () => {
+    function startedState(userContent = 'Hello'): ConversationState {
+      return reduceConversation(loadedState(), {
+        type: 'generationEvent',
+        event: {
+          type: 'started',
+          ...generation,
+          userMessage: { ...generation.userMessage, content: userContent }
+        }
+      })
+    }
+
+    function reasoningDelta(
+      state: ConversationState,
+      delta: string,
+      messageId: string = ASSISTANT_MESSAGE_ID,
+      requestId: string = REQUEST_ID
+    ): ConversationState {
+      return reduceConversation(state, {
+        type: 'generationEvent',
+        event: { type: 'reasoningChunk', requestId, sessionId: SESSION_A, messageId, delta }
+      })
+    }
+
+    function textDelta(state: ConversationState, delta: string): ConversationState {
+      return reduceConversation(state, {
+        type: 'generationEvent',
+        event: {
+          type: 'chunk',
+          requestId: REQUEST_ID,
+          sessionId: SESSION_A,
+          messageId: ASSISTANT_MESSAGE_ID,
+          delta
+        }
+      })
+    }
+
+    it('enables an empty reasoning buffer for conversation drafts', () => {
+      expect(findMessage(startedState(), ASSISTANT_MESSAGE_ID)?.reasoning).toBe('')
+    })
+
+    it('does not enable the reasoning placeholder for skill commands', () => {
+      for (const content of ['/vocabulary pursue', '/phrase give up', '/synonym big, large']) {
+        expect(findMessage(startedState(content), ASSISTANT_MESSAGE_ID)?.reasoning).toBeUndefined()
+      }
+    })
+
+    it('keeps the placeholder for /concept messages, which are conversation streams', () => {
+      expect(findMessage(startedState('/concept pursue'), ASSISTANT_MESSAGE_ID)?.reasoning).toBe('')
+    })
+
+    it('appends reasoning deltas and ignores empty ones', () => {
+      let state = startedState()
+      state = reasoningDelta(state, '先分析')
+      state = reasoningDelta(state, '输入的意图')
+      state = reasoningDelta(state, '')
+
+      expect(findMessage(state, ASSISTANT_MESSAGE_ID)).toMatchObject({
+        reasoning: '先分析输入的意图',
+        content: '',
+        streaming: true
+      })
+    })
+
+    it('keeps the reasoning preview when text starts after reasoning arrived', () => {
+      let state = startedState()
+      state = reasoningDelta(state, '思考内容')
+      state = textDelta(state, 'Hi')
+
+      expect(findMessage(state, ASSISTANT_MESSAGE_ID)).toMatchObject({
+        reasoning: '思考内容',
+        content: 'Hi'
+      })
+    })
+
+    it('removes the empty placeholder but shows reasoning arriving between text chunks', () => {
+      let state = startedState()
+      state = textDelta(state, 'Hi')
+      expect(findMessage(state, ASSISTANT_MESSAGE_ID)?.reasoning).toBeUndefined()
+
+      state = reasoningDelta(state, '')
+      expect(findMessage(state, ASSISTANT_MESSAGE_ID)?.reasoning).toBeUndefined()
+
+      state = reasoningDelta(state, '后续思考')
+      expect(findMessage(state, ASSISTANT_MESSAGE_ID)?.reasoning).toBe('后续思考')
+      state = textDelta(state, ' there')
+      state = reasoningDelta(state, '继续分析')
+
+      const message = findMessage(state, ASSISTANT_MESSAGE_ID)
+      expect(message?.reasoning).toBe('后续思考继续分析')
+      expect(message?.content).toBe('Hi there')
+    })
+
+    it('drops reasoning from the draft when the request completes', () => {
+      let state = startedState()
+      state = reasoningDelta(state, '思考内容')
+      state = textDelta(state, 'partial')
+      state = reduceConversation(state, {
+        type: 'generationEvent',
+        event: {
+          type: 'completed',
+          requestId: REQUEST_ID,
+          sessionId: SESSION_A,
+          message: {
+            messageId: ASSISTANT_MESSAGE_ID,
+            sessionId: SESSION_A,
+            role: 'assistant',
+            content: 'Hi there',
+            createdAt: '2026-09-02T10:00:00.000Z'
+          }
+        }
+      })
+
+      expect(findMessage(state, ASSISTANT_MESSAGE_ID)).toMatchObject({
+        content: 'Hi there',
+        streaming: false
+      })
+      expect(findMessage(state, ASSISTANT_MESSAGE_ID)?.reasoning).toBeUndefined()
+    })
+
+    it('drops the reasoning draft on cancel together with the assistant draft', () => {
+      let state = startedState()
+      state = reasoningDelta(state, '思考内容')
+      state = reduceConversation(state, {
+        type: 'generationEvent',
+        event: {
+          type: 'cancelled',
+          requestId: REQUEST_ID,
+          sessionId: SESSION_A,
+          messageId: ASSISTANT_MESSAGE_ID
+        }
+      })
+
+      expect(messageIds(state)).toEqual([USER_MESSAGE_ID])
+      expect(isGenerating(state)).toBe(false)
+    })
+
+    it('reports a protocol error when the reasoning identity mismatches', () => {
+      let state = startedState()
+      state = reasoningDelta(state, 'poison', '7b097553-e4fb-48c9-be81-e25cfa55358e')
+
+      expect(state.status).toEqual({ kind: 'protocolError' })
+      expect(findMessage(state, ASSISTANT_MESSAGE_ID)?.reasoning).toBe('')
+    })
+
+    it('ignores late reasoning after the request reached a terminal state', () => {
+      let state = startedState()
+      state = reasoningDelta(state, '思考内容')
+      state = reduceConversation(state, {
+        type: 'generationEvent',
+        event: {
+          type: 'cancelled',
+          requestId: REQUEST_ID,
+          sessionId: SESSION_A,
+          messageId: ASSISTANT_MESSAGE_ID
+        }
+      })
+      state = reasoningDelta(state, '迟到')
+
+      expect(messageIds(state)).toEqual([USER_MESSAGE_ID])
+    })
+
+    it('starts a fresh reasoning buffer when a retry begins', () => {
+      let state = startedState()
+      state = reasoningDelta(state, '第一次尝试的思考')
+      state = reduceConversation(state, {
+        type: 'generationEvent',
+        event: {
+          type: 'cancelled',
+          requestId: REQUEST_ID,
+          sessionId: SESSION_A,
+          messageId: ASSISTANT_MESSAGE_ID
+        }
+      })
+
+      const retryGeneration = {
+        ...generation,
+        requestId: OTHER_REQUEST_ID,
+        assistantMessageId: '8e1bd8d2-1c31-4c1e-9b4e-6d2f3a2c1a10'
+      }
+      state = reduceConversation(state, {
+        type: 'generationStarted',
+        generation: retryGeneration
+      })
+
+      expect(findMessage(state, retryGeneration.assistantMessageId)?.reasoning).toBe('')
+      // 旧请求的草稿与思考都已清除
+      expect(findMessage(state, ASSISTANT_MESSAGE_ID)).toBeUndefined()
+    })
+
+    it('bounds the reasoning buffer to a tail of the configured code points', () => {
+      // 由码点外字符（'😀' 占两个 UTF-16 码元）验证按码点裁剪且不切断代理对
+      const emoji = '😀'
+      const overhang = 7
+      const total = REASONING_PREVIEW_MAX_CODE_POINTS + overhang
+      const filler = emoji.repeat(total)
+
+      let state = startedState()
+      state = reasoningDelta(state, filler)
+
+      const reasoning = findMessage(state, ASSISTANT_MESSAGE_ID)?.reasoning ?? ''
+      // 不超过上限码点数，且保留的是最新内容（尾部）
+      expect([...reasoning].length).toBe(REASONING_PREVIEW_MAX_CODE_POINTS)
+      expect(reasoning.endsWith(emoji)).toBe(true)
+      // 起点落在完整的码点边界上（不是代理对的后半）
+      expect(reasoning.codePointAt(0)).toBeGreaterThan(0xffff)
     })
   })
 

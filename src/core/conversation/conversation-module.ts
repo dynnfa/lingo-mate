@@ -397,14 +397,16 @@ export class ConversationModule {
     const signal = active.controller.signal
     let title = ''
     try {
-      for await (const delta of this.model.streamReply({
+      for await (const event of this.model.streamReply({
         messages: [{ role: 'user', content: message.content }],
         ...active.languages,
         promptKind: 'conversation-title',
         signal
       })) {
         signal.throwIfAborted()
-        title += delta
+        // 标题生成是纯正文消费者：提供方即使返回思考增量也忽略。
+        if (event.type !== 'text') continue
+        title += event.delta
         if (title.length > CONVERSATION_TITLE_MAX_LENGTH * 2)
           throw new ModelRequestError('PROTOCOL', new Error('Title is too long'))
       }
@@ -496,7 +498,7 @@ export class ConversationModule {
           : 'conversation'
       let response = ''
 
-      for await (const delta of this.model.streamReply({
+      for await (const event of this.model.streamReply({
         messages: modelMessages,
         outputLanguage: execution.languages.outputLanguage,
         // 目标语言来自执行开始时的配置快照，不随界面语言切换。
@@ -505,8 +507,19 @@ export class ConversationModule {
         signal: execution.controller.signal
       })) {
         if (execution.controller.signal.aborted) break
-        response += delta
-        emit({ ...eventBase, type: 'chunk', messageId: assistantMessageId, delta })
+        if (event.type === 'reasoning') {
+          // 思考只作为本次请求的临时展示数据转发：不写入 response，
+          // 也不进入最终消息、会话历史与后续模型上下文。
+          emit({
+            ...eventBase,
+            type: 'reasoningChunk',
+            messageId: assistantMessageId,
+            delta: event.delta
+          })
+        } else {
+          response += event.delta
+          emit({ ...eventBase, type: 'chunk', messageId: assistantMessageId, delta: event.delta })
+        }
         if (execution.controller.signal.aborted) break
       }
 

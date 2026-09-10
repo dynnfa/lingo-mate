@@ -133,13 +133,13 @@ describe('LLM usage ledger across the unified client', () => {
 
   async function streamReply(model: ConfiguredLanguageModel): Promise<string> {
     let text = ''
-    for await (const delta of model.streamReply({
+    for await (const event of model.streamReply({
       messages: [{ role: 'user', content: 'Practice English with me.' }],
       outputLanguage: 'zh-CN',
       targetLanguage: 'en',
       signal: new AbortController().signal
     })) {
-      text += delta
+      if (event.type === 'text') text += event.delta
     }
     return text
   }

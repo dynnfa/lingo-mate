@@ -1,4 +1,4 @@
-import type { LanguageModel, StreamReplyInput } from './language-model'
+import type { LanguageModel, ModelStreamEvent, StreamReplyInput } from './language-model'
 import { ModelConfigService, ModelNotConfiguredError } from './model-config'
 import { RemoteLanguageModel, CHAT_REQUEST_TIMEOUT_MS } from './remote-language-model'
 import type { CreateLlmClient } from './llm-client'
@@ -12,7 +12,7 @@ export class ConfiguredLanguageModel implements LanguageModel {
     private readonly createClient: CreateLlmClient
   ) {}
 
-  async *streamReply(input: StreamReplyInput): AsyncIterable<string> {
+  async *streamReply(input: StreamReplyInput): AsyncIterable<ModelStreamEvent> {
     const config = this.configService.resolveSnapshot()
     if (!config.configured) {
       throw new ModelNotConfiguredError()

@@ -1,4 +1,4 @@
-import type { LanguageModel, StreamReplyInput } from './language-model'
+import type { LanguageModel, ModelStreamEvent, StreamReplyInput } from './language-model'
 
 const delay = (milliseconds: number, signal: AbortSignal): Promise<void> =>
   new Promise((resolve, reject) => {
@@ -22,18 +22,29 @@ const delay = (milliseconds: number, signal: AbortSignal): Promise<void> =>
   })
 
 export class LocalLanguageModel implements LanguageModel {
-  async *streamReply({ messages, signal, promptKind }: StreamReplyInput): AsyncIterable<string> {
+  async *streamReply({
+    messages,
+    signal,
+    promptKind
+  }: StreamReplyInput): AsyncIterable<ModelStreamEvent> {
     const latestMessage = messages.at(-1)?.content ?? ''
     if (promptKind === 'conversation-title') {
       signal.throwIfAborted()
-      yield latestMessage.replace(/\s+/g, ' ').trim().slice(0, 40)
+      yield { type: 'text', delta: latestMessage.replace(/\s+/g, ' ').trim().slice(0, 40) }
       return
+    }
+    // 本地开发模型模拟推理模型的节奏：先流出少量思考文本，再流式给出正文，
+    // 供开发与端到端测试验证思考预览交互。
+    const reasoning = `正在分析输入「${latestMessage}」，先确认意图再组织回复。`
+    for (const character of reasoning) {
+      await delay(12, signal)
+      yield { type: 'reasoning', delta: character }
     }
     const reply = `收到：“${latestMessage}”。这是本地开发模型的回复；下一步可通过 LanguageModel 接口接入真实模型。`
 
     for (const character of reply) {
       await delay(18, signal)
-      yield character
+      yield { type: 'text', delta: character }
     }
   }
 }

@@ -1,0 +1,18 @@
+/* 思考预览：弱于正文的临时展示区，等待期出现在 assistant 草稿正文上方。 */
+.thinking-preview {
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--color-border-message);
+  border-radius: 4px;
+  color: var(--color-text-label);
+  font-size: 12px;
+}
+
+/* 三行视觉上限：1.6em 行高 × 3 行 = 4.8em；溢出裁剪，不改值需同步修改。 */
+.thinking-preview-scroll {
+  max-height: 4.8em;
+  overflow: hidden;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

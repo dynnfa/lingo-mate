@@ -43,7 +43,7 @@ function setup(analyze = vi.fn(normal)): {
   const module = new ConversationModule(
     {
       async *streamReply() {
-        yield 'hello'
+        yield { type: 'text' as const, delta: 'hello' }
       }
     },
     repository,

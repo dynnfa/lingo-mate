@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type SyntheticEvent } 
 import { useTranslation } from 'react-i18next'
 import { translateConversationStatus } from './status-messages'
 import { MarkdownMessage } from './MarkdownMessage'
+import { ThinkingPreview } from './ThinkingPreview'
 import { ACTION_PICKER_ID, ConversationActionPicker } from './ConversationActionPicker'
 import {
   CONVERSATION_ACTIONS,
@@ -260,6 +261,15 @@ export function ConversationPanel({
               key={message.messageId}
             >
               <span>{message.role === 'user' ? t('common:messages.userRole') : 'Lingo Mate'}</span>
+              {message.role === 'assistant' &&
+              message.streaming &&
+              message.reasoning !== undefined ? (
+                <ThinkingPreview
+                  label={t('conversation:thinking.label')}
+                  placeholder={t('conversation:thinking.placeholder')}
+                  reasoning={message.reasoning}
+                />
+              ) : null}
               <MarkdownMessage content={message.content} />
               {message.role === 'user' && message.retryable && !composerLocked ? (
                 <button

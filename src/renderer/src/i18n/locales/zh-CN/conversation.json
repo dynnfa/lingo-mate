@@ -26,10 +26,14 @@
   },
   "composer": {
     "vocabularyRequired": "请在 /vocabulary 后输入一个或多个英语单词或短语。",
-    "phraseRequired": "请在 /phrase 后输入一个或多个英语短语。",
+    "phraseRequired": "请在 /phrase 后输入英语短语。",
     "phraseHint": "每行一个短语，可批量收录；短语内部可包含空格与标点。",
     "synonymRequired": "请在 /synonym 后输入英语单词，以逗号分隔。",
     "synonymHint": "例如：/synonym adequate, decent；已收录的单词会跳过。"
+  },
+  "thinking": {
+    "label": "模型思考过程",
+    "placeholder": "正在思考…"
   },
   "actionPicker": {
     "listLabel": "可用行动",

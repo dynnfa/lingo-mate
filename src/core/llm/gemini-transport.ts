@@ -45,13 +45,20 @@ const responseSchema = z.object({
 type Part = z.infer<typeof partSchema>
 type Params = Omit<ChatCompletionCreateParamsNonStreaming, 'stream'>
 
+// 思考摘要作为 OpenAI 形状上的提供方扩展字段传递（reasoning_content，与
+// DeepSeek 系提供方对齐），由 remote-language-model 统一消费。
+type ThoughtMessage = ChatCompletion.Choice['message'] & { reasoning_content?: string }
+type ThoughtCompletion = Omit<ChatCompletion, 'choices'> & {
+  choices: Array<Omit<ChatCompletion.Choice, 'message'> & { message: ThoughtMessage }>
+}
+
 // Converts the application's text/tool contract at the network boundary. Original model
 // parts stay request-local so signatures survive tool rounds without entering the UI.
 export class GeminiTransport {
   private readonly calls = new Map<string, { name: string; parts: Part[]; providerId?: string }>()
   constructor(private readonly config: LlmClientConfig) {}
 
-  private body(params: Params): unknown {
+  private body(params: Params, streaming: boolean): unknown {
     const contents: { role: string; parts: unknown[] }[] = []
     const system: unknown[] = []
     for (const message of params.messages) {
@@ -134,7 +141,10 @@ export class GeminiTransport {
         topP: params.top_p ?? undefined,
         maxOutputTokens: params.max_completion_tokens ?? params.max_tokens ?? undefined,
         stopSequences: typeof params.stop === 'string' ? [params.stop] : (params.stop ?? undefined),
-        candidateCount: params.n ?? undefined
+        candidateCount: params.n ?? undefined,
+        // 仅流式对话请求思考摘要（thought: true 的 parts，归一化为
+        // reasoning_content）；非流式分析请求保持原状。
+        includeThoughts: streaming ? true : undefined
       }
     }
   }
@@ -152,7 +162,7 @@ export class GeminiTransport {
       headers['x-goog-api-key'] = this.config.apiKey
     }
     let response: Response
-    const body = JSON.stringify(this.body(params))
+    const body = JSON.stringify(this.body(params, streaming))
     try {
       // Never forward custom API-key headers through redirects.
       response = await fetch(url, { method: 'POST', headers, body, signal, redirect: 'error' })
@@ -173,7 +183,7 @@ export class GeminiTransport {
     return response
   }
 
-  private convert(raw: unknown, model: string, streaming: boolean): ChatCompletion {
+  private convert(raw: unknown, model: string, streaming: boolean): ThoughtCompletion {
     const parsed = responseSchema.safeParse(raw)
     if (!parsed.success) throw new ModelRequestError('PROTOCOL', parsed.error)
     const value = parsed.data
@@ -232,20 +242,28 @@ export class GeminiTransport {
                 : null
         if (!streaming && finish === null)
           throw new ModelRequestError('PROTOCOL', new Error('Missing Gemini finish reason'))
+        // 思考摘要仅展示，不进入正文；thoughtSignature 留在本地的 parts 快照中
+        // 供工具回合回放，不作为思考文本下发。
+        const thoughtSummary = parts
+          .filter((part) => part.thought)
+          .map((part) => part.text ?? '')
+          .join('')
+        const message: ThoughtMessage = {
+          role: 'assistant',
+          refusal: null,
+          content:
+            parts
+              .filter((part) => !part.thought)
+              .map((part) => part.text ?? '')
+              .join('') || null,
+          ...(thoughtSummary ? { reasoning_content: thoughtSummary } : {}),
+          ...(toolCalls.length ? { tool_calls: toolCalls } : {})
+        }
         return {
           index: candidate.index ?? 0,
           logprobs: null,
           finish_reason: finish as ChatCompletion.Choice['finish_reason'],
-          message: {
-            role: 'assistant',
-            refusal: null,
-            content:
-              parts
-                .filter((part) => !part.thought)
-                .map((part) => part.text ?? '')
-                .join('') || null,
-            ...(toolCalls.length ? { tool_calls: toolCalls } : {})
-          }
+          message
         }
       })
     }
@@ -280,17 +298,23 @@ export class GeminiTransport {
       return {
         ...completion,
         object: 'chat.completion.chunk',
-        choices: completion.choices.map((choice) => ({
-          index: choice.index,
-          finish_reason: choice.finish_reason,
-          logprobs: null,
-          delta: {
+        choices: completion.choices.map((choice) => {
+          const delta: ChatCompletionChunk.Choice['delta'] & { reasoning_content?: string } = {
             content: choice.message.content,
+            ...(choice.message.reasoning_content
+              ? { reasoning_content: choice.message.reasoning_content }
+              : {}),
             ...(choice.message.tool_calls
               ? { tool_calls: choice.message.tool_calls.map((call, index) => ({ ...call, index })) }
               : {})
           }
-        }))
+          return {
+            index: choice.index,
+            finish_reason: choice.finish_reason,
+            logprobs: null,
+            delta
+          }
+        })
       }
     }
     try {
