@@ -451,7 +451,7 @@ body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   font-size: 13px;
 }
 
@@ -460,7 +460,10 @@ body {
   font-weight: 600;
 }
 
+/* 全局 input, textarea 规则带 flex: 1（聊天输入区用）；数量输入框是定宽
+   字段，需 flex: none 抵消，否则会被 grow 拉伸占满整行剩余空间。 */
 .vocabulary-practice-setup input {
+  flex: none;
   width: 88px;
   padding: 6px 8px;
   border: 1px solid var(--color-border-divider);
@@ -548,6 +551,28 @@ body {
   min-height: 0;
 }
 
+.vocabulary-practice-list {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* 列标题：与练习行使用相同的网格列宽，保证左右两列上下对齐。 */
+.vocabulary-practice-column-headers {
+  display: grid;
+  grid-template-columns: minmax(120px, 220px) minmax(0, 1fr);
+  gap: 12px;
+  padding: 6px 14px;
+  border: 1px solid var(--color-border-divider);
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  background: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .vocabulary-practice-rows {
   flex: 1 1 auto;
   min-height: 0;
@@ -556,7 +581,7 @@ body {
   overflow-y: auto;
   list-style: none;
   border: 1px solid var(--color-border-divider);
-  border-radius: 10px;
+  border-radius: 0 0 10px 10px;
   background: var(--color-surface);
 }
 
@@ -596,7 +621,6 @@ body {
   color: var(--color-text);
   font: inherit;
   font-size: 13px;
-  resize: vertical;
 }
 
 .vocabulary-practice-input:focus {
@@ -2007,6 +2031,7 @@ textarea:disabled {
     padding: 20px 24px 16px;
   }
 
+  .vocabulary-practice-column-headers,
   .vocabulary-practice-row {
     grid-template-columns: minmax(0, 1fr);
     gap: 6px;

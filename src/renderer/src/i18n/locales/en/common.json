@@ -224,6 +224,8 @@
     "vocabulary": {
       "detailTitle": "Vocabulary practice",
       "countLabel": "Number of words",
+      "termColumnLabel": "Word",
+      "meaningColumnLabel": "Meaning",
       "confirm": "Confirm",
       "loading": "Drawing words…",
       "idleTitle": "Ready to practice?",

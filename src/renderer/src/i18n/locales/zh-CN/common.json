@@ -224,6 +224,8 @@
     "vocabulary": {
       "detailTitle": "词汇练习",
       "countLabel": "练习单词数量",
+      "termColumnLabel": "单词",
+      "meaningColumnLabel": "释义",
       "confirm": "确认",
       "loading": "正在抽取单词…",
       "idleTitle": "准备好开始了吗？",
