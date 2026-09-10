@@ -432,6 +432,247 @@ body {
   font-size: 12px;
 }
 
+/* ── 词汇练习详情：数量确认表单、两列练习区、审查状态与标红反馈 ── */
+.vocabulary-practice {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+  padding: 24px 28px 16px;
+}
+
+.vocabulary-practice-header h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.vocabulary-practice-setup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.vocabulary-practice-setup label {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.vocabulary-practice-setup input {
+  width: 88px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.vocabulary-practice-setup input[aria-invalid='true'] {
+  border-color: var(--color-danger, #b42318);
+}
+
+.vocabulary-practice-setup button {
+  padding: 6px 14px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-secondary);
+  font-size: 12px;
+}
+
+.vocabulary-practice-setup button:disabled {
+  opacity: 0.6;
+}
+
+.vocabulary-practice-field-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--color-danger, #b42318);
+  font-size: 12px;
+}
+
+.vocabulary-practice-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 32px 0;
+  color: var(--color-text-status);
+  font-size: 13px;
+}
+
+.vocabulary-practice-state-title {
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.vocabulary-practice-error,
+.vocabulary-practice-short,
+.vocabulary-practice-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-message);
+  border-radius: 10px;
+  background: var(--color-surface);
+  font-size: 12px;
+}
+
+.vocabulary-practice-error {
+  border-color: var(--color-danger, #b42318);
+}
+
+.vocabulary-practice-error-title {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.vocabulary-practice-error p {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.vocabulary-practice-short,
+.vocabulary-practice-notice {
+  color: var(--color-text-secondary);
+}
+
+.vocabulary-practice-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.vocabulary-practice-rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 10px;
+  background: var(--color-surface);
+}
+
+.vocabulary-practice-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 220px) minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border-divider);
+}
+
+.vocabulary-practice-row:last-child {
+  border-bottom: 0;
+}
+
+.vocabulary-practice-term {
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  align-self: center;
+}
+
+.vocabulary-practice-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.vocabulary-practice-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.vocabulary-practice-input:focus {
+  outline: 2px solid var(--color-border-active, var(--color-border-divider));
+}
+
+/* 标红：固定红色样式 + 图标与文本原因，不只依赖颜色传达错误 */
+.vocabulary-practice-input-marked {
+  border-color: var(--color-danger, #b42318);
+  color: var(--color-danger, #b42318);
+}
+
+.vocabulary-practice-mark-reason {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  color: var(--color-danger, #b42318);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.vocabulary-practice-reviewing {
+  margin: 0;
+  color: var(--color-text-status);
+  font-size: 12px;
+}
+
+.vocabulary-practice-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-message);
+  border-radius: 10px;
+  background: var(--color-surface);
+}
+
+.vocabulary-practice-verdict {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.vocabulary-practice-verdict-ok {
+  color: var(--color-text-active);
+}
+
+.vocabulary-practice-verdict-errors {
+  color: var(--color-danger, #b42318);
+}
+
+.vocabulary-practice-summary,
+.vocabulary-practice-edit-hint {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.vocabulary-practice-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.vocabulary-practice-actions button {
+  padding: 6px 16px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-secondary);
+  font-size: 12px;
+}
+
+.vocabulary-practice-actions button:hover {
+  background: var(--color-surface-hover);
+}
+
 /* 删除确认对话框 */
 .dialog-backdrop {
   position: fixed;
@@ -1759,6 +2000,16 @@ textarea:disabled {
 
   .settings-detail {
     padding: 24px;
+  }
+
+  /* 窄窗口下练习行改为上下堆叠：单词在上、释义输入在下。 */
+  .vocabulary-practice {
+    padding: 20px 24px 16px;
+  }
+
+  .vocabulary-practice-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
   }
 
   .chat-header {

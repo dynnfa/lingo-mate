@@ -217,7 +217,40 @@
   "practice": {
     "title": "Start practicing",
     "back": "Back",
-    "menuLabel": "Practice menu"
+    "menuLabel": "Practice menu",
+    "sections": {
+      "vocabulary": "Vocabulary practice"
+    },
+    "vocabulary": {
+      "detailTitle": "Vocabulary practice",
+      "countLabel": "Number of words",
+      "confirm": "Confirm",
+      "loading": "Drawing words…",
+      "idleTitle": "Ready to practice?",
+      "idleBody": "Enter the number of words and confirm to start a round drawn from your vocabulary.",
+      "emptyTitle": "No vocabulary to practice yet",
+      "emptyBody": "Save words with the /vocabulary command in a conversation, then practice them here.",
+      "countShort": "Only {{count}} words are saved; all of them were added to this round.",
+      "countErrorRequired": "Enter the number of words.",
+      "countErrorInvalid": "Enter a whole number between 1 and 50.",
+      "startFailedTitle": "Failed to draw words",
+      "submit": "Submit for review",
+      "submitBlockedTitle": "Some meanings are still empty",
+      "submitBlockedBody": "Fill in a meaning for every word before submitting for review.",
+      "reviewing": "Reviewing your answers…",
+      "cancelReview": "Cancel review",
+      "reviewFailedTitle": "Review failed",
+      "cancelledNotice": "Review cancelled. Your answers are kept; edit and submit again.",
+      "verdictAllCorrect": "All correct!",
+      "verdictHasErrors": "Some answers are wrong and marked below.",
+      "markedIconLabel": "Wrong",
+      "editAfterReviewNotice": "Editing any answer requires submitting for review again.",
+      "confirmNewRoundTitle": "Start a new round",
+      "confirmNewRoundBody": "Your current answers have not been submitted. Starting a new round will clear them.",
+      "confirmNewRoundCancel": "Keep answering",
+      "confirmNewRoundConfirm": "Start a new round",
+      "answerLabel": "Meaning of {{term}}"
+    }
   },
   "preferences": {
     "startupError": "Couldn't load your language preference. Using the default language.",

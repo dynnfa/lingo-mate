@@ -65,6 +65,15 @@ import {
   synonymListResultSchema,
   SYNONYM_CHANNELS
 } from '../shared/synonym'
+import {
+  vocabularyPracticeCancelInputSchema,
+  vocabularyPracticeCancelResultSchema,
+  vocabularyPracticeReviewInputSchema,
+  vocabularyPracticeReviewResultSchema,
+  vocabularyPracticeStartInputSchema,
+  vocabularyPracticeStartResultSchema,
+  VOCABULARY_PRACTICE_CHANNELS
+} from '../shared/vocabulary-practice'
 
 const api: LingoMateApi = {
   preferences: {
@@ -163,6 +172,23 @@ const api: LingoMateApi = {
       const input = synonymListInputSchema.parse(rawInput)
       const result: unknown = await ipcRenderer.invoke(SYNONYM_CHANNELS.list, input)
       return synonymListResultSchema.parse(result)
+    }
+  },
+  vocabularyPractice: {
+    async start(rawInput) {
+      const input = vocabularyPracticeStartInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(VOCABULARY_PRACTICE_CHANNELS.start, input)
+      return vocabularyPracticeStartResultSchema.parse(result)
+    },
+    async review(rawInput) {
+      const input = vocabularyPracticeReviewInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(VOCABULARY_PRACTICE_CHANNELS.review, input)
+      return vocabularyPracticeReviewResultSchema.parse(result)
+    },
+    async cancel(rawInput) {
+      const input = vocabularyPracticeCancelInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(VOCABULARY_PRACTICE_CHANNELS.cancel, input)
+      return vocabularyPracticeCancelResultSchema.parse(result)
     }
   },
   conversation: {

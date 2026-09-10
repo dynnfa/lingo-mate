@@ -78,5 +78,21 @@
     "invalidInput": "The synonym request is invalid.",
     "untrustedSource": "Recorded synonyms are only available from the application window.",
     "unknown": "Something went wrong. Please try again later."
+  },
+  "vocabularyPractice": {
+    "untrustedSource": "Vocabulary practice can only be used from the app window.",
+    "invalidInput": "Invalid practice request. Confirm the count or your answers and try again.",
+    "sessionNotFound": "This practice round is no longer valid. Confirm a count to start a new round.",
+    "busy": "A review is already running. Wait for it or cancel it first.",
+    "modelNotConfigured": "No model is configured yet. Set one up in Settings > Models first.",
+    "credentialDecryptFailed": "The saved API key cannot be read. Re-enter or remove it.",
+    "modelError": "The model request failed. Try again later.",
+    "invalidAnalysis": "The model returned an invalid review. Submit again.",
+    "toolCallNotSupported": "The current model or endpoint doesn't support the tool calls required for review. Switch models or endpoints and try again.",
+    "timeout": "The review timed out. Try again.",
+    "cancelled": "The review was cancelled.",
+    "roundLimit": "The review used too many rounds. Submit again.",
+    "storageFailed": "Failed to read the local vocabulary data. Try again later.",
+    "unknown": "An unknown error occurred. Try again later."
   }
 }
