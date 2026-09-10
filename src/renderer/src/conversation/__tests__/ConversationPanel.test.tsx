@@ -254,9 +254,9 @@ describe('ConversationPanel slash trigger and filtering', () => {
 
     const listbox = screen.getByRole('listbox', { name: '可用行动' })
     expect(listbox).toBeInTheDocument()
-    expect(pickerOptions()).toHaveLength(7)
+    expect(pickerOptions()).toHaveLength(4)
     // 首次打开默认高亮第一项
-    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-translate')
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-concept')
   })
 
   it('does not open for non-leading slash, leading space or full-width slash', () => {
@@ -270,20 +270,20 @@ describe('ConversationPanel slash trigger and filtering', () => {
 
   it('filters by command name and localized name case-insensitively', () => {
     renderPanel()
-    typeDraft('/润')
+    typeDraft('/概')
     expect(pickerOptions()).toHaveLength(1)
-    expect(pickerOptions()[0]).toHaveTextContent('润色')
+    expect(pickerOptions()[0]).toHaveTextContent('概念讲解')
 
-    typeDraft('/TRA')
+    typeDraft('/SYN')
     expect(pickerOptions()).toHaveLength(1)
-    expect(pickerOptions()[0]).toHaveTextContent('翻译')
+    expect(pickerOptions()[0]).toHaveTextContent('近义词分组')
 
-    typeDraft('/t')
+    typeDraft('/o')
     expect(pickerOptions()).toHaveLength(3)
     // 过滤后高亮重置为第一项
     expect(screen.getByLabelText('练习内容')).toHaveAttribute(
       'aria-activedescendant',
-      'conversation-action-option-translate'
+      'conversation-action-option-concept'
     )
   })
 
@@ -359,19 +359,13 @@ describe('ConversationPanel picker keyboard selection', () => {
     const input = typeDraft('/')
 
     fireEvent.keyDown(input, { key: 'ArrowDown' })
-    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-polish')
-    fireEvent.keyDown(input, { key: 'ArrowDown' })
-    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-practice')
-    fireEvent.keyDown(input, { key: 'ArrowDown' })
-    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-concept')
-    fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-vocabulary')
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-phrase')
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-synonym')
     fireEvent.keyDown(input, { key: 'ArrowDown' })
-    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-translate')
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-concept')
     fireEvent.keyDown(input, { key: 'ArrowUp' })
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-synonym')
   })
@@ -380,11 +374,10 @@ describe('ConversationPanel picker keyboard selection', () => {
     const { callbacks } = renderPanel()
     const input = typeDraft('/')
 
-    fireEvent.keyDown(input, { key: 'ArrowDown' })
     fireEvent.keyDown(input, { key: 'Enter' })
 
     expect(callbacks.onSend).not.toHaveBeenCalled()
-    expect(input).toHaveValue('/polish ')
+    expect(input).toHaveValue('/concept ')
     expect(input).toHaveFocus()
     expect(input).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
@@ -392,9 +385,9 @@ describe('ConversationPanel picker keyboard selection', () => {
 
   it.each([
     ['partial command', '/voc', 'vocabulary', '/vocabulary '],
-    ['full command', '/translate', 'translate', '/translate '],
-    ['slash only', '/', 'translate', '/translate '],
-    ['localized name', '/润', 'polish', '/polish ']
+    ['full command', '/synonym', 'synonym', '/synonym '],
+    ['slash only', '/', 'concept', '/concept '],
+    ['localized name', '/收', 'vocabulary', '/vocabulary ']
   ])(
     'selects the same candidate with Enter and Tab: %s',
     (_scenario, draft, expectedId, expectedValue) => {
@@ -429,7 +422,7 @@ describe('ConversationPanel picker keyboard selection', () => {
 
     expect(callbacks.onSend).not.toHaveBeenCalled()
     expect(callbacks.onRunSkill).not.toHaveBeenCalled()
-    expect(input).toHaveValue('/polish ')
+    expect(input).toHaveValue('/vocabulary ')
     expect(input).toHaveFocus()
     expect(input).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
@@ -439,10 +432,10 @@ describe('ConversationPanel picker keyboard selection', () => {
     const { callbacks } = renderPanel()
     const input = typeDraft('/')
 
-    fireEvent.mouseEnter(screen.getByRole('option', { name: /口语练习/ }))
+    fireEvent.mouseEnter(screen.getByRole('option', { name: /收录短语/ }))
     fireEvent.keyDown(input, { key: 'Tab' })
 
-    expect(input).toHaveValue('/practice ')
+    expect(input).toHaveValue('/phrase ')
     expect(callbacks.onSend).not.toHaveBeenCalled()
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
@@ -616,12 +609,12 @@ describe('ConversationPanel picker keyboard selection', () => {
     const { callbacks } = renderPanel()
     const input = typeDraft('/')
 
-    const option = screen.getByRole('option', { name: /口语练习/ })
+    const option = screen.getByRole('option', { name: /概念讲解/ })
     fireEvent.mouseDown(option)
     fireEvent.click(option)
 
     expect(callbacks.onSend).not.toHaveBeenCalled()
-    expect(input).toHaveValue('/practice ')
+    expect(input).toHaveValue('/concept ')
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 
@@ -629,32 +622,32 @@ describe('ConversationPanel picker keyboard selection', () => {
     renderPanel()
     const input = typeDraft('/')
 
-    fireEvent.mouseEnter(screen.getByRole('option', { name: /润色/ }))
+    fireEvent.mouseEnter(screen.getByRole('option', { name: /收录短语/ }))
 
-    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-polish')
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-phrase')
   })
 })
 
 describe('ConversationPanel picker closing and reopen suppression', () => {
   it('closes on Escape, keeps the draft, and allows sending the literal slash text', () => {
     const { callbacks } = renderPanel()
-    const input = typeDraft('/tr')
+    const input = typeDraft('/co')
 
     fireEvent.keyDown(input, { key: 'Escape' })
 
     expect(input).toHaveAttribute('aria-expanded', 'false')
     expect(input).not.toHaveAttribute('aria-activedescendant')
-    expect(input).toHaveValue('/tr')
+    expect(input).toHaveValue('/co')
     expect(screen.getByRole('button', { name: '发送' })).toBeEnabled()
 
     fireEvent.click(screen.getByRole('button', { name: '发送' }))
     expect(callbacks.onSend).toHaveBeenCalledTimes(1)
-    expect(callbacks.onSend).toHaveBeenCalledWith('/tr')
+    expect(callbacks.onSend).toHaveBeenCalledWith('/co')
   })
 
   it('does not reopen on plain rerenders after Escape but reopens on the next edit or refocus', () => {
     const { view } = renderPanel()
-    const input = typeDraft('/tr')
+    const input = typeDraft('/co')
     fireEvent.keyDown(input, { key: 'Escape' })
 
     // 同一草稿的普通重渲染不重开
@@ -662,7 +655,7 @@ describe('ConversationPanel picker closing and reopen suppression', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
 
     // 下一次符合条件的人工编辑可以重开
-    fireEvent.change(input, { target: { value: '/tra' } })
+    fireEvent.change(input, { target: { value: '/con' } })
     expect(screen.getByRole('listbox')).toBeInTheDocument()
 
     // Escape 后失焦再聚焦同样可以重开
@@ -748,14 +741,14 @@ describe('ConversationPanel picker closing and reopen suppression', () => {
 
   it('does not reopen the suppressed draft after an action selection', () => {
     renderPanel()
-    const input = typeDraft('/tra')
+    const input = typeDraft('/co')
 
     fireEvent.keyDown(input, { key: 'Enter' })
-    expect(input).toHaveValue('/translate ')
+    expect(input).toHaveValue('/concept ')
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
 
     // 继续补充参数不弹回
-    fireEvent.change(input, { target: { value: '/translate Good morning' } })
+    fireEvent.change(input, { target: { value: '/concept Good morning' } })
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
 
     // 失焦后重新聚焦同样保持关闭
@@ -771,10 +764,10 @@ describe('ConversationPanel picker closing and reopen suppression', () => {
 
   it('does not reopen the suppressed draft after a Tab selection and lets the next Tab leave', () => {
     const { view } = renderPanel()
-    const input = typeDraft('/tra')
+    const input = typeDraft('/co')
 
     fireEvent.keyDown(input, { key: 'Tab' })
-    expect(input).toHaveValue('/translate ')
+    expect(input).toHaveValue('/concept ')
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
 
     // 同一草稿的普通重渲染不弹回
@@ -782,7 +775,7 @@ describe('ConversationPanel picker closing and reopen suppression', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
 
     // 继续补充参数、失焦后重新聚焦同样保持关闭
-    fireEvent.change(input, { target: { value: '/translate Good morning' } })
+    fireEvent.change(input, { target: { value: '/concept Good morning' } })
     fireEvent.blur(input)
     fireEvent.focus(input)
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
@@ -800,46 +793,45 @@ describe('ConversationPanel picker closing and reopen suppression', () => {
     const { callbacks } = renderPanel()
     const input = typeDraft('/')
 
-    fireEvent.keyDown(input, { key: 'ArrowDown' })
     fireEvent.keyDown(input, { key: 'Enter' })
-    fireEvent.change(input, { target: { value: '/polish Hello' } })
+    fireEvent.change(input, { target: { value: '/concept Hello' } })
     fireEvent.submit(input.closest('form') as HTMLFormElement)
 
-    expect(callbacks.onSend).toHaveBeenCalledExactlyOnceWith('/polish Hello')
+    expect(callbacks.onSend).toHaveBeenCalledExactlyOnceWith('/concept Hello')
     expect(input).toHaveValue('')
     expect(input).not.toHaveAttribute('aria-activedescendant')
 
     fireEvent.change(input, { target: { value: '/' } })
     expect(input).toHaveAttribute('aria-expanded', 'true')
-    expect(pickerOptions()).toHaveLength(7)
-    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-translate')
+    expect(pickerOptions()).toHaveLength(4)
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-concept')
 
     fireEvent.keyDown(input, { key: 'Enter' })
-    expect(input).toHaveValue('/translate ')
+    expect(input).toHaveValue('/concept ')
     expect(callbacks.onSend).toHaveBeenCalledTimes(1)
   })
 
   it('closes and preserves the draft while the composer is locked', () => {
     const { view } = renderPanel()
-    const input = typeDraft('/tr')
+    const input = typeDraft('/co')
 
     view.rerender(panelElement({ composerLocked: true }))
     expect(input).toBeDisabled()
-    expect(input).toHaveValue('/tr')
+    expect(input).toHaveValue('/co')
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
 
     // 真实窗口中禁用会使输入框失焦；失焦后解除锁定不主动重开
     fireEvent.blur(input)
     view.rerender(panelElement({ composerLocked: false }))
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
-    expect(input).toHaveValue('/tr')
+    expect(input).toHaveValue('/co')
   })
 })
 
 describe('ConversationPanel picker submit protection', () => {
   it('disables the send button and blocks form submit while the picker is open', () => {
     const { callbacks } = renderPanel()
-    const input = typeDraft('/polish 你好')
+    const input = typeDraft('/voc 你好')
 
     expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
     fireEvent.submit(input.closest('form') as HTMLFormElement)
@@ -852,12 +844,12 @@ describe('ConversationPanel picker input method composition', () => {
     'blocks submit during composition with %s and allows it after composition ends',
     (scenario) => {
       const { callbacks } = renderPanel()
-      const input = typeDraft(scenario === 'ordinary draft' ? '你好' : '/tr')
+      const input = typeDraft(scenario === 'ordinary draft' ? '你好' : '/co')
       if (scenario === 'dismissed picker') {
         fireEvent.keyDown(input, { key: 'Escape' })
       } else if (scenario === 'selected action') {
         fireEvent.keyDown(input, { key: 'Enter' })
-        fireEvent.change(input, { target: { value: '/translate 你好' } })
+        fireEvent.change(input, { target: { value: '/concept 你好' } })
       }
       const draft = input.value
       const form = input.closest('form') as HTMLFormElement
@@ -882,20 +874,20 @@ describe('ConversationPanel picker input method composition', () => {
     const input = typeDraft('/')
 
     fireEvent.compositionStart(input)
-    fireEvent.change(input, { target: { value: '/翻' } })
+    fireEvent.change(input, { target: { value: '/收' } })
 
     // 组合期间不刷新候选
-    expect(pickerOptions()).toHaveLength(7)
+    expect(pickerOptions()).toHaveLength(4)
 
     // 组合确认键不选择候选、不发送
     fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
     expect(callbacks.onSend).not.toHaveBeenCalled()
-    expect(input).toHaveValue('/翻')
+    expect(input).toHaveValue('/收')
 
     fireEvent.compositionEnd(input)
-    expect(pickerOptions()).toHaveLength(1)
-    expect(pickerOptions()[0]).toHaveTextContent('翻译')
-    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-translate')
+    expect(pickerOptions()).toHaveLength(2)
+    expect(pickerOptions()[0]).toHaveTextContent('收藏词汇')
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-vocabulary')
   })
 
   it('does not select on Tab during input method composition', () => {
@@ -918,8 +910,8 @@ describe('ConversationPanel picker input method composition', () => {
 describe('ConversationPanel picker language switch', () => {
   it('retranslates candidates and keeps the draft and highlight without reopening state', () => {
     const { view } = renderPanel()
-    // /po 命中命令名 polish，两种界面语言下都有效
-    const input = typeDraft('/po')
+    // /co 命中命令名 concept，两种界面语言下都有效
+    const input = typeDraft('/co')
 
     expect(pickerOptions()).toHaveLength(1)
 
@@ -940,8 +932,8 @@ describe('ConversationPanel picker language switch', () => {
 
     const translated = screen.getByRole('listbox', { name: 'Available actions' })
     expect(translated).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: /Polish/ })).toHaveTextContent('/polish')
-    expect(input).toHaveValue('/po')
-    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-polish')
+    expect(screen.getByRole('option', { name: /Word concept/ })).toHaveTextContent('/concept')
+    expect(input).toHaveValue('/co')
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-concept')
   })
 })

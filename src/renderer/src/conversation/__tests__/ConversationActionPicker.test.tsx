@@ -45,21 +45,20 @@ describe('ConversationActionPicker rendering', () => {
 
     const listbox = screen.getByRole('listbox', { name: '可用行动' })
     const options = screen.getAllByRole('option')
-    expect(options).toHaveLength(7)
+    expect(options).toHaveLength(4)
     expect(listbox).toContainElement(options[0])
 
-    expect(options[0]).toHaveTextContent('翻译')
-    expect(options[0]).toHaveTextContent('/translate')
-    expect(options[0]).toHaveTextContent('把文本翻译成目标语言')
-    expect(options[1]).toHaveTextContent('润色')
-    expect(options[2]).toHaveTextContent('口语练习')
-    expect(options[3]).toHaveTextContent('概念讲解')
-    expect(options[3]).toHaveTextContent('/concept')
-    expect(options[4]).toHaveTextContent('收藏词汇')
+    expect(options[0]).toHaveTextContent('概念讲解')
+    expect(options[0]).toHaveTextContent('/concept')
+    expect(options[0]).toHaveTextContent('讲清一个单词表达的核心概念')
+    expect(options[1]).toHaveTextContent('收藏词汇')
+    expect(options[2]).toHaveTextContent('收录短语')
+    expect(options[3]).toHaveTextContent('近义词分组')
+    expect(options[3]).toHaveTextContent('/synonym')
   })
 
   it('marks only the highlighted option as selected', () => {
-    renderPicker({ highlightedActionId: 'polish' })
+    renderPicker({ highlightedActionId: 'vocabulary' })
 
     const options = screen.getAllByRole('option')
     expect(options[0]).toHaveAttribute('aria-selected', 'false')
@@ -75,10 +74,10 @@ describe('ConversationActionPicker rendering', () => {
   })
 
   it('keeps stable option ids for aria-activedescendant references', () => {
-    renderPicker({ highlightedActionId: 'translate' })
+    renderPicker({ highlightedActionId: 'concept' })
 
-    expect(document.getElementById('conversation-action-option-translate')).toBeInTheDocument()
-    expect(document.getElementById('conversation-action-option-polish')).toBeInTheDocument()
+    expect(document.getElementById('conversation-action-option-concept')).toBeInTheDocument()
+    expect(document.getElementById('conversation-action-option-phrase')).toBeInTheDocument()
     expect(document.getElementById('conversation-action-picker')).toBeInTheDocument()
   })
 })
@@ -87,20 +86,20 @@ describe('ConversationActionPicker interactions', () => {
   it('reports the selected action meta on click', () => {
     const { onSelect } = renderPicker()
 
-    fireEvent.mouseDown(screen.getByRole('option', { name: /润色/ }))
-    fireEvent.click(screen.getByRole('option', { name: /润色/ }))
+    fireEvent.mouseDown(screen.getByRole('option', { name: /收录短语/ }))
+    fireEvent.click(screen.getByRole('option', { name: /收录短语/ }))
 
     expect(onSelect).toHaveBeenCalledTimes(1)
-    expect(onSelect).toHaveBeenCalledWith(CONVERSATION_ACTIONS[1])
+    expect(onSelect).toHaveBeenCalledWith(CONVERSATION_ACTIONS[2])
   })
 
   it('reports hover as a highlight intent without selecting', () => {
     const { onSelect, onHighlight } = renderPicker()
 
-    fireEvent.mouseEnter(screen.getByRole('option', { name: /口语练习/ }))
+    fireEvent.mouseEnter(screen.getByRole('option', { name: /近义词分组/ }))
 
     expect(onHighlight).toHaveBeenCalledTimes(1)
-    expect(onHighlight).toHaveBeenCalledWith('practice')
+    expect(onHighlight).toHaveBeenCalledWith('synonym')
     expect(onSelect).not.toHaveBeenCalled()
   })
 })
