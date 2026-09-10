@@ -172,6 +172,12 @@ export const conversationEventSchema = z.discriminatedUnion('type', [
     delta: z.string()
   }),
   eventBaseSchema.extend({
+    // 思考增量：仅请求等待期临时展示，不进入最终消息或会话历史。
+    type: z.literal('reasoningChunk'),
+    messageId: identifierSchema,
+    delta: z.string()
+  }),
+  eventBaseSchema.extend({
     type: z.literal('completed'),
     message: conversationMessageSchema,
     skillCompletion: z.enum(['complete', 'description_failed', 'description_cancelled']).optional(),

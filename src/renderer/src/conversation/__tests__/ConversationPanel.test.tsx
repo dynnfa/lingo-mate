@@ -110,6 +110,91 @@ describe('ConversationPanel rendering', () => {
   })
 })
 
+describe('ConversationPanel thinking preview', () => {
+  it('shows the thinking placeholder above the body while a draft has no content', () => {
+    renderPanel({
+      messages: [
+        message({ messageId: 'user-1' }),
+        message({
+          messageId: 'assistant-1',
+          role: 'assistant',
+          content: '',
+          streaming: true,
+          reasoning: ''
+        })
+      ],
+      status: { kind: 'generating' },
+      generating: true
+    })
+
+    const preview = screen.getByRole('group', { name: '模型思考过程' })
+    expect(preview).toHaveTextContent('正在思考…')
+    // 占位显示在正文上方
+    const article = document.querySelector('[data-message-id="assistant-1"]')!
+    expect(article.firstElementChild?.nextElementSibling).toBe(preview)
+  })
+
+  it('shows streamed reasoning content instead of the placeholder', () => {
+    renderPanel({
+      messages: [
+        message({
+          messageId: 'assistant-1',
+          role: 'assistant',
+          content: 'Hi',
+          streaming: true,
+          reasoning: '先分析用户输入，再组织回复。'
+        })
+      ]
+    })
+
+    const preview = screen.getByRole('group', { name: '模型思考过程' })
+    expect(preview).toHaveTextContent('先分析用户输入，再组织回复。')
+    expect(preview).not.toHaveTextContent('正在思考…')
+  })
+
+  it('keeps the reasoning preview visible after the body starts streaming', () => {
+    renderPanel({
+      messages: [
+        message({
+          messageId: 'assistant-1',
+          role: 'assistant',
+          content: 'Hi there',
+          streaming: true,
+          reasoning: '已有思考内容'
+        })
+      ]
+    })
+
+    expect(screen.getByRole('group', { name: '模型思考过程' })).toBeInTheDocument()
+  })
+
+  it('removes the preview once the message finishes streaming', () => {
+    renderPanel({
+      messages: [message({ messageId: 'assistant-1', role: 'assistant', content: 'Hi there' })]
+    })
+
+    expect(screen.queryByRole('group', { name: '模型思考过程' })).not.toBeInTheDocument()
+  })
+
+  it('does not show a thinking placeholder for skill drafts', () => {
+    renderPanel({
+      messages: [
+        message({
+          messageId: 'assistant-1',
+          role: 'assistant',
+          content: '',
+          streaming: true
+        })
+      ],
+      status: { kind: 'skillPhase', phase: 'analyzing', skillId: 'vocabulary' },
+      generating: true
+    })
+
+    expect(screen.queryByRole('group', { name: '模型思考过程' })).not.toBeInTheDocument()
+    expect(screen.getByText('正在解析词汇…')).toBeInTheDocument()
+  })
+})
+
 describe('ConversationPanel composer', () => {
   it('waits for the composer to unlock before handling the startup focus request', () => {
     const { view } = renderPanel({ composerFocusRequest: 1, composerLocked: true })

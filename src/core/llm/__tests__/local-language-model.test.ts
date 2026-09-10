@@ -1,33 +1,58 @@
 import { getEventListeners } from 'node:events'
 import { describe, expect, it } from 'vitest'
 import { LocalLanguageModel } from '../local-language-model'
+import type { ModelStreamEvent } from '../language-model'
+
+function input(
+  promptKind?: 'conversation-title'
+): Parameters<LocalLanguageModel['streamReply']>[0] {
+  return {
+    messages: [{ role: 'user' as const, content: 'Hello' }],
+    outputLanguage: 'zh-CN',
+    targetLanguage: 'en',
+    ...(promptKind ? { promptKind } : {}),
+    signal: new AbortController().signal
+  }
+}
+
+async function collect(stream: AsyncIterable<ModelStreamEvent>): Promise<ModelStreamEvent[]> {
+  const events: ModelStreamEvent[] = []
+  for await (const event of stream) events.push(event)
+  return events
+}
+
+function textOf(events: ModelStreamEvent[]): string {
+  return events
+    .filter((event) => event.type === 'text')
+    .map((event) => event.delta)
+    .join('')
+}
 
 describe('LocalLanguageModel', () => {
-  it('removes abort listeners after a streamed reply completes', async () => {
+  it('streams reasoning before the reply text and removes abort listeners afterwards', async () => {
     const controller = new AbortController()
-    const model = new LocalLanguageModel()
-    const chunks: string[] = []
+    const events = await collect(new LocalLanguageModel().streamReply(input()))
 
-    for await (const delta of model.streamReply({
-      messages: [{ role: 'user', content: 'Hello' }],
-      outputLanguage: 'zh-CN',
-      targetLanguage: 'en',
-      signal: controller.signal
-    })) {
-      chunks.push(delta)
-    }
-
-    expect(chunks.length).toBeGreaterThan(0)
+    expect(events.length).toBeGreaterThan(0)
+    // 思考先于正文：首个事件是 reasoning，最后一段是正文
+    expect(events[0].type).toBe('reasoning')
+    expect(events.at(-1)?.type).toBe('text')
+    expect(textOf(events)).toContain('Hello')
     expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0)
+  })
+
+  it('returns only text events for title generation', async () => {
+    const events = await collect(new LocalLanguageModel().streamReply(input('conversation-title')))
+
+    expect(events.every((event) => event.type === 'text')).toBe(true)
+    expect(textOf(events)).toBe('Hello')
   })
 
   it('removes the abort listener when a pending chunk is cancelled', async () => {
     const controller = new AbortController()
     const stream = new LocalLanguageModel()
       .streamReply({
-        messages: [{ role: 'user', content: 'Hello' }],
-        outputLanguage: 'zh-CN',
-        targetLanguage: 'en',
+        ...input(),
         signal: controller.signal
       })
       [Symbol.asyncIterator]()

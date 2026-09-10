@@ -1,6 +1,7 @@
 import { getEventListeners } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RemoteLanguageModel } from '../remote-language-model'
+import type { ModelStreamEvent } from '../language-model'
 import { LlmClient, type CreateLlmClient } from '../llm-client'
 import { LlmUsageRecorder } from '../llm-usage-recorder'
 
@@ -26,10 +27,16 @@ const encoder = new TextEncoder()
 const event = (value: unknown): string => `data: ${JSON.stringify(value)}\n\n`
 const chunk = (content: string | null, finishReason: string | null = null): string =>
   event({ choices: [{ index: 0, delta: { content }, finish_reason: finishReason }] })
+// DeepSeek 系提供方在 delta.reasoning_content 上返回思考增量。
+const reasoningChunk = (reasoning: string | null): string =>
+  event({ choices: [{ index: 0, delta: { reasoning_content: reasoning }, finish_reason: null }] })
 const STOP = chunk(null, 'stop')
 const DONE = 'data: [DONE]\n\n'
 
-function reply(signal = new AbortController().signal, timeoutMs = 1_000): AsyncGenerator<string> {
+function reply(
+  signal = new AbortController().signal,
+  timeoutMs = 1_000
+): AsyncGenerator<ModelStreamEvent> {
   return new RemoteLanguageModel(CONFIG, timeoutMs, createClient).streamReply({
     messages: [{ role: 'user', content: 'Help me practice English.' }],
     outputLanguage: 'zh-CN',
@@ -38,8 +45,8 @@ function reply(signal = new AbortController().signal, timeoutMs = 1_000): AsyncG
   })
 }
 
-async function collect(stream: AsyncIterable<string>): Promise<string[]> {
-  const chunks: string[] = []
+async function collect(stream: AsyncIterable<ModelStreamEvent>): Promise<ModelStreamEvent[]> {
+  const chunks: ModelStreamEvent[] = []
   for await (const chunk of stream) chunks.push(chunk)
   return chunks
 }
@@ -92,7 +99,7 @@ describe('RemoteLanguageModel protocol and lifecycle', () => {
     stallAfterFirstChunk()
     const controller = new AbortController()
     const stream = reply(controller.signal, 20)
-    expect((await stream.next()).value).toBe('first')
+    expect((await stream.next()).value).toEqual({ type: 'text', delta: 'first' })
     let outcome: unknown = 'pending'
     const pending = stream.next().then(
       (value) => {
@@ -153,7 +160,7 @@ describe('RemoteLanguageModel protocol and lifecycle', () => {
         DONE +
         chunk('late')
     )
-    expect(await collect(reply(controller.signal))).toEqual(['Hello'])
+    expect(await collect(reply(controller.signal))).toEqual([{ type: 'text', delta: 'Hello' }])
     expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0)
   })
 
@@ -230,5 +237,54 @@ describe('RemoteLanguageModel protocol and lifecycle', () => {
     controller.abort()
     await expect(reply(controller.signal).next()).rejects.toMatchObject({ name: 'AbortError' })
     expect(fetch).not.toHaveBeenCalled()
+  })
+})
+
+describe('RemoteLanguageModel reasoning separation', () => {
+  it('yields reasoning deltas as reasoning events before the text', async () => {
+    respond(
+      reasoningChunk('Let me think. ') +
+        reasoningChunk('The user practices English.') +
+        chunk('Hello!') +
+        STOP +
+        DONE
+    )
+    expect(await collect(reply())).toEqual([
+      { type: 'reasoning', delta: 'Let me think. ' },
+      { type: 'reasoning', delta: 'The user practices English.' },
+      { type: 'text', delta: 'Hello!' }
+    ])
+  })
+
+  it('emits reasoning before text when one chunk carries both', async () => {
+    respond(
+      event({
+        choices: [
+          { index: 0, delta: { content: 'Hi', reasoning_content: 'think' }, finish_reason: null }
+        ]
+      }) +
+        STOP +
+        DONE
+    )
+    expect(await collect(reply())).toEqual([
+      { type: 'reasoning', delta: 'think' },
+      { type: 'text', delta: 'Hi' }
+    ])
+  })
+
+  it('keeps plain text streams working and ignores empty reasoning strings', async () => {
+    respond(reasoningChunk('') + reasoningChunk(null) + chunk('Hello') + STOP + DONE)
+    expect(await collect(reply())).toEqual([{ type: 'text', delta: 'Hello' }])
+  })
+
+  it('rejects a stream that never produces final text even with reasoning', async () => {
+    // 仅有思考而无有效正文不能视为成功。
+    respond(reasoningChunk('only thoughts here') + STOP + DONE)
+    await expect(collect(reply())).rejects.toMatchObject({ kind: 'PROTOCOL' })
+  })
+
+  it('ignores reasoning that arrives after stop alongside late content', async () => {
+    respond(chunk('Hello') + STOP + reasoningChunk('late thoughts') + chunk('late') + DONE)
+    expect(await collect(reply())).toEqual([{ type: 'text', delta: 'Hello' }])
   })
 })

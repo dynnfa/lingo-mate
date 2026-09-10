@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import type { ConversationEvent, ConversationSummary } from '../../../shared/conversation'
-import type { LanguageModel, StreamReplyInput } from '../../llm/language-model'
+import { conversationEventSchema } from '../../../shared/conversation'
+import type { LanguageModel, ModelStreamEvent, StreamReplyInput } from '../../llm/language-model'
 import { ConfiguredLanguageModel } from '../../llm/configured-language-model'
 import { ModelConfigService } from '../../llm/model-config'
 import { LlmClient, type CreateLlmClient } from '../../llm/llm-client'
@@ -67,18 +68,21 @@ class MemoryConversationRepository implements ConversationRepository {
   }
 }
 
+const textEvent = (delta: string): ModelStreamEvent => ({ type: 'text', delta })
+const reasoningEvent = (delta: string): ModelStreamEvent => ({ type: 'reasoning', delta })
+
 class SuccessfulModel implements LanguageModel {
-  async *streamReply(): AsyncIterable<string> {
-    yield 'Hi'
-    yield ' there'
+  async *streamReply(): AsyncIterable<ModelStreamEvent> {
+    yield textEvent('Hi')
+    yield textEvent(' there')
   }
 }
 
 // 迭代器第一次 next() 即抛错，模拟首 chunk 前的模型失败。
 class ImmediateFailureModel implements LanguageModel {
-  streamReply(): AsyncIterable<string> {
-    const iterator: AsyncIterator<string> = {
-      async next(): Promise<IteratorResult<string>> {
+  streamReply(): AsyncIterable<ModelStreamEvent> {
+    const iterator: AsyncIterator<ModelStreamEvent> = {
+      async next(): Promise<IteratorResult<ModelStreamEvent>> {
         throw new Error('model unavailable')
       }
     }
@@ -87,9 +91,9 @@ class ImmediateFailureModel implements LanguageModel {
 }
 
 class MidStreamFailureModel implements LanguageModel {
-  async *streamReply(): AsyncIterable<string> {
-    yield 'par'
-    yield 'tial'
+  async *streamReply(): AsyncIterable<ModelStreamEvent> {
+    yield textEvent('par')
+    yield textEvent('tial')
     throw new Error('model crashed mid-stream')
   }
 }
@@ -113,14 +117,14 @@ function abortOnSignal(signal: AbortSignal): Promise<void> {
 class BlockingOnceModel implements LanguageModel {
   private calls = 0
 
-  async *streamReply({ signal }: StreamReplyInput): AsyncIterable<string> {
+  async *streamReply({ signal }: StreamReplyInput): AsyncIterable<ModelStreamEvent> {
     this.calls += 1
     if (this.calls === 1) {
-      yield 'partial'
+      yield textEvent('partial')
       await abortOnSignal(signal)
       return
     }
-    yield 'Hi there'
+    yield textEvent('Hi there')
   }
 }
 
@@ -752,6 +756,121 @@ describe('ConversationModule', () => {
     })
   })
 
+  describe('reasoning stream separation', () => {
+    class ReasoningModel implements LanguageModel {
+      async *streamReply(input: StreamReplyInput): AsyncIterable<ModelStreamEvent> {
+        if (input.promptKind === 'conversation-title') {
+          // 标题生成是纯正文消费者：即使提供方返回思考也应忽略。
+          yield reasoningEvent('title thoughts must be ignored')
+          yield textEvent('Coffee practice')
+          return
+        }
+        yield reasoningEvent('思考第一段。')
+        yield reasoningEvent('思考第二段。')
+        yield textEvent('Hi')
+        yield textEvent(' there')
+      }
+    }
+
+    it('forwards reasoning deltas separately and keeps them out of the final message', async () => {
+      const repository = new MemoryConversationRepository()
+      const module = new ConversationModule(new ReasoningModel(), repository)
+      const { sessionId } = await repository.seedConversation()
+
+      const events = await new Promise<ConversationEvent[]>((resolve) => {
+        const collected: ConversationEvent[] = []
+        void module
+          .sendMessage({ requestId: REQUEST_ID, sessionId, text: 'Hello' }, (event) => {
+            collected.push(event)
+            if (event.type === 'completed' || event.type === 'failed' || event.type === 'cancelled')
+              resolve(collected)
+          })
+          .then(() => undefined)
+      })
+
+      expect(events.map((event) => event.type)).toEqual([
+        'started',
+        'reasoningChunk',
+        'reasoningChunk',
+        'chunk',
+        'chunk',
+        'completed'
+      ])
+      const started = events[0]
+      if (started.type !== 'started') throw new Error('expected started event')
+      const reasoningChunks = events.filter((event) => event.type === 'reasoningChunk')
+      for (const chunk of reasoningChunks) {
+        expect(chunk.messageId).toBe(started.assistantMessageId)
+        // 事件载荷通过共享 schema 校验（reasoningChunk 属于合法事件协议）。
+        expect(() => conversationEventSchema.parse(chunk)).not.toThrow()
+      }
+
+      // 思考只作临时展示：不进入最终消息、持久化历史与后续模型上下文。
+      const completed = events.at(-1)
+      if (completed?.type !== 'completed') throw new Error('expected completed event')
+      expect(completed.message.content).toBe('Hi there')
+      const persisted = repository.messages.find((message) => message.role === 'assistant')
+      expect(persisted?.content).toBe('Hi there')
+      expect(JSON.stringify(repository.messages)).not.toContain('思考第一段')
+    })
+
+    it('cancels during the reasoning phase without persisting anything', async () => {
+      const repository = new MemoryConversationRepository()
+      class ReasoningThenBlockModel implements LanguageModel {
+        async *streamReply({ signal }: StreamReplyInput): AsyncIterable<ModelStreamEvent> {
+          yield reasoningEvent('思考中…')
+          await abortOnSignal(signal)
+        }
+      }
+      const module = new ConversationModule(new ReasoningThenBlockModel(), repository)
+      const { sessionId } = await repository.seedConversation()
+
+      const events = await new Promise<ConversationEvent[]>((resolve) => {
+        const collected: ConversationEvent[] = []
+        void module
+          .sendMessage({ requestId: REQUEST_ID, sessionId, text: 'Hello' }, (event) => {
+            collected.push(event)
+            if (event.type === 'reasoningChunk') module.cancelMessage(REQUEST_ID)
+            if (event.type === 'cancelled') resolve(collected)
+          })
+          .then(() => undefined)
+      })
+
+      expect(events.map((event) => event.type)).toEqual(['started', 'reasoningChunk', 'cancelled'])
+      expect(repository.messages.map(({ role }) => role)).toEqual(['user'])
+    })
+
+    it('uses only text deltas for the background title generation', async () => {
+      const repository = new MemoryConversationRepository()
+      const module = new ConversationModule(new ReasoningModel(), repository)
+      const summary = await module.createConversation()
+
+      await new Promise<void>((resolve) => {
+        void module
+          .sendMessage(
+            { requestId: REQUEST_ID, sessionId: summary.sessionId, text: 'Coffee' },
+            () => undefined
+          )
+          .then(() => undefined)
+        const interval = setInterval(() => {
+          const conversation = repository.conversations.find(
+            (candidate) => candidate.id === summary.sessionId
+          )
+          if (conversation?.title) {
+            clearInterval(interval)
+            resolve()
+          }
+        }, 5)
+      })
+
+      const conversation = repository.conversations.find(
+        (candidate) => candidate.id === summary.sessionId
+      )
+      // 标题只由正文增量组成，思考增量被标题消费者忽略。
+      expect(conversation?.title).toBe('Coffee practice')
+    })
+  })
+
   describe('retry', () => {
     async function cancelAfterFirstChunk(
       module: ConversationModule,
@@ -898,9 +1017,9 @@ describe('ConversationModule', () => {
     class RecordingModel implements LanguageModel {
       readonly inputs: StreamReplyInput[] = []
 
-      async *streamReply(input: StreamReplyInput): AsyncIterable<string> {
+      async *streamReply(input: StreamReplyInput): AsyncIterable<ModelStreamEvent> {
         this.inputs.push(input)
-        yield '解释'
+        yield textEvent('解释')
       }
     }
 
@@ -909,15 +1028,15 @@ describe('ConversationModule', () => {
       readonly inputs: StreamReplyInput[] = []
       private calls = 0
 
-      async *streamReply(input: StreamReplyInput): AsyncIterable<string> {
+      async *streamReply(input: StreamReplyInput): AsyncIterable<ModelStreamEvent> {
         this.inputs.push(input)
         this.calls += 1
         if (this.calls === 1) {
-          yield 'partial'
+          yield textEvent('partial')
           await abortOnSignal(input.signal)
           return
         }
-        yield 'retried'
+        yield textEvent('retried')
       }
     }
 
@@ -1028,9 +1147,9 @@ describe('ConversationModule', () => {
     class RecordingModel implements LanguageModel {
       readonly inputs: StreamReplyInput[] = []
 
-      async *streamReply(input: StreamReplyInput): AsyncIterable<string> {
+      async *streamReply(input: StreamReplyInput): AsyncIterable<ModelStreamEvent> {
         this.inputs.push(input)
-        yield 'Hi'
+        yield textEvent('Hi')
       }
     }
 
@@ -1039,15 +1158,15 @@ describe('ConversationModule', () => {
       readonly inputs: StreamReplyInput[] = []
       private calls = 0
 
-      async *streamReply(input: StreamReplyInput): AsyncIterable<string> {
+      async *streamReply(input: StreamReplyInput): AsyncIterable<ModelStreamEvent> {
         this.inputs.push(input)
         this.calls += 1
         if (this.calls === 1) {
-          yield 'partial'
+          yield textEvent('partial')
           await abortOnSignal(input.signal)
           return
         }
-        yield 'retried'
+        yield textEvent('retried')
       }
     }
 

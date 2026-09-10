@@ -20,6 +20,11 @@ export interface StreamReplyInput {
   signal: AbortSignal
 }
 
+// 模型流的可判别事件：text 是最终回复正文的增量，reasoning 是提供方
+// 返回的思考文本或思考摘要增量，仅供等待期临时展示，不属于回复正文。
+export type ModelStreamEvent =
+  { type: 'text'; delta: string } | { type: 'reasoning'; delta: string }
+
 export interface LanguageModel {
-  streamReply(input: StreamReplyInput): AsyncIterable<string>
+  streamReply(input: StreamReplyInput): AsyncIterable<ModelStreamEvent>
 }

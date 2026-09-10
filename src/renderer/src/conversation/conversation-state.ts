@@ -10,12 +10,16 @@ import type {
 
 // Renderer 侧投影的消息：以 canonical messageId 为唯一身份与 React key，
 // requestId 只存在于 activeRequests 索引，不允许进入消息实体。
+// reasoning 是流式期间的临时思考预览缓冲：'' 表示已启用、等待首个思考或
+// 正文增量（显示占位），undefined 表示不展示（技能请求，或正文已开始且
+// 一直没有思考内容）；终态后一律移除。
 export interface DisplayMessage {
   messageId: string
   role: 'user' | 'assistant'
   content: string
   streaming: boolean
   retryable: boolean
+  reasoning?: string
 }
 
 interface ActiveGeneration {
@@ -141,6 +145,37 @@ export function isGenerating(state: ConversationState): boolean {
   return Object.keys(state.activeRequests).length > 0
 }
 
+// 思考预览的有界尾部缓冲上限（Unicode 码点）：超限后只保留最新内容，
+// 与组件层的三行视觉限制分别实现。
+export const REASONING_PREVIEW_MAX_CODE_POINTS = 4_000
+
+// 追加思考增量并在超限时裁剪到尾部：按 Unicode 码点数计不超过上限；
+// 裁剪先按码元粗剪（码点数 ≤ 2 倍上限的窗口）避免展开超长增量，
+// 并避让被截断的代理对。
+function appendReasoningDelta(current: string, delta: string): string {
+  const next = current + delta
+  // 快速路径：码元数不超过上限时，码点数必然也不超过上限。
+  if (next.length <= REASONING_PREVIEW_MAX_CODE_POINTS) return next
+  let window =
+    next.length > REASONING_PREVIEW_MAX_CODE_POINTS * 2
+      ? next.slice(next.length - REASONING_PREVIEW_MAX_CODE_POINTS * 2)
+      : next
+  const leadingUnit = window.charCodeAt(0)
+  if (leadingUnit >= 0xdc00 && leadingUnit <= 0xdfff) window = window.slice(1)
+  const codePoints = [...window]
+  if (codePoints.length <= REASONING_PREVIEW_MAX_CODE_POINTS) return codePoints.join('')
+  return codePoints.slice(-REASONING_PREVIEW_MAX_CODE_POINTS).join('')
+}
+
+// 从消息内容派生技能身份；命令前缀是 canonical 数据，不依赖内存标记。
+// /concept 是普通对话流（概念讲解提示词），不属于技能。
+function skillCommandOf(content: string): ConversationSkillId | undefined {
+  if (content.startsWith('/synonym ')) return 'synonym'
+  if (content.startsWith('/phrase ')) return 'phrase'
+  if (content.startsWith('/vocabulary ')) return 'vocabulary'
+  return undefined
+}
+
 // 从活动请求对应的 user 消息内容派生技能身份；命令前缀是 canonical 数据，
 // 不依赖 Renderer 侧的内存标记。
 function skillOfRequest(
@@ -150,10 +185,7 @@ function skillOfRequest(
   const content = state.messages.find(
     (message) => message.messageId === active.userMessageId
   )?.content
-  if (content?.startsWith('/synonym ')) return 'synonym'
-  if (content?.startsWith('/phrase ')) return 'phrase'
-  if (content?.startsWith('/vocabulary ')) return 'vocabulary'
-  return undefined
+  return content ? skillCommandOf(content) : undefined
 }
 
 // 加载历史时，最后一条没有 assistant 回复的 user 消息投影为可重试，
@@ -194,7 +226,10 @@ function applyGenerationStarted(
     role: 'assistant',
     content: '',
     streaming: true,
-    retryable: false
+    retryable: false,
+    // 普通对话流（含 /concept）启用思考预览占位；技能请求沿用既有
+    // 阶段状态展示，不显示思考占位。
+    ...(skillCommandOf(generation.userMessage.content) ? {} : { reasoning: '' })
   })
 
   return {
@@ -234,6 +269,23 @@ function applyEvent(state: ConversationState, event: ConversationEvent): Convers
       }
     }
 
+    case 'reasoningChunk': {
+      const active = state.activeRequests[event.requestId]
+      if (!active) return state
+      if (event.messageId !== active.assistantMessageId) {
+        return { ...state, status: { kind: 'protocolError' } }
+      }
+      // 空增量不改变占位状态；有效思考可在正文开始后重新显示预览。
+      if (event.delta.length === 0) return state
+
+      const messages = state.messages.map((message) =>
+        message.messageId === event.messageId && message.streaming
+          ? { ...message, reasoning: appendReasoningDelta(message.reasoning ?? '', event.delta) }
+          : message
+      )
+      return { ...state, messages }
+    }
+
     case 'chunk': {
       const active = state.activeRequests[event.requestId]
       if (!active) return state
@@ -241,11 +293,14 @@ function applyEvent(state: ConversationState, event: ConversationEvent): Convers
         return { ...state, status: { kind: 'protocolError' } }
       }
 
-      const messages = state.messages.map((message) =>
-        message.messageId === event.messageId && message.streaming
-          ? { ...message, content: message.content + event.delta }
-          : message
-      )
+      const messages = state.messages.map((message) => {
+        if (message.messageId !== event.messageId || !message.streaming) return message
+        const next: DisplayMessage = { ...message, content: message.content + event.delta }
+        // 第一段正文到达时撤下无内容的思考占位；已有思考内容的预览
+        // 保留至请求完成。
+        if (message.reasoning === '') delete next.reasoning
+        return next
+      })
       return { ...state, messages }
     }
 

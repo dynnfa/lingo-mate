@@ -31,6 +31,10 @@
     "synonymRequired": "Enter English words after /synonym, separated by commas.",
     "synonymHint": "Example: /synonym adequate, decent. Previously saved words are skipped."
   },
+  "thinking": {
+    "label": "Model thinking",
+    "placeholder": "Thinking…"
+  },
   "actionPicker": {
     "listLabel": "Available actions",
     "empty": "No matching actions",

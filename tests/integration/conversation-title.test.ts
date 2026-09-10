@@ -63,8 +63,8 @@ describe('first-message conversation titles', () => {
         calls.push(input)
         if (input.promptKind === 'conversation-title') {
           await finishTitle.promise
-          yield 'Coffee practice'
-        } else yield 'What would you like?'
+          yield { type: 'text' as const, delta: 'Coffee practice' }
+        } else yield { type: 'text' as const, delta: 'What would you like?' }
       }
     })
     const { sessionId } = await module.createConversation()
@@ -85,7 +85,10 @@ describe('first-message conversation titles', () => {
     async (title) => {
       const { module, repository } = setup({
         async *streamReply(input) {
-          yield input.promptKind === 'conversation-title' ? title : 'Reply'
+          yield {
+            type: 'text' as const,
+            delta: input.promptKind === 'conversation-title' ? title : 'Reply'
+          }
         }
       })
       const { sessionId } = await module.createConversation()
@@ -99,10 +102,10 @@ describe('first-message conversation titles', () => {
     const { module, repository } = setup({
       async *streamReply(input) {
         if (input.promptKind === 'conversation-title') {
-          yield 'Partial'
+          yield { type: 'text' as const, delta: 'Partial' }
           throw new Error('network failed')
         }
-        yield 'Reply'
+        yield { type: 'text' as const, delta: 'Reply' }
       }
     })
     const { sessionId } = await module.createConversation()
@@ -116,7 +119,7 @@ describe('first-message conversation titles', () => {
     const { module, repository } = setup({
       async *streamReply() {
         await gate.promise
-        yield 'Coffee practice'
+        yield { type: 'text' as const, delta: 'Coffee practice' }
       }
     })
     const { sessionId } = await module.createConversation()
@@ -133,7 +136,7 @@ describe('first-message conversation titles', () => {
   it('rolls back conversation creation when writing the first message fails', async () => {
     const { module, repository, database } = setup({
       async *streamReply() {
-        yield 'Coffee practice'
+        yield { type: 'text' as const, delta: 'Coffee practice' }
       }
     })
     const { sessionId } = await module.createConversation()

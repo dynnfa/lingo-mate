@@ -212,8 +212,8 @@ describe('models integration with a fake OpenAI-compatible service', () => {
     signal = new AbortController().signal
   ): Promise<string> {
     let text = ''
-    for await (const delta of model.streamReply(STREAM_INPUT(signal))) {
-      text += delta
+    for await (const event of model.streamReply(STREAM_INPUT(signal))) {
+      if (event.type === 'text') text += event.delta
     }
     return text
   }
@@ -408,7 +408,7 @@ describe('models integration with a fake OpenAI-compatible service', () => {
 
     releaseStreamStart()
     const streamed = await firstChunk
-    expect(streamed.value).toBe('late')
+    expect(streamed.value).toEqual({ type: 'text', delta: 'late' })
     // 排空旧流
     await iterator.next()
 
