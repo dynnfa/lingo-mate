@@ -9,7 +9,7 @@ import { PracticePage } from '../PracticePage'
 // 组件测试固定 zh-CN 渲染，英文用例内切换语言；断言基于真实资源文本。
 const i18n = createI18n('zh-CN')
 
-vi.mock('../VocabularyPracticeDetail', () => ({
+vi.mock('../vocabulary/VocabularyPracticeDetail', () => ({
   VocabularyPracticeDetail: (): React.JSX.Element => (
     <section data-testid="vocabulary-practice-detail" />
   )

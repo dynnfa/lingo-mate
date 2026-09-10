@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { VocabularyPracticeDetail } from './VocabularyPracticeDetail'
+import { VocabularyPracticeDetail } from './vocabulary/VocabularyPracticeDetail'
 
 interface PracticePageProps {
   onExit: () => void

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { PhraseDetail } from './PhraseDetail'
-import { SynonymDetail } from './SynonymDetail'
-import { VocabularyDetail } from './VocabularyDetail'
+import { PhraseDetail } from './phrase/PhraseDetail'
+import { SynonymDetail } from './synonym/SynonymDetail'
+import { VocabularyDetail } from './vocabulary/VocabularyDetail'
 
 interface RecordedPageProps {
   onExit: () => void
