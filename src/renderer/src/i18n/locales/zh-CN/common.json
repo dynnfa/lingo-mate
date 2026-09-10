@@ -217,7 +217,40 @@
   "practice": {
     "title": "开始练习",
     "back": "返回",
-    "menuLabel": "练习菜单"
+    "menuLabel": "练习菜单",
+    "sections": {
+      "vocabulary": "词汇练习"
+    },
+    "vocabulary": {
+      "detailTitle": "词汇练习",
+      "countLabel": "练习单词数量",
+      "confirm": "确认",
+      "loading": "正在抽取单词…",
+      "idleTitle": "准备好开始了吗？",
+      "idleBody": "输入练习单词数量并确认，从词库中随机抽取单词开始练习。",
+      "emptyTitle": "还没有可练习的词汇",
+      "emptyBody": "在对话中使用 /vocabulary 命令收藏单词后，即可在这里练习。",
+      "countShort": "词库中只有 {{count}} 个词，已全部加入本轮练习。",
+      "countErrorRequired": "请输入练习单词数量。",
+      "countErrorInvalid": "请输入 1 到 50 之间的整数。",
+      "startFailedTitle": "抽取单词失败",
+      "submit": "提交审查",
+      "submitBlockedTitle": "还有未填写的释义",
+      "submitBlockedBody": "请为每个单词填写释义后再提交审查。",
+      "reviewing": "正在审查答案…",
+      "cancelReview": "取消审查",
+      "reviewFailedTitle": "审查失败",
+      "cancelledNotice": "审查已取消，答案已保留，可修改后重新提交。",
+      "verdictAllCorrect": "全部正确！",
+      "verdictHasErrors": "存在错误，已在下方标出。",
+      "markedIconLabel": "错误",
+      "editAfterReviewNotice": "修改任意答案后需重新提交审查。",
+      "confirmNewRoundTitle": "开始新一轮练习",
+      "confirmNewRoundBody": "当前答案尚未提交审查，开始新一轮将清空这些答案。",
+      "confirmNewRoundCancel": "继续作答",
+      "confirmNewRoundConfirm": "开始新一轮",
+      "answerLabel": "{{term}} 的释义"
+    }
   },
   "preferences": {
     "startupError": "无法读取语言偏好，已使用默认语言。",

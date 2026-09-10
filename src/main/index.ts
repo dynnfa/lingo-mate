@@ -52,6 +52,10 @@ import { LlmUsageStatisticsService } from '../core/llm/llm-usage-statistics'
 import { registerUsageIpc } from './usage-ipc'
 import { registerVocabularyIpc } from './vocabulary-ipc'
 import { VocabularyManagementService } from '../core/learning/vocabulary/vocabulary-management'
+import { registerVocabularyPracticeIpc } from './vocabulary-practice-ipc'
+import { VocabularyPracticeService } from '../core/learning/vocabulary-practice/vocabulary-practice-service'
+import { VocabularyPracticeError } from '../core/learning/vocabulary-practice/parse-vocabulary-practice-input'
+import { LlmVocabularyPracticeReviewer } from '../core/llm/llm-vocabulary-practice-reviewer'
 import { registerPhraseIpc } from './phrase-ipc'
 import { PhraseManagementService } from '../core/learning/phrase/phrase-management'
 import { registerSynonymIpc } from './synonym-ipc'
@@ -59,6 +63,7 @@ import { SynonymManagementService } from '../core/learning/synonym/synonym-manag
 
 let database: Database.Database | undefined
 let conversationModule: ConversationModule | undefined
+let vocabularyPracticeService: VocabularyPracticeService | undefined
 
 // 加载目标与 IPC 来源白名单使用同一地址，开发模式也只信任指定文档。
 const rendererUrl =
@@ -182,6 +187,32 @@ app.whenReady().then(() => {
   // 已记录页的词汇列表与删除：复用同一仓储，经管理服务暴露窄接口；
   // 删除只作用于 vocabulary 记录，不改写历史会话与收藏批次报告。
   registerVocabularyIpc(new VocabularyManagementService(vocabularyRepository), rendererUrl)
+  // 词汇练习：同一词库仓储随机抽词，审查按请求解析模型快照；练习与审查
+  // 状态只保存在内存会话中，不落库。解释语言跟随当前界面语言。
+  vocabularyPracticeService = new VocabularyPracticeService(vocabularyRepository, () => {
+    try {
+      return new LlmVocabularyPracticeReviewer(
+        modelsService.resolveSnapshot(),
+        30_000,
+        createLlmClient
+      )
+    } catch (cause) {
+      throw new VocabularyPracticeError(
+        cause instanceof ModelNotConfiguredError
+          ? 'MODEL_NOT_CONFIGURED'
+          : cause instanceof ModelConfigValidationError &&
+              cause.code === 'CREDENTIAL_DECRYPT_FAILED'
+            ? 'CREDENTIAL_DECRYPT_FAILED'
+            : 'MODEL_ERROR',
+        { cause }
+      )
+    }
+  })
+  registerVocabularyPracticeIpc(
+    vocabularyPracticeService,
+    () => resolveLanguages().outputLanguage,
+    rendererUrl
+  )
   const vocabularySkill = new VocabularyConversationSkill(
     vocabularyRepository,
     () => ({
@@ -257,6 +288,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   conversationModule?.dispose()
+  vocabularyPracticeService?.dispose()
   database?.close()
   database = undefined
 })

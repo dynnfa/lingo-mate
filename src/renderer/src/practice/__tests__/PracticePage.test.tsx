@@ -9,6 +9,12 @@ import { PracticePage } from '../PracticePage'
 // 组件测试固定 zh-CN 渲染，英文用例内切换语言；断言基于真实资源文本。
 const i18n = createI18n('zh-CN')
 
+vi.mock('../VocabularyPracticeDetail', () => ({
+  VocabularyPracticeDetail: (): React.JSX.Element => (
+    <section data-testid="vocabulary-practice-detail" />
+  )
+}))
+
 function renderPage(onExit: () => void = vi.fn()): () => void {
   render(
     <I18nextProvider i18n={i18n}>
@@ -24,15 +30,17 @@ afterEach(() => {
 })
 
 describe('PracticePage', () => {
-  it('renders the page with an empty menu and detail container', () => {
+  it('renders the menu with vocabulary selected by default and its detail', () => {
     renderPage()
 
     expect(screen.getByRole('main', { name: '开始练习' })).toBeInTheDocument()
     const menu = screen.getByRole('navigation', { name: '练习菜单' })
-    expect(within(menu).queryAllByRole('button')).toHaveLength(0)
-    const detail = document.querySelector('.practice-detail')
-    expect(detail).toBeInstanceOf(HTMLElement)
-    expect(detail).toBeEmptyDOMElement()
+    const items = within(menu).getAllByRole('button')
+    expect(items).toHaveLength(1)
+    expect(items[0]).toHaveTextContent('词汇练习')
+    expect(items[0]).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByTestId('vocabulary-practice-detail')).toBeInTheDocument()
+    expect(document.querySelector('.practice-detail')).not.toBeEmptyDOMElement()
   })
 
   it('exits through the back button and Escape', () => {
@@ -61,8 +69,7 @@ describe('PracticePage', () => {
 
     expect(screen.getByRole('main', { name: 'Start practicing' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
-    expect(
-      within(screen.getByRole('navigation', { name: 'Practice menu' })).queryAllByRole('button')
-    ).toHaveLength(0)
+    const menu = screen.getByRole('navigation', { name: 'Practice menu' })
+    expect(within(menu).getAllByRole('button', { name: 'Vocabulary practice' })).toHaveLength(1)
   })
 })

@@ -153,6 +153,17 @@ export class SqliteVocabularyRepository implements VocabularyRepository {
     })
   }
 
+  // 练习抽词：count 只作为绑定参数参与 LIMIT，随机排序由 SQLite 完成；
+  // 主键保证行不重复，词库不足时返回全部可用行。
+  sampleRandom(count: number): VocabularyEntry[] {
+    if (!Number.isInteger(count) || count < 1) throw new Error('Invalid sample count')
+    return this.withStorage(() =>
+      (
+        this.database.prepare(`${SELECT_ROWS} ORDER BY RANDOM() LIMIT ?`).all(count) as unknown[]
+      ).map(fromRow)
+    )
+  }
+
   deleteById(id: string): boolean {
     // id 只作为绑定参数参与参数化删除；不存在时 changes 为 0，返回幂等结果。
     return this.withStorage(() => {

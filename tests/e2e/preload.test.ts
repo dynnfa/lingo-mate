@@ -40,8 +40,18 @@ test('exposes the conversation skill and preferences interfaces from the sandbox
         'preferences',
         'synonym',
         'usage',
-        'vocabulary'
+        'vocabulary',
+        'vocabularyPractice'
       ])
+
+      // 词汇练习窄接口：只暴露开始、审查与取消，不暴露通用 invoke 或会话内部状态
+      const exposedVocabularyPracticeKeys = await window.evaluate(() =>
+        Object.keys(
+          (globalThis as typeof globalThis & { api?: { vocabularyPractice?: object } }).api
+            ?.vocabularyPractice ?? {}
+        ).sort()
+      )
+      expect(exposedVocabularyPracticeKeys).toEqual(['cancel', 'review', 'start'])
 
       // 用量窄接口：只暴露聚合读取，不暴露通用 invoke 或任意时间范围
       const exposedUsageKeys = await window.evaluate(() =>

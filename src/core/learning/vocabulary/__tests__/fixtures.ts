@@ -80,6 +80,11 @@ export function memoryRepository(): VocabularyRepository & { commands: Vocabular
     saveBatch: save,
     saveBatchWithResult: (_executionId, values, finalize) => finalize(save(values)),
     list: () => ({ entries: commands.map((command) => toEntry(command.parameters)) }),
+    sampleRandom: (count) => {
+      // 测试内存仓储的抽词：按存储顺序截取，不引入随机性以保证用例可复现。
+      const entries = commands.map((command) => toEntry(command.parameters))
+      return entries.slice(0, Math.max(0, count))
+    },
     deleteById: (id) => {
       const index = commands.findIndex((command) => command.parameters.id === id)
       if (index === -1) return false

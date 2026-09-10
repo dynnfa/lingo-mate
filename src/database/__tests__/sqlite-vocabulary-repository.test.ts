@@ -439,3 +439,75 @@ describe('vocabulary repository on the v5 schema', () => {
     )
   })
 })
+
+describe('vocabulary practice sampling', () => {
+  // 直接 SQL 插入：插入命令要求 meaning 非空，而抽词测试需要历史 NULL 行。
+  function seeded(words: Array<{ term: string; meaning: string | null }>): {
+    repository: SqliteVocabularyRepository
+    database: Database.Database
+  } {
+    const database = open()
+    const insert = database.prepare(
+      `INSERT INTO vocabulary
+       (id, term, phonetic, meaning, concept, example_sentences, model_id, prompt_version, created_at)
+       VALUES (?, ?, NULL, ?, NULL, NULL, 'fixture-model', 'vocabulary-tools-v2', ?)`
+    )
+    words.forEach((word, index) => {
+      insert.run(
+        `10000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+        word.term,
+        word.meaning,
+        `2026-09-07T0${index}:00:00.000Z`
+      )
+    })
+    return { repository: new SqliteVocabularyRepository(database), database }
+  }
+
+  it('returns unique random entries bounded by the requested count', () => {
+    const { repository } = seeded([
+      { term: 'apple', meaning: '苹果' },
+      { term: 'banana', meaning: '香蕉' },
+      { term: 'orange', meaning: '橙子' },
+      { term: 'peach', meaning: '桃子' },
+      { term: 'grape', meaning: null }
+    ])
+    const sampled = repository.sampleRandom(3)
+    expect(sampled).toHaveLength(3)
+    const ids = new Set(sampled.map((entry) => entry.id))
+    expect(ids.size).toBe(3)
+    for (const entry of sampled) {
+      expect(['apple', 'banana', 'orange', 'peach', 'grape']).toContain(entry.term)
+    }
+    // 连续抽样同样不出现重复 ID
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const again = repository.sampleRandom(5)
+      expect(new Set(again.map((entry) => entry.id)).size).toBe(5)
+    }
+  })
+
+  it('returns every entry once when the vocabulary is smaller than requested', () => {
+    const { repository } = seeded([
+      { term: 'apple', meaning: '苹果' },
+      { term: 'banana', meaning: null }
+    ])
+    const sampled = repository.sampleRandom(10)
+    expect(sampled.map((entry) => entry.term).sort()).toEqual(['apple', 'banana'])
+    // 历史 NULL meaning 原样保留，不阻断抽词
+    expect(sampled.find((entry) => entry.term === 'banana')?.meaning).toBeNull()
+  })
+
+  it('returns an empty array for an empty vocabulary', () => {
+    const database = open()
+    const repository = new SqliteVocabularyRepository(database)
+    expect(repository.sampleRandom(5)).toEqual([])
+  })
+
+  it('rejects invalid counts and wraps storage failures as STORAGE_FAILED', () => {
+    const { repository, database } = seeded([{ term: 'apple', meaning: '苹果' }])
+    expect(() => repository.sampleRandom(0)).toThrow()
+    expect(() => repository.sampleRandom(-1)).toThrow()
+    expect(() => repository.sampleRandom(1.5)).toThrow()
+    database.exec('DROP TABLE vocabulary')
+    expect(() => repository.sampleRandom(1)).toThrow('STORAGE_FAILED')
+  })
+})
