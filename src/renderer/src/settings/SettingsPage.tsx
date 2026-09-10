@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { TargetLanguageSection } from '../preferences/TargetLanguageSection'
-import { UiLanguageSection } from '../preferences/UiLanguageSection'
-import { ModelsSettings } from './ModelsSettings'
-import { useModelsSettings } from './useModelsSettings'
-import { UsageSettings } from './UsageSettings'
-import { useUsageStatistics } from './useUsageStatistics'
+import { TargetLanguageSection } from './target-language/TargetLanguageSection'
+import { UiLanguageSection } from './ui-language/UiLanguageSection'
+import { ModelsSettings } from './models/ModelsSettings'
+import { useModelsSettings } from './models/useModelsSettings'
+import { UsageSettings } from './usage/UsageSettings'
+import { useUsageStatistics } from './usage/useUsageStatistics'
 
 // 设置区块注册表：新增设置时在此追加条目，左侧菜单随之扩展。
 // 详情区各区块保持挂载并用 hidden 隐藏，模型草稿在菜单切换间不丢失。

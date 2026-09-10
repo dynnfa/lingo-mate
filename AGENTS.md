@@ -65,6 +65,8 @@ Renderer 必须视为纯浏览器环境，不得直接导入或调用任何 Elec
 
 业务规则应下沉到 Agent Engine，不要隐藏在 React 组件中。
 
+页面目录按 menu 组织：根目录只保留外层页面容器及其 `__tests__/`，每个 menu 使用独立子目录（如 `recorded/phrase/`、`settings/models/`），收拢该 menu 的组件、hooks 和辅助函数。menu 专属测试放在对应子目录的 `__tests__/` 中。跨 menu 或应用级公共能力按实际职责存放，不复制到各 menu，也不归入某个单独 menu。
+
 ### `src/core`
 
 负责与界面无关的 Agent Engine 和语言学习业务逻辑，按以下领域拆分：
