@@ -219,7 +219,8 @@
     "back": "返回",
     "menuLabel": "练习菜单",
     "sections": {
-      "vocabulary": "词汇练习"
+      "vocabulary": "词汇练习",
+      "sentence": "造句练习"
     },
     "vocabulary": {
       "detailTitle": "词汇练习",
@@ -252,6 +253,48 @@
       "confirmNewRoundCancel": "继续作答",
       "confirmNewRoundConfirm": "开始新一轮",
       "answerLabel": "{{term}} 的释义"
+    },
+    "sentence": {
+      "detailTitle": "造句练习",
+      "newRound": "换一组",
+      "loading": "正在抽取单词…",
+      "emptyTitle": "词库中的单词还不够",
+      "emptyCount": "词库中只有 {{count}} 个单词，造句练习需要 3 个。",
+      "emptyBody": "先在对话中用 /vocabulary 记录单词，再回来练习。",
+      "startFailedTitle": "抽取单词失败",
+      "wordsLabel": "需要使用的单词",
+      "hintsLabel": "短语提示",
+      "hintsLoading": "正在生成提示…",
+      "hintsFailedTitle": "提示生成失败",
+      "hintsRetry": "重新生成提示",
+      "answerLabel": "你的句子",
+      "answerPlaceholder": "使用上面的三个单词完成造句，可以写一句或数句连贯的话…",
+      "submit": "提交点评",
+      "submitBlockedTitle": "还没有作答",
+      "submitBlockedBody": "先使用这三个单词写出句子，再提交点评。",
+      "cancel": "取消",
+      "reviewing": "正在点评你的句子…",
+      "reviewFailedTitle": "点评失败",
+      "cancelledNotice": "已取消。单词、提示和你的答案已保留。",
+      "reviewTitle": "点评结果",
+      "allPassed": "全部正确！",
+      "usageLabel": "单词使用情况",
+      "usageCorrect": "使用正确",
+      "usageIncorrect": "用法有误",
+      "usageMissing": "未使用",
+      "fluencyLabel": "通顺度",
+      "fluencyNatural": "通顺自然",
+      "fluencyUnnatural": "不够自然",
+      "grammarLabel": "语法",
+      "grammarCorrect": "语法正确",
+      "grammarIncorrect": "语法有误",
+      "summaryLabel": "总评",
+      "revisedAnswerLabel": "建议改写",
+      "editAfterReviewNotice": "修改答案后需重新提交点评。",
+      "confirmNewRoundTitle": "换一组单词",
+      "confirmNewRoundBody": "当前答案尚未提交。换一组将清空提示、答案和点评。",
+      "confirmNewRoundCancel": "继续作答",
+      "confirmNewRoundConfirm": "换一组"
     }
   },
   "preferences": {

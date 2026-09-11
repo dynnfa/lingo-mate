@@ -1,14 +1,21 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { SentencePracticeDetail } from './sentence/SentencePracticeDetail'
 import { VocabularyPracticeDetail } from './vocabulary/VocabularyPracticeDetail'
 
 interface PracticePageProps {
   onExit: () => void
 }
 
-type PracticeSection = 'vocabulary'
+type PracticeSection = 'vocabulary' | 'sentence'
 
-// 练习页骨架：左侧菜单当前只有“词汇练习”一项（默认选中），右侧渲染对应详情。
+const PRACTICE_SECTIONS = [
+  'vocabulary',
+  'sentence'
+] as const satisfies ReadonlyArray<PracticeSection>
+
+// 练习页骨架：左侧菜单有“词汇练习”（默认选中）与“造句练习”两项，
+// 右侧渲染对应详情；切换菜单时旧详情卸载并中止其在途请求。
 // 进入时焦点移至返回按钮；Escape 退出；退出后由调用方把焦点还给「开始练习」入口。
 export function PracticePage({ onExit }: PracticePageProps): React.JSX.Element {
   const { t } = useTranslation('common')
@@ -43,7 +50,7 @@ export function PracticePage({ onExit }: PracticePageProps): React.JSX.Element {
           <h2 className="practice-title">{t('practice.title')}</h2>
         </div>
         <nav aria-label={t('practice.menuLabel')} className="practice-menu-list">
-          {(['vocabulary'] as const).map((item) => (
+          {PRACTICE_SECTIONS.map((item) => (
             <button
               aria-current={section === item ? 'true' : undefined}
               className="practice-menu-item"
@@ -58,6 +65,7 @@ export function PracticePage({ onExit }: PracticePageProps): React.JSX.Element {
       </aside>
       <section className="practice-detail">
         {section === 'vocabulary' ? <VocabularyPracticeDetail /> : null}
+        {section === 'sentence' ? <SentencePracticeDetail /> : null}
       </section>
     </main>
   )

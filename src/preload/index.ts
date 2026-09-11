@@ -74,6 +74,19 @@ import {
   vocabularyPracticeStartResultSchema,
   VOCABULARY_PRACTICE_CHANNELS
 } from '../shared/vocabulary-practice'
+import {
+  sentencePracticeCancelInputSchema,
+  sentencePracticeCancelResultSchema,
+  sentencePracticeCloseInputSchema,
+  sentencePracticeCloseResultSchema,
+  sentencePracticeHintsInputSchema,
+  sentencePracticeHintsResultSchema,
+  sentencePracticeReviewInputSchema,
+  sentencePracticeReviewResultSchema,
+  sentencePracticeStartInputSchema,
+  sentencePracticeStartResultSchema,
+  SENTENCE_PRACTICE_CHANNELS
+} from '../shared/sentence-practice'
 
 const api: LingoMateApi = {
   preferences: {
@@ -189,6 +202,33 @@ const api: LingoMateApi = {
       const input = vocabularyPracticeCancelInputSchema.parse(rawInput)
       const result: unknown = await ipcRenderer.invoke(VOCABULARY_PRACTICE_CHANNELS.cancel, input)
       return vocabularyPracticeCancelResultSchema.parse(result)
+    }
+  },
+  sentencePractice: {
+    async start(rawInput) {
+      const input = sentencePracticeStartInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(SENTENCE_PRACTICE_CHANNELS.start, input)
+      return sentencePracticeStartResultSchema.parse(result)
+    },
+    async hints(rawInput) {
+      const input = sentencePracticeHintsInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(SENTENCE_PRACTICE_CHANNELS.hints, input)
+      return sentencePracticeHintsResultSchema.parse(result)
+    },
+    async review(rawInput) {
+      const input = sentencePracticeReviewInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(SENTENCE_PRACTICE_CHANNELS.review, input)
+      return sentencePracticeReviewResultSchema.parse(result)
+    },
+    async cancel(rawInput) {
+      const input = sentencePracticeCancelInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(SENTENCE_PRACTICE_CHANNELS.cancel, input)
+      return sentencePracticeCancelResultSchema.parse(result)
+    },
+    async close(rawInput) {
+      const input = sentencePracticeCloseInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(SENTENCE_PRACTICE_CHANNELS.close, input)
+      return sentencePracticeCloseResultSchema.parse(result)
     }
   },
   conversation: {
