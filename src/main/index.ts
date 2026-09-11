@@ -56,6 +56,11 @@ import { registerVocabularyPracticeIpc } from './vocabulary-practice-ipc'
 import { VocabularyPracticeService } from '../core/learning/vocabulary-practice/vocabulary-practice-service'
 import { VocabularyPracticeError } from '../core/learning/vocabulary-practice/parse-vocabulary-practice-input'
 import { LlmVocabularyPracticeReviewer } from '../core/llm/llm-vocabulary-practice-reviewer'
+import { registerSentencePracticeIpc } from './sentence-practice-ipc'
+import { SentencePracticeService } from '../core/learning/sentence-practice/sentence-practice-service'
+import { SentencePracticeError } from '../core/learning/sentence-practice/parse-sentence-practice-input'
+import { LlmSentencePracticeHintGenerator } from '../core/llm/llm-sentence-practice-hint-generator'
+import { LlmSentencePracticeReviewer } from '../core/llm/llm-sentence-practice-reviewer'
 import { registerPhraseIpc } from './phrase-ipc'
 import { PhraseManagementService } from '../core/learning/phrase/phrase-management'
 import { registerSynonymIpc } from './synonym-ipc'
@@ -64,6 +69,7 @@ import { SynonymManagementService } from '../core/learning/synonym/synonym-manag
 let database: Database.Database | undefined
 let conversationModule: ConversationModule | undefined
 let vocabularyPracticeService: VocabularyPracticeService | undefined
+let sentencePracticeService: SentencePracticeService | undefined
 
 // 加载目标与 IPC 来源白名单使用同一地址，开发模式也只信任指定文档。
 const rendererUrl =
@@ -213,6 +219,48 @@ app.whenReady().then(() => {
     () => resolveLanguages().outputLanguage,
     rendererUrl
   )
+  // 造句练习：同一词库仓储随机抽 3 词，独立内存会话，不与词汇练习
+  // 共用实例；解释语言跟随界面语言，练习语言读取学习目标配置。
+  const toSentencePracticeModelError = (cause: unknown): SentencePracticeError =>
+    new SentencePracticeError(
+      cause instanceof ModelNotConfiguredError
+        ? 'MODEL_NOT_CONFIGURED'
+        : cause instanceof ModelConfigValidationError && cause.code === 'CREDENTIAL_DECRYPT_FAILED'
+          ? 'CREDENTIAL_DECRYPT_FAILED'
+          : 'MODEL_ERROR',
+      { cause }
+    )
+  sentencePracticeService = new SentencePracticeService(
+    vocabularyRepository,
+    () => {
+      try {
+        return new LlmSentencePracticeHintGenerator(
+          modelsService.resolveSnapshot(),
+          30_000,
+          createLlmClient
+        )
+      } catch (cause) {
+        throw toSentencePracticeModelError(cause)
+      }
+    },
+    () => {
+      try {
+        return new LlmSentencePracticeReviewer(
+          modelsService.resolveSnapshot(),
+          30_000,
+          createLlmClient
+        )
+      } catch (cause) {
+        throw toSentencePracticeModelError(cause)
+      }
+    }
+  )
+  registerSentencePracticeIpc(
+    sentencePracticeService,
+    () => resolveLanguages().outputLanguage,
+    () => resolveLanguages().targetLanguage,
+    rendererUrl
+  )
   const vocabularySkill = new VocabularyConversationSkill(
     vocabularyRepository,
     () => ({
@@ -289,6 +337,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   conversationModule?.dispose()
   vocabularyPracticeService?.dispose()
+  sentencePracticeService?.dispose()
   database?.close()
   database = undefined
 })

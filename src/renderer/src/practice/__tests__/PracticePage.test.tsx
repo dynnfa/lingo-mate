@@ -15,6 +15,12 @@ vi.mock('../vocabulary/VocabularyPracticeDetail', () => ({
   )
 }))
 
+vi.mock('../sentence/SentencePracticeDetail', () => ({
+  SentencePracticeDetail: (): React.JSX.Element => (
+    <section data-testid="sentence-practice-detail" />
+  )
+}))
+
 function renderPage(onExit: () => void = vi.fn()): () => void {
   render(
     <I18nextProvider i18n={i18n}>
@@ -36,11 +42,25 @@ describe('PracticePage', () => {
     expect(screen.getByRole('main', { name: '开始练习' })).toBeInTheDocument()
     const menu = screen.getByRole('navigation', { name: '练习菜单' })
     const items = within(menu).getAllByRole('button')
-    expect(items).toHaveLength(1)
+    expect(items).toHaveLength(2)
     expect(items[0]).toHaveTextContent('词汇练习')
     expect(items[0]).toHaveAttribute('aria-current', 'true')
+    expect(items[1]).toHaveTextContent('造句练习')
+    expect(items[1]).not.toHaveAttribute('aria-current')
     expect(screen.getByTestId('vocabulary-practice-detail')).toBeInTheDocument()
-    expect(document.querySelector('.practice-detail')).not.toBeEmptyDOMElement()
+    expect(screen.queryByTestId('sentence-practice-detail')).not.toBeInTheDocument()
+  })
+
+  it('switches to the sentence practice detail through the menu', () => {
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: '造句练习' }))
+
+    const menu = screen.getByRole('navigation', { name: '练习菜单' })
+    expect(within(menu).getAllByRole('button')[0]).not.toHaveAttribute('aria-current')
+    expect(within(menu).getAllByRole('button')[1]).toHaveAttribute('aria-current', 'true')
+    expect(screen.queryByTestId('vocabulary-practice-detail')).not.toBeInTheDocument()
+    expect(screen.getByTestId('sentence-practice-detail')).toBeInTheDocument()
   })
 
   it('exits through the back button and Escape', () => {
@@ -71,5 +91,6 @@ describe('PracticePage', () => {
     expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
     const menu = screen.getByRole('navigation', { name: 'Practice menu' })
     expect(within(menu).getAllByRole('button', { name: 'Vocabulary practice' })).toHaveLength(1)
+    expect(within(menu).getAllByRole('button', { name: 'Sentence practice' })).toHaveLength(1)
   })
 })

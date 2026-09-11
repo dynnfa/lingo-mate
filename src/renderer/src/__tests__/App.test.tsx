@@ -26,6 +26,7 @@ import type { VocabularyApi } from '../../../shared/vocabulary'
 import type { PhraseApi } from '../../../shared/phrase'
 import type { SynonymApi } from '../../../shared/synonym'
 import type { VocabularyPracticeApi } from '../../../shared/vocabulary-practice'
+import type { SentencePracticeApi } from '../../../shared/sentence-practice'
 import App from '../App'
 import { createI18n } from '../i18n'
 
@@ -148,6 +149,27 @@ function vocabularyPracticeApiStub(): VocabularyPracticeApi {
   }
 }
 
+// App 测试不进入造句练习详情；提供稳定错误桩，避免页面挂起。
+function sentencePracticeApiStub(): SentencePracticeApi {
+  return {
+    async start() {
+      return { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
+    },
+    async hints() {
+      return { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
+    },
+    async review() {
+      return { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
+    },
+    async cancel() {
+      return { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
+    },
+    async close() {
+      return { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
+    }
+  }
+}
+
 function summary(sessionId: string, updatedAt: string): ConversationSummary {
   return { sessionId, title: null, createdAt: '2026-09-01T08:00:00.000Z', updatedAt }
 }
@@ -242,6 +264,7 @@ function installApiMock(
     phrase: phraseApiStub(),
     synonym: synonymApiStub(),
     vocabularyPractice: vocabularyPracticeApiStub(),
+    sentencePractice: sentencePracticeApiStub(),
     conversation: {
       async create() {
         mock.calls.create += 1

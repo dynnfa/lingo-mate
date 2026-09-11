@@ -697,6 +697,322 @@ body {
   background: var(--color-surface-hover);
 }
 
+/* ── 造句练习 ── */
+.sentence-practice {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+  padding: 24px 28px 16px;
+  overflow-y: auto;
+}
+
+.sentence-practice-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sentence-practice-header h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.sentence-practice-new-round,
+.sentence-practice-retry-hints {
+  flex: none;
+  padding: 6px 14px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-secondary);
+  font-size: 12px;
+}
+
+.sentence-practice-new-round:hover:not(:disabled),
+.sentence-practice-retry-hints:hover {
+  background: var(--color-surface-hover);
+}
+
+.sentence-practice-new-round:disabled {
+  opacity: 0.6;
+}
+
+.sentence-practice-state,
+.sentence-practice-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+  color: var(--color-text-status);
+  font-size: 13px;
+}
+
+.sentence-practice-state-title {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sentence-practice-state p,
+.sentence-practice-status {
+  margin: 0;
+}
+
+.sentence-practice-error,
+.sentence-practice-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-message);
+  border-radius: 10px;
+  background: var(--color-surface);
+  font-size: 12px;
+}
+
+.sentence-practice-error {
+  border-color: var(--color-danger, #b42318);
+}
+
+.sentence-practice-error-title {
+  margin: 0;
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.sentence-practice-error p {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.sentence-practice-notice {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.sentence-practice-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.sentence-practice-words h3,
+.sentence-practice-hints h3,
+.sentence-practice-answer label,
+.sentence-practice-feedback h3,
+.sentence-practice-feedback h4 {
+  margin: 0 0 8px;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sentence-practice-word-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sentence-practice-word {
+  padding: 6px 12px;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.sentence-practice-hint-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sentence-practice-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-message);
+  border-radius: 10px;
+  background: var(--color-surface);
+  font-size: 13px;
+}
+
+.sentence-practice-hint-phrase {
+  color: var(--color-text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.sentence-practice-hint-explanation {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.sentence-practice-hint-failed {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.sentence-practice-textarea {
+  flex: none;
+  width: 100%;
+  min-height: 96px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.sentence-practice-textarea:focus {
+  outline: 2px solid var(--color-border-active, var(--color-border-divider));
+}
+
+.sentence-practice-textarea:disabled {
+  opacity: 0.7;
+}
+
+.sentence-practice-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.sentence-practice-actions button {
+  padding: 6px 16px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-secondary);
+  font-size: 12px;
+}
+
+.sentence-practice-actions button:hover {
+  background: var(--color-surface-hover);
+}
+
+.sentence-practice-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-message);
+  border-radius: 10px;
+  background: var(--color-surface);
+}
+
+.sentence-practice-feedback h4 {
+  margin-bottom: 4px;
+}
+
+.sentence-practice-verdict {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sentence-practice-verdict-ok {
+  color: var(--color-text-active);
+}
+
+.sentence-practice-usage-list,
+.sentence-practice-issue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sentence-practice-usage-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+}
+
+/* 结论以图标 + 文本标签表达，不只依赖颜色。 */
+.sentence-practice-check {
+  font-weight: 700;
+}
+
+.sentence-practice-check-ok {
+  color: var(--color-text-active);
+}
+
+.sentence-practice-check-bad {
+  color: var(--color-danger, #b42318);
+}
+
+.sentence-practice-usage-term {
+  color: var(--color-text);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.sentence-practice-usage-state {
+  font-size: 12px;
+}
+
+.sentence-practice-usage-state-ok {
+  color: var(--color-text-active);
+}
+
+.sentence-practice-usage-state-bad {
+  color: var(--color-danger, #b42318);
+}
+
+.sentence-practice-usage-feedback,
+.sentence-practice-revised,
+.sentence-practice-edit-hint {
+  margin: 2px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.sentence-practice-issue {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 8px;
+}
+
+.sentence-practice-issue-text {
+  margin: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.sentence-practice-issue-original {
+  color: var(--color-danger, #b42318);
+}
+
+.sentence-practice-issue-suggestion {
+  color: var(--color-text-active);
+}
+
 /* 删除确认对话框 */
 .dialog-backdrop {
   position: fixed;

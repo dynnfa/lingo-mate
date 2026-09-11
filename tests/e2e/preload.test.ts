@@ -38,11 +38,21 @@ test('exposes the conversation skill and preferences interfaces from the sandbox
         'models',
         'phrase',
         'preferences',
+        'sentencePractice',
         'synonym',
         'usage',
         'vocabulary',
         'vocabularyPractice'
       ])
+
+      // 造句练习窄接口：只暴露开始、提示、点评、取消与释放
+      const exposedSentencePracticeKeys = await window.evaluate(() =>
+        Object.keys(
+          (globalThis as typeof globalThis & { api?: { sentencePractice?: object } }).api
+            ?.sentencePractice ?? {}
+        ).sort()
+      )
+      expect(exposedSentencePracticeKeys).toEqual(['cancel', 'close', 'hints', 'review', 'start'])
 
       // 词汇练习窄接口：只暴露开始、审查与取消，不暴露通用 invoke 或会话内部状态
       const exposedVocabularyPracticeKeys = await window.evaluate(() =>

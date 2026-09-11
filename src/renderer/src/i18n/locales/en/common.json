@@ -219,7 +219,8 @@
     "back": "Back",
     "menuLabel": "Practice menu",
     "sections": {
-      "vocabulary": "Vocabulary practice"
+      "vocabulary": "Vocabulary practice",
+      "sentence": "Sentence practice"
     },
     "vocabulary": {
       "detailTitle": "Vocabulary practice",
@@ -252,6 +253,48 @@
       "confirmNewRoundCancel": "Keep answering",
       "confirmNewRoundConfirm": "Start a new round",
       "answerLabel": "Meaning of {{term}}"
+    },
+    "sentence": {
+      "detailTitle": "Sentence practice",
+      "newRound": "New words",
+      "loading": "Drawing words…",
+      "emptyTitle": "Not enough words for sentence practice",
+      "emptyCount": "Only {{count}} words are saved; sentence practice needs 3.",
+      "emptyBody": "Save words with the /vocabulary command in a conversation, then practice them here.",
+      "startFailedTitle": "Failed to draw words",
+      "wordsLabel": "Words to use",
+      "hintsLabel": "Phrase hints",
+      "hintsLoading": "Generating hints…",
+      "hintsFailedTitle": "Failed to generate hints",
+      "hintsRetry": "Regenerate hints",
+      "answerLabel": "Your sentences",
+      "answerPlaceholder": "Write one or a few connected sentences using the three words above…",
+      "submit": "Submit for review",
+      "submitBlockedTitle": "Your answer is empty",
+      "submitBlockedBody": "Write a sentence using the three words before submitting for review.",
+      "cancel": "Cancel",
+      "reviewing": "Reviewing your answer…",
+      "reviewFailedTitle": "Review failed",
+      "cancelledNotice": "Cancelled. The words, hints and your answer are kept.",
+      "reviewTitle": "Review",
+      "allPassed": "Everything is correct!",
+      "usageLabel": "Word usage",
+      "usageCorrect": "Used correctly",
+      "usageIncorrect": "Used incorrectly",
+      "usageMissing": "Not used",
+      "fluencyLabel": "Fluency",
+      "fluencyNatural": "Natural",
+      "fluencyUnnatural": "Not natural",
+      "grammarLabel": "Grammar",
+      "grammarCorrect": "Correct",
+      "grammarIncorrect": "Incorrect",
+      "summaryLabel": "Summary",
+      "revisedAnswerLabel": "Suggested revision",
+      "editAfterReviewNotice": "Editing your answer requires submitting for review again.",
+      "confirmNewRoundTitle": "Start with new words",
+      "confirmNewRoundBody": "Your current answer has not been submitted. Starting with new words will clear the hints, answer and review.",
+      "confirmNewRoundCancel": "Keep answering",
+      "confirmNewRoundConfirm": "New words"
     }
   },
   "preferences": {
