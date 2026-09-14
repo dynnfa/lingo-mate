@@ -1,0 +1,118 @@
+/* 共享页面骨架：左菜单右详情的分栏布局，取代 settings/recorded/practice
+   三份并列选择器；页面专属差异经 .page-shell.<page-class> 附加。 */
+.page-shell {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  background: var(--color-background);
+}
+
+.page-shell-menu {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 12px 16px;
+  border-right: 1px solid var(--color-border-sidebar);
+  background: var(--color-surface-sidebar);
+}
+
+.page-shell-menu-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border-divider);
+}
+
+.page-shell-back-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  color: var(--color-text-secondary);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.page-shell-back-button svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.page-shell-back-button:hover {
+  background: var(--color-surface-hover);
+}
+
+.page-shell-title {
+  padding: 0 8px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.page-shell-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 12px;
+}
+
+.page-shell-menu-item {
+  padding: 6px 10px;
+  color: var(--color-text-session);
+  background: transparent;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.page-shell-menu-item:hover {
+  background: var(--color-surface-hover);
+}
+
+.page-shell-menu-item[aria-current='true'] {
+  color: var(--color-text-active);
+  background: var(--color-surface-active);
+}
+
+.page-shell-detail {
+  min-width: 0;
+  overflow-y: auto;
+}
+
+/* keepMounted 面板按 hidden 切换；显式声明避免被布局 display 覆盖。 */
+.page-shell-pane[hidden] {
+  display: none;
+}
+
+.page-shell-pane h2 {
+  margin-bottom: 16px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+@media (max-width: 760px) {
+  .page-shell {
+    grid-template-columns: 210px minmax(0, 1fr);
+  }
+
+  .page-shell-menu {
+    padding-inline: 10px;
+  }
+}
+
+@media (max-width: 520px) {
+  .page-shell {
+    grid-template-columns: 150px minmax(0, 1fr);
+  }
+}

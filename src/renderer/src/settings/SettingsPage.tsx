@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { PageShell, type PageShellSection } from '../components/PageShell'
 import { TargetLanguageSection } from './target-language/TargetLanguageSection'
 import { UiLanguageSection } from './ui-language/UiLanguageSection'
 import { ModelsSettings } from './models/ModelsSettings'
@@ -12,19 +14,23 @@ import { useUsageStatistics } from './usage/useUsageStatistics'
 const SETTINGS_SECTIONS = [
   {
     id: 'uiLanguage',
-    labelKey: 'common:settings.sections.uiLanguage'
+    labelKey: 'common:settings.sections.uiLanguage',
+    titleId: 'settings-section-title-ui-language'
   },
   {
     id: 'targetLanguage',
-    labelKey: 'common:settings.sections.targetLanguage'
+    labelKey: 'common:settings.sections.targetLanguage',
+    titleId: 'settings-section-title-target-language'
   },
   {
     id: 'models',
-    labelKey: 'common:settings.sections.models'
+    labelKey: 'common:settings.sections.models',
+    titleId: 'settings-section-title-models'
   },
   {
     id: 'usage',
-    labelKey: 'common:settings.sections.usage'
+    labelKey: 'common:settings.sections.usage',
+    titleId: 'settings-section-title-usage'
   }
 ] as const
 
@@ -34,43 +40,26 @@ interface SettingsPageProps {
   onExit: () => void
 }
 
-// 设置页：左侧菜单切换区块，右侧渲染对应详情。
+// 设置页：左侧菜单切换区块，右侧渲染对应详情（骨架由 PageShell 提供）。
 // 进入时焦点移入返回按钮；Escape 优先关闭当前确认层或编辑表单，再执行退出，
 // 一次按键只触发一个动作；退出后由调用方把焦点还给设置按钮。
 // 模型区块有未保存修改时，返回或 Escape 先经过“继续编辑 / 放弃修改”确认。
 export function SettingsPage({ onExit }: SettingsPageProps): React.JSX.Element {
   const { t } = useTranslation(['common', 'errors'])
-  const [activeSectionId, setActiveSectionId] = useState<SettingsSectionId>(SETTINGS_SECTIONS[0].id)
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false)
+  // 活动区块镜像：Escape 分层需要判断模型表单是否可见。
+  const [activeSectionId, setActiveSectionId] = useState<SettingsSectionId>('uiLanguage')
   const modelsSettings = useModelsSettings()
   const usageStatistics = useUsageStatistics()
   const backButtonRef = useRef<HTMLButtonElement>(null)
-  const discardKeepEditingRef = useRef<HTMLButtonElement>(null)
-
-  useEffect(() => {
-    backButtonRef.current?.focus()
-  }, [])
 
   // Usage 首次激活时读取数据，再次进入时重新读取；
   // 维度与选中周保留在本次设置页会话内。
-  const reloadUsage = usageStatistics.reload
-  useEffect(() => {
-    if (activeSectionId === 'usage') reloadUsage()
-  }, [activeSectionId, reloadUsage])
-
-  useEffect(() => {
-    if (confirmDiscardOpen) {
-      discardKeepEditingRef.current?.focus()
-    }
-  }, [confirmDiscardOpen])
-
-  // 切离 Models 时中止在途连接测试，但保留普通表单草稿。
-  const switchSection = (sectionId: SettingsSectionId): void => {
-    if (sectionId === activeSectionId) return
-    if (activeSectionId === 'models') {
-      modelsSettings.cancelActiveTest()
-    }
-    setActiveSectionId(sectionId)
+  const handleSectionChange = (sectionId: string): void => {
+    // 切离 Models 时中止在途连接测试（含草稿测试）；其余区块为无害空操作。
+    modelsSettings.cancelActiveTest()
+    setActiveSectionId(sectionId as SettingsSectionId)
+    if (sectionId === 'usage') usageStatistics.reload()
   }
 
   const exitSettings = (): void => {
@@ -91,126 +80,70 @@ export function SettingsPage({ onExit }: SettingsPageProps): React.JSX.Element {
     exitSettings()
   }
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLElement>): void => {
-    if (event.key !== 'Escape') return
-    event.preventDefault()
-    // Escape 分层：先关本页确认层，再交给模型区块处理其确认层与编辑表单，
-    // 最后才是退出设置。
-    if (confirmDiscardOpen) {
-      setConfirmDiscardOpen(false)
+  // Escape 分层：确认层（含本页与模型区块的对话框）由 ConfirmDialog 在遮罩层
+  // 自行吞掉按键；这里只处理模型编辑表单与页面退出。
+  const handleEscape = (): void => {
+    if (activeSectionId === 'models' && modelsSettings.editSession.mode !== 'closed') {
+      modelsSettings.requestCloseForm()
       return
     }
-    if (activeSectionId === 'models' && modelsSettings.consumeEscape()) return
     requestExit()
   }
 
-  return (
-    <main
-      aria-label={t('common:settings.title')}
-      className="settings-page"
-      onKeyDown={handleKeyDown}
-    >
-      <aside className="settings-menu">
-        <div className="settings-menu-header">
-          <button
-            className="settings-back-button"
-            onClick={requestExit}
-            ref={backButtonRef}
-            type="button"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m15 5-7 7 7 7" />
-            </svg>
-            {t('common:settings.back')}
-          </button>
-          <h2 className="settings-title">{t('common:settings.title')}</h2>
-        </div>
-        <nav aria-label={t('common:settings.menuLabel')} className="settings-menu-list">
-          {SETTINGS_SECTIONS.map((section) => (
-            <button
-              aria-current={section.id === activeSectionId ? 'true' : undefined}
-              className="settings-menu-item"
-              key={section.id}
-              onClick={() => switchSection(section.id)}
-              type="button"
-            >
-              {t(section.labelKey)}
-            </button>
-          ))}
-        </nav>
-      </aside>
-      <section className="settings-detail">
-        <div
-          aria-labelledby="settings-section-title-ui-language"
-          className="settings-detail-pane"
-          hidden={activeSectionId !== 'uiLanguage'}
-        >
-          <h2 id="settings-section-title-ui-language">
-            {t('common:settings.sections.uiLanguage')}
-          </h2>
-          <div className="settings-section-body">
-            <UiLanguageSection />
-          </div>
-        </div>
-        <div
-          aria-labelledby="settings-section-title-target-language"
-          className="settings-detail-pane"
-          hidden={activeSectionId !== 'targetLanguage'}
-        >
-          <h2 id="settings-section-title-target-language">
-            {t('common:settings.sections.targetLanguage')}
-          </h2>
-          <div className="settings-section-body">
-            <TargetLanguageSection />
-          </div>
-        </div>
-        <div
-          aria-labelledby="settings-section-title-models"
-          className="settings-detail-pane"
-          hidden={activeSectionId !== 'models'}
-        >
-          <h2 id="settings-section-title-models">{t('common:settings.sections.models')}</h2>
-          <div className="settings-section-body models-section-body">
-            <ModelsSettings state={modelsSettings} />
-          </div>
-        </div>
-        <div
-          aria-labelledby="settings-section-title-usage"
-          className="settings-detail-pane"
-          hidden={activeSectionId !== 'usage'}
-        >
-          <h2 id="settings-section-title-usage">{t('common:settings.sections.usage')}</h2>
-          <div className="settings-section-body usage-section-body">
-            <UsageSettings state={usageStatistics} />
-          </div>
-        </div>
-      </section>
+  const sectionBody = (sectionId: SettingsSectionId): React.JSX.Element => {
+    if (sectionId === 'uiLanguage') return <UiLanguageSection />
+    if (sectionId === 'targetLanguage') return <TargetLanguageSection />
+    if (sectionId === 'models') return <ModelsSettings state={modelsSettings} />
+    return <UsageSettings state={usageStatistics} />
+  }
 
-      {confirmDiscardOpen ? (
+  const sections: PageShellSection[] = SETTINGS_SECTIONS.map((section) => ({
+    id: section.id,
+    label: t(section.labelKey),
+    keepMounted: true,
+    labelledBy: section.titleId,
+    content: (
+      <>
+        <h2 id={section.titleId}>{t(section.labelKey)}</h2>
         <div
-          aria-describedby="settings-discard-confirm-body"
-          aria-labelledby="settings-discard-confirm-title"
-          className="settings-confirm"
-          role="dialog"
+          className={
+            section.id === 'models'
+              ? 'settings-section-body models-section-body'
+              : section.id === 'usage'
+                ? 'settings-section-body usage-section-body'
+                : 'settings-section-body'
+          }
         >
-          <h3 id="settings-discard-confirm-title">
-            {t('common:settings.models.discardConfirmTitle')}
-          </h3>
-          <p id="settings-discard-confirm-body">{t('common:settings.models.discardConfirmBody')}</p>
-          <div className="settings-confirm-actions">
-            <button
-              onClick={() => setConfirmDiscardOpen(false)}
-              ref={discardKeepEditingRef}
-              type="button"
-            >
-              {t('common:settings.models.discardConfirmKeepEditing')}
-            </button>
-            <button className="settings-confirm-danger" onClick={discardChanges} type="button">
-              {t('common:settings.models.discardConfirmDiscard')}
-            </button>
-          </div>
+          {sectionBody(section.id)}
         </div>
-      ) : null}
-    </main>
+      </>
+    )
+  }))
+
+  return (
+    <>
+      <PageShell
+        className="settings-page"
+        exitButtonRef={backButtonRef}
+        exitLabel={t('common:settings.back')}
+        menuLabel={t('common:settings.menuLabel')}
+        onEscape={handleEscape}
+        onExit={requestExit}
+        onSectionChange={handleSectionChange}
+        sections={sections}
+        title={t('common:settings.title')}
+      />
+      <ConfirmDialog
+        cancelLabel={t('common:settings.models.discardConfirmKeepEditing')}
+        confirmLabel={t('common:settings.models.discardConfirmDiscard')}
+        description={t('common:settings.models.discardConfirmBody')}
+        onCancel={() => setConfirmDiscardOpen(false)}
+        onConfirm={discardChanges}
+        open={confirmDiscardOpen}
+        returnFocusRef={backButtonRef}
+        title={t('common:settings.models.discardConfirmTitle')}
+        tone="danger"
+      />
+    </>
   )
 }

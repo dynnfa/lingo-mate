@@ -2,6 +2,7 @@ import { useRef, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { SupportedLocale } from '../../../../shared/preferences'
 import type { UsageBucket } from '../../../../shared/usage'
+import { listSeparator } from '../../i18n/formatters'
 import {
   formatTokenCompact,
   formatTokenNumber,
@@ -311,7 +312,7 @@ export function TokenUsageChart({
         ) : (
           <span className="usage-chart-detail-hint">
             {kind === 'week' && selectionHint
-              ? `${t('settings.usage.focusHint')}；${selectionHint}`
+              ? `${t('settings.usage.focusHint')}${listSeparator(locale)}${selectionHint}`
               : t('settings.usage.focusHint')}
           </span>
         )}

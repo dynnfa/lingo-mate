@@ -10,6 +10,7 @@ import {
   type ModelsErrorField,
   type TestModelsConnectionResult
 } from '../../../../shared/models'
+import { useIpcRequest } from '../../hooks/use-ipc-request'
 
 export interface ModelsDraft {
   protocol: ModelProtocol
@@ -160,8 +161,6 @@ export interface ModelsSettingsState {
   closeRowTestDialog: () => void
   testDraft: () => void
   cancelActiveTest: () => void
-  // Escape 分层处理：优先关闭本区块确认层或编辑表单；返回 false 表示未消费。
-  consumeEscape: () => boolean
 }
 
 export function useModelsSettings(): ModelsSettingsState {
@@ -343,29 +342,28 @@ export function useModelsSettings(): ModelsSettingsState {
     })
   }, [])
 
-  const saveEdit = useCallback((): void => {
-    if (formLocked || writeInFlightRef.current) return
-    const session = editSession
-    if (session.mode === 'closed') return
-    const issues = validateDraft(draft)
-    if (Object.keys(issues).length > 0) {
-      setFieldIssues((current) => ({ ...current, ...issues }))
-      return
-    }
-    const payload = {
-      protocol: draft.protocol,
-      baseUrl: submitBaseUrl(draft),
-      modelId: draft.modelId.trim(),
-      credential: credentialIntentFromDraft(draft, editTarget)
-    }
-    setSaveState({ kind: 'saving' })
-    writeInFlightRef.current = true
-    const request =
-      session.mode === 'create'
-        ? window.api.models.createConfig(payload)
-        : window.api.models.updateConfig({ configId: session.configId, ...payload })
-    request
-      .then((result) => {
+  // 提交保存的会话：closed 不发起请求，请求函数据此收窄类型。
+  type SaveableEditSession = Extract<EditSession, { mode: 'create' | 'edit' }>
+
+  // 保存（新增/编辑）：结果携带发起时的会话，编辑成功后关闭旧配置的结果弹窗。
+  const saveRequest = useIpcRequest(
+    async (
+      session: SaveableEditSession,
+      payload: {
+        protocol: ModelProtocol
+        baseUrl: string
+        modelId: string
+        credential: CredentialUpdate
+      }
+    ) => {
+      const result =
+        session.mode === 'create'
+          ? await window.api.models.createConfig(payload)
+          : await window.api.models.updateConfig({ configId: session.configId, ...payload })
+      return { result, session }
+    },
+    {
+      onComplete: ({ result, session }) => {
         if (result.status === 'ok') {
           // 以 Main 返回的完整安全列表刷新，避免并发响应互相覆盖。
           setList(result.list)
@@ -386,12 +384,33 @@ export function useModelsSettings(): ModelsSettingsState {
         } else {
           setSaveState({ kind: 'failed', code: result.error.code })
         }
-      })
-      .catch(() => setSaveState({ kind: 'failed', code: 'UNKNOWN_ERROR' }))
-      .finally(() => {
-        writeInFlightRef.current = false
-      })
-  }, [closeForm, draft, editSession, editTarget, formLocked])
+      },
+      onError: () => setSaveState({ kind: 'failed', code: 'UNKNOWN_ERROR' })
+    }
+  )
+
+  const { run: runSave } = saveRequest
+  const saveEdit = useCallback((): void => {
+    if (formLocked || writeInFlightRef.current) return
+    const session = editSession
+    if (session.mode === 'closed') return
+    const issues = validateDraft(draft)
+    if (Object.keys(issues).length > 0) {
+      setFieldIssues((current) => ({ ...current, ...issues }))
+      return
+    }
+    const payload = {
+      protocol: draft.protocol,
+      baseUrl: submitBaseUrl(draft),
+      modelId: draft.modelId.trim(),
+      credential: credentialIntentFromDraft(draft, editTarget)
+    }
+    writeInFlightRef.current = true
+    setSaveState({ kind: 'saving' })
+    void runSave(session, payload).finally(() => {
+      writeInFlightRef.current = false
+    })
+  }, [draft, editSession, editTarget, formLocked, runSave])
 
   const requestDelete = useCallback(
     (configId: ModelConfigId): void => {
@@ -410,14 +429,14 @@ export function useModelsSettings(): ModelsSettingsState {
     setDeleteState({ kind: 'idle' })
   }, [deleteState.kind])
 
-  const confirmDelete = useCallback((): void => {
-    const target = deleteTarget
-    if (target === undefined || writeInFlightRef.current) return
-    setDeleteState({ kind: 'deleting' })
-    writeInFlightRef.current = true
-    window.api.models
-      .deleteConfig({ configId: target.id })
-      .then((result) => {
+  // 删除：结果携带发起时的目标；被删配置的结果弹窗与编辑草稿一并清理。
+  const deleteRequest = useIpcRequest(
+    async (target: ModelConfigSummary) => {
+      const result = await window.api.models.deleteConfig({ configId: target.id })
+      return { result, target }
+    },
+    {
+      onComplete: ({ result, target }) => {
         if (result.status === 'ok') {
           setList(result.list)
           listRef.current = result.list
@@ -432,21 +451,27 @@ export function useModelsSettings(): ModelsSettingsState {
         } else {
           setDeleteState({ kind: 'failed', code: result.error.code })
         }
-      })
-      .catch(() => setDeleteState({ kind: 'failed', code: 'UNKNOWN_ERROR' }))
-      .finally(() => {
-        writeInFlightRef.current = false
-      })
-  }, [closeForm, deleteTarget, editSession])
+      },
+      onError: () => setDeleteState({ kind: 'failed', code: 'UNKNOWN_ERROR' })
+    }
+  )
+
+  const { run: runDelete } = deleteRequest
+  const confirmDelete = useCallback((): void => {
+    const target = deleteTarget
+    if (target === undefined || writeInFlightRef.current) return
+    writeInFlightRef.current = true
+    setDeleteState({ kind: 'deleting' })
+    void runDelete(target).finally(() => {
+      writeInFlightRef.current = false
+    })
+  }, [deleteTarget, runDelete])
 
   // 当前模型选择与集合一起原子保存；失败不发布新状态，仅提示重试。
-  const setActive = useCallback((configId: ModelConfigId): void => {
-    if (configId === listRef.current?.activeConfigId || writeInFlightRef.current) return
-    setActiveState({ kind: 'saving' })
-    writeInFlightRef.current = true
-    window.api.models
-      .setActiveConfig({ configId })
-      .then((result) => {
+  const setActiveRequest = useIpcRequest(
+    async (configId: ModelConfigId) => window.api.models.setActiveConfig({ configId }),
+    {
+      onComplete: (result) => {
         if (result.status === 'ok') {
           setList(result.list)
           listRef.current = result.list
@@ -454,12 +479,23 @@ export function useModelsSettings(): ModelsSettingsState {
         } else {
           setActiveState({ kind: 'failed', code: result.error.code })
         }
-      })
-      .catch(() => setActiveState({ kind: 'failed', code: 'UNKNOWN_ERROR' }))
-      .finally(() => {
+      },
+      onError: () => setActiveState({ kind: 'failed', code: 'UNKNOWN_ERROR' })
+    }
+  )
+
+  const { run: runSetActive } = setActiveRequest
+  const setActive = useCallback(
+    (configId: ModelConfigId): void => {
+      if (configId === listRef.current?.activeConfigId || writeInFlightRef.current) return
+      writeInFlightRef.current = true
+      setActiveState({ kind: 'saving' })
+      void runSetActive(configId).finally(() => {
         writeInFlightRef.current = false
       })
-  }, [])
+    },
+    [runSetActive]
+  )
 
   // 结果按配置 ID 与 requestId 关联：仅当该测试仍是活动测试且记录仍存在时
   // 才落地；取消后开启的新测试不会被迟到回调覆盖。
@@ -580,37 +616,6 @@ export function useModelsSettings(): ModelsSettingsState {
   // 页面卸载（退出 Settings）时清理在途测试；Main 侧 sender 销毁同样会中止。
   useEffect(() => cancelActiveTest, [cancelActiveTest])
 
-  // Escape 分层：先关确认层（删除确认、弃改确认），再关测试结果弹窗，最后处理
-  // 编辑表单；一次按键只执行一个动作，避免同时触发多个层级。
-  const consumeEscape = useCallback((): boolean => {
-    if (deleteTarget !== undefined) {
-      cancelDelete()
-      return true
-    }
-    if (discardPrompt !== undefined) {
-      keepEditing()
-      return true
-    }
-    if (rowTestDialog !== undefined) {
-      closeRowTestDialog()
-      return true
-    }
-    if (editSession.mode !== 'closed') {
-      requestCloseForm()
-      return true
-    }
-    return false
-  }, [
-    cancelDelete,
-    closeRowTestDialog,
-    deleteTarget,
-    discardPrompt,
-    editSession,
-    keepEditing,
-    requestCloseForm,
-    rowTestDialog
-  ])
-
   return {
     loadState,
     retryLoad,
@@ -643,7 +648,6 @@ export function useModelsSettings(): ModelsSettingsState {
     testRow,
     closeRowTestDialog,
     testDraft,
-    cancelActiveTest,
-    consumeEscape
+    cancelActiveTest
   }
 }

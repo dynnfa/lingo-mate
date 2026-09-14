@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { StateBlock } from '../../components/StateBlock'
 import {
   VOCABULARY_PRACTICE_COUNT_MAX,
   VOCABULARY_PRACTICE_COUNT_MIN,
@@ -20,17 +22,12 @@ export function VocabularyPracticeDetail(): React.JSX.Element {
   const [confirmNewRound, setConfirmNewRound] = useState(false)
   const [pendingCount, setPendingCount] = useState<number | undefined>(undefined)
   const [submitBlocked, setSubmitBlocked] = useState(false)
-  const dialogCancelButtonRef = useRef<HTMLButtonElement>(null)
   const confirmButtonRef = useRef<HTMLButtonElement>(null)
   const countInputRef = useRef<HTMLInputElement>(null)
 
   const practicing =
     state.phase === 'active' || state.phase === 'reviewing' || state.phase === 'done'
   const locked = state.phase !== 'active' && state.phase !== 'done'
-
-  useEffect(() => {
-    if (confirmNewRound) dialogCancelButtonRef.current?.focus()
-  }, [confirmNewRound])
 
   const beginRound = (count: number): void => {
     setConfirmNewRound(false)
@@ -67,18 +64,10 @@ export function VocabularyPracticeDetail(): React.JSX.Element {
     beginRound(count)
   }
 
+  // 关闭后的焦点归还（回到确认按钮）由 ConfirmDialog 负责。
   const closeNewRoundDialog = (): void => {
     setConfirmNewRound(false)
     setPendingCount(undefined)
-    confirmButtonRef.current?.focus()
-  }
-
-  const handleDialogKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    if (event.key !== 'Escape') return
-    // Escape 只关闭对话框，不冒泡退出练习页。
-    event.preventDefault()
-    event.stopPropagation()
-    closeNewRoundDialog()
   }
 
   const requestReview = (): void => {
@@ -132,33 +121,35 @@ export function VocabularyPracticeDetail(): React.JSX.Element {
           ) : null}
         </form>
         {state.error?.scope === 'start' ? (
-          <div className="vocabulary-practice-error" role="alert">
-            <p className="vocabulary-practice-error-title">
-              {t('common:practice.vocabulary.startFailedTitle')}
-            </p>
-            <p>{t(vocabularyPracticeErrorKey(state.error.code))}</p>
-          </div>
+          <StateBlock
+            className="vocabulary-practice-error"
+            message={t(vocabularyPracticeErrorKey(state.error.code))}
+            title={t('common:practice.vocabulary.startFailedTitle')}
+            variant="error"
+          />
         ) : null}
       </header>
 
       {state.phase === 'loading' ? (
-        <div aria-busy="true" className="vocabulary-practice-state" role="status">
-          {t('common:practice.vocabulary.loading')}
-        </div>
+        <StateBlock
+          className="vocabulary-practice-state"
+          message={t('common:practice.vocabulary.loading')}
+          variant="loading"
+        />
       ) : state.phase === 'empty' ? (
-        <div className="vocabulary-practice-state">
-          <p className="vocabulary-practice-state-title">
-            {t('common:practice.vocabulary.emptyTitle')}
-          </p>
-          <p>{t('common:practice.vocabulary.emptyBody')}</p>
-        </div>
+        <StateBlock
+          className="vocabulary-practice-state"
+          message={t('common:practice.vocabulary.emptyBody')}
+          title={t('common:practice.vocabulary.emptyTitle')}
+          variant="empty"
+        />
       ) : state.phase === 'idle' ? (
-        <div className="vocabulary-practice-state">
-          <p className="vocabulary-practice-state-title">
-            {t('common:practice.vocabulary.idleTitle')}
-          </p>
-          <p>{t('common:practice.vocabulary.idleBody')}</p>
-        </div>
+        <StateBlock
+          className="vocabulary-practice-state"
+          message={t('common:practice.vocabulary.idleBody')}
+          title={t('common:practice.vocabulary.idleTitle')}
+          variant="empty"
+        />
       ) : null}
 
       {practicing ? (
@@ -226,12 +217,12 @@ export function VocabularyPracticeDetail(): React.JSX.Element {
           </div>
 
           {submitBlocked ? (
-            <div className="vocabulary-practice-error" role="alert">
-              <p className="vocabulary-practice-error-title">
-                {t('common:practice.vocabulary.submitBlockedTitle')}
-              </p>
-              <p>{t('common:practice.vocabulary.submitBlockedBody')}</p>
-            </div>
+            <StateBlock
+              className="vocabulary-practice-error"
+              message={t('common:practice.vocabulary.submitBlockedBody')}
+              title={t('common:practice.vocabulary.submitBlockedTitle')}
+              variant="error"
+            />
           ) : null}
 
           {state.notice === 'cancelled' ? (
@@ -241,12 +232,12 @@ export function VocabularyPracticeDetail(): React.JSX.Element {
           ) : null}
 
           {state.error?.scope === 'review' ? (
-            <div className="vocabulary-practice-error" role="alert">
-              <p className="vocabulary-practice-error-title">
-                {t('common:practice.vocabulary.reviewFailedTitle')}
-              </p>
-              <p>{t(vocabularyPracticeErrorKey(state.error.code))}</p>
-            </div>
+            <StateBlock
+              className="vocabulary-practice-error"
+              message={t(vocabularyPracticeErrorKey(state.error.code))}
+              title={t('common:practice.vocabulary.reviewFailedTitle')}
+              variant="error"
+            />
           ) : null}
 
           {state.phase === 'reviewing' ? (
@@ -290,38 +281,17 @@ export function VocabularyPracticeDetail(): React.JSX.Element {
         </div>
       ) : null}
 
-      {confirmNewRound ? (
-        <div className="dialog-backdrop" onKeyDown={handleDialogKeyDown}>
-          <div
-            aria-labelledby="vocabulary-practice-new-round-title"
-            aria-modal="true"
-            className="dialog-card"
-            role="dialog"
-          >
-            <h3 id="vocabulary-practice-new-round-title">
-              {t('common:practice.vocabulary.confirmNewRoundTitle')}
-            </h3>
-            <p className="dialog-text">{t('common:practice.vocabulary.confirmNewRoundBody')}</p>
-            <div className="dialog-actions">
-              <button
-                className="dialog-cancel-button"
-                onClick={closeNewRoundDialog}
-                ref={dialogCancelButtonRef}
-                type="button"
-              >
-                {t('common:practice.vocabulary.confirmNewRoundCancel')}
-              </button>
-              <button
-                className="dialog-danger-button"
-                onClick={() => beginRound(pendingCount ?? Number(countInput.trim()))}
-                type="button"
-              >
-                {t('common:practice.vocabulary.confirmNewRoundConfirm')}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <ConfirmDialog
+        cancelLabel={t('common:practice.vocabulary.confirmNewRoundCancel')}
+        confirmLabel={t('common:practice.vocabulary.confirmNewRoundConfirm')}
+        description={t('common:practice.vocabulary.confirmNewRoundBody')}
+        onCancel={closeNewRoundDialog}
+        onConfirm={() => beginRound(pendingCount ?? Number(countInput.trim()))}
+        open={confirmNewRound}
+        returnFocusRef={confirmButtonRef}
+        title={t('common:practice.vocabulary.confirmNewRoundTitle')}
+        tone="danger"
+      />
     </section>
   )
 }

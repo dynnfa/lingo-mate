@@ -104,6 +104,7 @@
       "outputLabel": "Output tokens",
       "requestsLabel": "Requests",
       "unknownValue": "Unknown",
+      "emptyNotes": "—",
       "requestsWithoutUsage_one": "{{count}} request didn't report usage",
       "requestsWithoutUsage_other": "{{count}} requests didn't report usage",
       "invalidRecords_one": "{{count}} invalid record",
@@ -306,6 +307,7 @@
     "emptyTitle": "Start with a sentence",
     "emptyBody": "Practice phrasing, polish sentences, or talk about what interests you.",
     "userRole": "You",
+    "assistantRole": "Lingo Mate",
     "retry": "Retry"
   },
   "composer": {

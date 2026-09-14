@@ -161,7 +161,7 @@ describe('PhraseDetail list states', () => {
     renderDetail()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('短语读取失败')
-    expect(screen.getByText('访问本地短语数据失败，请稍后重试。')).toBeInTheDocument()
+    expect(screen.getByText('访问本地数据失败，请稍后重试。')).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
 
     stub.respondList({ status: 'ok', entries: [entry({ phrase: 'look forward to' })] })
@@ -330,7 +330,7 @@ describe('PhraseDetail deletion', () => {
     fireEvent.click(screen.getByRole('button', { name: '删除' }))
 
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByRole('alert')).toHaveTextContent('访问本地短语数据失败')
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('访问本地数据失败')
     expect(screen.getByText('a phrase')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '删除中…' })).not.toBeInTheDocument()
 

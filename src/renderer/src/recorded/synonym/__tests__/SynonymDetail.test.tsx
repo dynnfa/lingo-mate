@@ -218,7 +218,7 @@ describe('SynonymDetail list states', () => {
     renderDetail()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('近义词读取失败')
-    expect(screen.getByText('访问本地近义词数据失败，请稍后重试。')).toBeInTheDocument()
+    expect(screen.getByText('访问本地数据失败，请稍后重试。')).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
 
     stub.respondList({ status: 'ok', groups: [], nextCursor: null })

@@ -38,6 +38,9 @@
   --color-primary-hover: #354e2c;
   --color-focus-ring: #507762;
 
+  /* 危险与错误态 */
+  --color-danger: #b42318;
+
   /* 阴影 */
   --shadow-composer: 0 4px 20px #243d2310;
 }

@@ -5,6 +5,7 @@ import type {
   PreferencesErrorCode,
   UiLanguagePreference
 } from '../../../../shared/preferences'
+import { useIpcRequest } from '../../hooks/use-ipc-request'
 import { preferencesFailureMessageKey } from '../../preferences/preferences-failure'
 
 // 语言名称使用各自的本地语言自称并保持固定，
@@ -21,57 +22,56 @@ const UI_LANGUAGE_OPTIONS: ReadonlyArray<{ preference: UiLanguagePreference; lab
 export function UiLanguageSection(): React.JSX.Element {
   const { t, i18n } = useTranslation(['common', 'errors'])
   const [selected, setSelected] = useState<UiLanguagePreference>('system')
-  const [saving, setSaving] = useState(false)
   const [failureCode, setFailureCode] = useState<PreferencesErrorCode | undefined>()
 
-  useEffect(() => {
-    let cancelled = false
-    const preferences: PreferencesApi = window.api.preferences
-    void preferences
-      .getLanguageSettings()
-      .then((result) => {
-        if (cancelled) return
-        if (result.status === 'ok') {
-          setSelected(result.settings.uiLanguage)
-        } else {
-          setFailureCode(result.error.code)
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setFailureCode('PREFERENCES_READ_FAILED')
-      })
-    return () => {
-      cancelled = true
+  // 挂载读取偏好；卸载或重复挂载的迟到结果由 hook 的 mounted 防护丢弃。
+  const readRequest = useIpcRequest(
+    async (): Promise<Awaited<ReturnType<PreferencesApi['getLanguageSettings']>>> =>
+      window.api.preferences.getLanguageSettings(),
+    {
+      onComplete: (result) => {
+        if (result.status === 'ok') setSelected(result.settings.uiLanguage)
+        else setFailureCode(result.error.code)
+      },
+      onError: () => setFailureCode('PREFERENCES_READ_FAILED')
     }
-  }, [])
+  )
 
-  const selectPreference = (preference: UiLanguagePreference): void => {
-    if (saving || preference === selected) {
-      return
-    }
-    setSaving(true)
-    setFailureCode(undefined)
-    window.api.preferences
-      .setUiLanguage({ uiLanguage: preference })
-      .then(async (result): Promise<void> => {
+  const { run: runRead } = readRequest
+  useEffect(() => {
+    void runRead()
+  }, [runRead])
+
+  // 保存成功后才切换界面语言；pending 期间重复选择被静默忽略。
+  const saveRequest = useIpcRequest(
+    async (
+      preference: UiLanguagePreference
+    ): Promise<Awaited<ReturnType<PreferencesApi['setUiLanguage']>>> =>
+      window.api.preferences.setUiLanguage({ uiLanguage: preference }),
+    {
+      onComplete: async (result) => {
         if (result.status === 'ok') {
           setSelected(result.settings.uiLanguage)
           await i18n.changeLanguage(result.settings.resolvedUiLanguage)
           return
         }
         setFailureCode(result.error.code)
-      })
-      .catch(() => {
-        setFailureCode('PREFERENCES_WRITE_FAILED')
-      })
-      .finally(() => {
-        setSaving(false)
-      })
+      },
+      onError: () => setFailureCode('PREFERENCES_WRITE_FAILED')
+    }
+  )
+
+  const selectPreference = (preference: UiLanguagePreference): void => {
+    if (saveRequest.pending || preference === selected) {
+      return
+    }
+    setFailureCode(undefined)
+    void saveRequest.run(preference)
   }
 
   return (
     <>
-      <fieldset className="language-fieldset" disabled={saving}>
+      <fieldset className="language-fieldset" disabled={saveRequest.pending}>
         <legend>{t('common:settings.uiLanguage')}</legend>
         {UI_LANGUAGE_OPTIONS.map((option) => (
           <label className="language-option" key={option.preference}>

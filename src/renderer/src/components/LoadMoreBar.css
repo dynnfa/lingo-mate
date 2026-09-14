@@ -1,0 +1,51 @@
+/* 共享列表底部加载区：取代 recorded 三份并列选择器。 */
+.load-more-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 34px;
+}
+
+.load-more-status {
+  color: var(--color-text-status);
+  font-size: 12px;
+}
+
+.load-more-button {
+  padding: 6px 16px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-secondary);
+  font-size: 12px;
+}
+
+.load-more-button:hover {
+  background: var(--color-surface-hover);
+}
+
+.load-more-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--color-text-status);
+  font-size: 12px;
+}
+
+.load-more-error-title {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.load-more-error p {
+  margin: 0;
+}
+
+.load-more-error button {
+  padding: 4px 12px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-secondary);
+  font-size: 12px;
+}

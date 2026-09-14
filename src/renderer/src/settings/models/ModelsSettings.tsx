@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { StateBlock } from '../../components/StateBlock'
 import { ModelConfigForm } from './ModelConfigForm'
 import { ModelsTable } from './ModelsTable'
 import {
@@ -45,32 +47,25 @@ export function ModelsSettings({
     wasDeletingRef.current = deleting
   }, [deleteTarget, state.deleteState.kind])
 
-  // 测试弹窗打开时焦点移入弹窗按钮：触发行的“测试连通”随测试开始被禁用，
-  // 焦点会落到 body，使挂在 <main> 上的 Escape 分层收不到按键。
-  const testDialogButtonRef = useRef<HTMLButtonElement>(null)
-  const wasTestDialogOpenRef = useRef(false)
-  useEffect(() => {
-    const dialogOpen = rowTestDialog !== undefined
-    if (dialogOpen && !wasTestDialogOpenRef.current) {
-      testDialogButtonRef.current?.focus()
-    }
-    wasTestDialogOpenRef.current = dialogOpen
-  }, [rowTestDialog])
-
   if (loadState === 'loading') {
-    return <p className="models-loading">{t('common:settings.models.loading')}</p>
+    return (
+      <StateBlock
+        className="models-loading"
+        message={t('common:settings.models.loading')}
+        variant="loading"
+      />
+    )
   }
 
   if (loadState === 'error') {
     return (
-      <div className="models-load-error">
-        <p className="settings-error" role="alert">
-          {t('errors:models.readFailed')}
-        </p>
-        <button onClick={retryLoad} type="button">
-          {t('common:settings.models.retryLoad')}
-        </button>
-      </div>
+      <StateBlock
+        className="models-load-error"
+        message={t('errors:models.readFailed')}
+        onRetry={retryLoad}
+        retryLabel={t('common:settings.models.retryLoad')}
+        variant="error"
+      />
     )
   }
 
@@ -117,10 +112,12 @@ export function ModelsSettings({
       <p className="settings-section-description">{t('common:settings.models.description')}</p>
 
       {empty ? (
-        <div className="models-empty">
-          <p className="models-empty-title">{t('common:settings.models.emptyTitle')}</p>
-          <p className="models-empty-body">{t('common:settings.models.emptyBody')}</p>
-        </div>
+        <StateBlock
+          className="models-empty"
+          message={t('common:settings.models.emptyBody')}
+          title={t('common:settings.models.emptyTitle')}
+          variant="empty"
+        />
       ) : (
         <div className="models-current">
           <label className="models-field-label" htmlFor="models-active-config">
@@ -176,110 +173,82 @@ export function ModelsSettings({
 
       {editSession.mode !== 'closed' ? <ModelConfigForm state={state} /> : null}
 
-      {deleteTarget !== undefined ? (
-        <div
-          aria-describedby="models-delete-confirm-body"
-          aria-labelledby="models-delete-confirm-title"
-          className="settings-confirm"
-          role="dialog"
-        >
-          <h3 id="models-delete-confirm-title">{t('common:settings.models.deleteConfirmTitle')}</h3>
-          <p id="models-delete-confirm-body">
-            {t('common:settings.models.deleteConfirmBody', {
-              modelId: deleteTarget.modelId,
-              baseUrl: deleteTarget.baseUrl
+      <ConfirmDialog
+        busy={state.deleteState.kind === 'deleting'}
+        cancelLabel={t('common:settings.models.deleteConfirmCancel')}
+        confirmLabel={
+          state.deleteState.kind === 'deleting'
+            ? t('common:settings.models.deleting')
+            : t('common:settings.models.deleteConfirmAccept')
+        }
+        description={
+          deleteTarget
+            ? t('common:settings.models.deleteConfirmBody', {
+                modelId: deleteTarget.modelId,
+                baseUrl: deleteTarget.baseUrl
+              })
+            : undefined
+        }
+        error={
+          state.deleteState.kind === 'failed'
+            ? t(modelsDeleteErrorKey(state.deleteState.code))
+            : null
+        }
+        onCancel={state.cancelDelete}
+        onConfirm={state.confirmDelete}
+        open={deleteTarget !== undefined}
+        title={t('common:settings.models.deleteConfirmTitle')}
+        tone="danger"
+      >
+        {list.activeConfigId === deleteTarget?.id ? (
+          <p>{t('common:settings.models.deleteConfirmActiveNote')}</p>
+        ) : null}
+        {editSession.mode === 'edit' && editSession.configId === deleteTarget?.id ? (
+          <p>{t('common:settings.models.deleteConfirmDraftNote')}</p>
+        ) : null}
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        cancelLabel={t('common:settings.models.discardConfirmKeepEditing')}
+        confirmLabel={t('common:settings.models.discardConfirmDiscard')}
+        description={t('common:settings.models.discardConfirmBody')}
+        onCancel={state.keepEditing}
+        onConfirm={state.confirmDiscard}
+        open={discardPrompt !== undefined}
+        title={t('common:settings.models.discardConfirmTitle')}
+        tone="danger"
+      />
+
+      {/* 行测试结果弹窗：标明被测配置，状态文案随测试进度在弹窗内更新。 */}
+      <ConfirmDialog
+        confirmLabel={
+          rowTestDialog?.outcome.status === 'running'
+            ? t('common:settings.models.cancelButton')
+            : t('common:settings.models.testDialogClose')
+        }
+        onConfirm={state.closeRowTestDialog}
+        onCancel={state.closeRowTestDialog}
+        open={rowTestDialog !== undefined}
+        title={t('common:settings.models.testDialogTitle')}
+      >
+        {rowTestTarget !== undefined ? (
+          <p>
+            {t('common:settings.models.testDialogTarget', {
+              modelId: rowTestTarget.modelId,
+              baseUrl: rowTestTarget.baseUrl
             })}
           </p>
-          {list.activeConfigId === deleteTarget.id ? (
-            <p>{t('common:settings.models.deleteConfirmActiveNote')}</p>
-          ) : null}
-          {editSession.mode === 'edit' && editSession.configId === deleteTarget.id ? (
-            <p>{t('common:settings.models.deleteConfirmDraftNote')}</p>
-          ) : null}
-          {state.deleteState.kind === 'failed' ? (
-            <p className="settings-error" role="alert">
-              {t(modelsDeleteErrorKey(state.deleteState.code))}
-            </p>
-          ) : null}
-          <div className="settings-confirm-actions">
-            <button
-              disabled={state.deleteState.kind === 'deleting'}
-              onClick={state.cancelDelete}
-              type="button"
-            >
-              {t('common:settings.models.deleteConfirmCancel')}
-            </button>
-            <button
-              className="settings-confirm-danger"
-              disabled={state.deleteState.kind === 'deleting'}
-              onClick={state.confirmDelete}
-              type="button"
-            >
-              {state.deleteState.kind === 'deleting'
-                ? t('common:settings.models.deleting')
-                : t('common:settings.models.deleteConfirmAccept')}
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {discardPrompt !== undefined ? (
-        <div
-          aria-describedby="models-form-discard-confirm-body"
-          aria-labelledby="models-form-discard-confirm-title"
-          className="settings-confirm"
-          role="dialog"
-        >
-          <h3 id="models-form-discard-confirm-title">
-            {t('common:settings.models.discardConfirmTitle')}
-          </h3>
-          <p id="models-form-discard-confirm-body">
-            {t('common:settings.models.discardConfirmBody')}
+        ) : null}
+        {rowTestMessage !== undefined ? (
+          <p
+            aria-live="polite"
+            className={rowTestFailed ? 'settings-error' : undefined}
+            role="status"
+          >
+            {rowTestMessage}
           </p>
-          <div className="settings-confirm-actions">
-            <button onClick={state.keepEditing} type="button">
-              {t('common:settings.models.discardConfirmKeepEditing')}
-            </button>
-            <button
-              className="settings-confirm-danger"
-              onClick={state.confirmDiscard}
-              type="button"
-            >
-              {t('common:settings.models.discardConfirmDiscard')}
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {rowTestDialog !== undefined ? (
-        <div aria-labelledby="models-test-dialog-title" className="settings-confirm" role="dialog">
-          <h3 id="models-test-dialog-title">{t('common:settings.models.testDialogTitle')}</h3>
-          {rowTestTarget !== undefined ? (
-            <p>
-              {t('common:settings.models.testDialogTarget', {
-                modelId: rowTestTarget.modelId,
-                baseUrl: rowTestTarget.baseUrl
-              })}
-            </p>
-          ) : null}
-          {rowTestMessage !== undefined ? (
-            <p
-              aria-live="polite"
-              className={rowTestFailed ? 'settings-error' : undefined}
-              role="status"
-            >
-              {rowTestMessage}
-            </p>
-          ) : null}
-          <div className="settings-confirm-actions">
-            <button onClick={state.closeRowTestDialog} ref={testDialogButtonRef} type="button">
-              {rowTestDialog.outcome.status === 'running'
-                ? t('common:settings.models.cancelButton')
-                : t('common:settings.models.testDialogClose')}
-            </button>
-          </div>
-        </div>
-      ) : null}
+        ) : null}
+      </ConfirmDialog>
     </div>
   )
 }
