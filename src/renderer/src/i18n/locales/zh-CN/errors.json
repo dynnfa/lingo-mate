@@ -1,4 +1,10 @@
 {
+  "common": {
+    "unknown": "发生未知错误，请稍后重试。",
+    "untrustedSource": "该操作仅可在应用窗口内执行。",
+    "invalidInput": "请求无效，请检查输入后重试。",
+    "storageFailed": "访问本地数据失败，请稍后重试。"
+  },
   "notFound": {
     "conversation": "会话不存在或已被删除。",
     "message": "消息不存在或已被删除。"
@@ -10,6 +16,7 @@
   "invalidInput": "请求内容无效，请检查词汇输入后重试。",
   "untrustedSource": "只能从应用窗口执行此操作。",
   "persistence": "访问本地会话数据失败，请稍后重试。",
+  "credentialDecryptFailed": "已保存的 API Key 无法读取，请重新输入或移除。",
   "unknown": "发生未知错误，请稍后重试。",
   "generation": {
     "model": "生成回复失败，请稍后重试。",
@@ -47,8 +54,6 @@
     "testModelUnavailable": "模型不可用，请检查 Model ID。",
     "testNetworkError": "网络错误，请检查 Base URL 和网络连接。",
     "testUnsupportedResponse": "服务返回了不支持的响应格式。",
-    "unknown": "发生未知错误，请稍后重试。",
-    "untrustedSource": "只能从应用窗口访问模型设置。",
     "invalidConfigId": "配置 ID 无效。",
     "configNotFound": "该模型配置不存在，可能已被删除。",
     "deleteFailed": "删除模型配置失败，请重试。",
@@ -56,32 +61,9 @@
   },
   "usage": {
     "readFailed": "无法读取用量数据，请稍后重试。",
-    "overflow": "用量合计超出可显示范围。",
-    "invalidInput": "用量请求无效。",
-    "untrustedSource": "只能从应用窗口访问用量统计。",
-    "unknown": "发生未知错误，请稍后重试。"
-  },
-  "vocabulary": {
-    "storageFailed": "访问本地词汇数据失败，请稍后重试。",
-    "invalidInput": "词汇请求无效。",
-    "untrustedSource": "已记录词汇只能从应用窗口访问。",
-    "unknown": "发生未知错误，请稍后重试。"
-  },
-  "phrase": {
-    "storageFailed": "访问本地短语数据失败，请稍后重试。",
-    "invalidInput": "短语请求无效。",
-    "untrustedSource": "已记录短语只能从应用窗口访问。",
-    "unknown": "发生未知错误，请稍后重试。"
-  },
-  "synonym": {
-    "storageFailed": "访问本地近义词数据失败，请稍后重试。",
-    "invalidInput": "近义词请求无效。",
-    "untrustedSource": "已记录近义词只能从应用窗口访问。",
-    "unknown": "发生未知错误，请稍后重试。"
+    "overflow": "用量合计超出可显示范围。"
   },
   "vocabularyPractice": {
-    "untrustedSource": "词汇练习只能从应用窗口访问。",
-    "invalidInput": "词汇练习请求无效，请重新确认数量或答案。",
     "sessionNotFound": "本轮练习已失效，请重新确认数量开始新一轮。",
     "busy": "本次审查仍在进行中，请稍候或先取消。",
     "modelNotConfigured": "尚未配置模型，请先在设置 > 模型中完成配置。",
@@ -91,13 +73,9 @@
     "toolCallNotSupported": "当前模型或接口不支持审查所需的工具调用，请更换模型或接口后重试。",
     "timeout": "审查超时，请重试。",
     "cancelled": "审查已取消。",
-    "roundLimit": "审查轮次过多，请重新提交。",
-    "storageFailed": "访问本地词汇数据失败，请稍后重试。",
-    "unknown": "发生未知错误，请稍后重试。"
+    "roundLimit": "审查轮次过多，请重新提交。"
   },
   "sentencePractice": {
-    "untrustedSource": "造句练习只能从应用窗口访问。",
-    "invalidInput": "练习请求无效。请检查答案后重试。",
     "sessionNotFound": "本轮练习已失效。请换一组单词重新开始。",
     "busy": "已有请求在进行中，请稍候或先取消。",
     "modelNotConfigured": "还没有配置模型。请先在设置 > 模型中完成配置。",
@@ -105,8 +83,6 @@
     "modelError": "模型请求失败，请稍后重试。",
     "invalidAnalysis": "模型返回的结果无效，请重试。",
     "timeout": "请求超时，请重试。",
-    "cancelled": "请求已取消。",
-    "storageFailed": "读取本地词库数据失败，请稍后重试。",
-    "unknown": "发生未知错误，请稍后重试。"
+    "cancelled": "请求已取消。"
   }
 }

@@ -104,6 +104,7 @@
       "outputLabel": "输出 Token",
       "requestsLabel": "请求数",
       "unknownValue": "未知",
+      "emptyNotes": "—",
       "requestsWithoutUsage_one": "{{count}} 次请求未返回用量",
       "requestsWithoutUsage_other": "{{count}} 次请求未返回用量",
       "invalidRecords_one": "{{count}} 条异常记录",
@@ -306,6 +307,7 @@
     "emptyTitle": "从一句话开始",
     "emptyBody": "练习表达、修改句子，或聊聊你感兴趣的话题。",
     "userRole": "你",
+    "assistantRole": "Lingo Mate",
     "retry": "重试"
   },
   "composer": {

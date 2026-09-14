@@ -1,0 +1,81 @@
+/* 共享页面级三态块：结构、语义与默认皮肤；站点经 className 附加间距/边框差异。 */
+.state-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--color-text-status);
+  font-size: 13px;
+}
+
+/* 站点经 .state-block.<site-class>（更高特异性）覆盖容器色等皮肤。 */
+.state-block-error {
+  color: var(--color-text-secondary);
+}
+
+.state-block-title {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.state-block-message {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.state-block button {
+  padding: 6px 14px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-secondary);
+  font-size: 12px;
+}
+
+/* 首次加载骨架：区块形状占位，避免布局跳动。 */
+.state-block-skeleton {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+}
+
+.state-block-skeleton-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.state-block-skeleton-block {
+  height: 92px;
+  border-radius: 12px;
+  background: var(--color-surface-secondary);
+  animation: state-block-skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+.state-block-skeleton-chart {
+  height: 200px;
+  border-radius: 8px;
+}
+
+@keyframes state-block-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .state-block-skeleton-block {
+    animation: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .state-block-skeleton-summary {
+    grid-template-columns: 1fr;
+  }
+}

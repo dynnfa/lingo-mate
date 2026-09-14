@@ -5,6 +5,7 @@ import type {
   PreferencesErrorCode,
   TargetLanguage
 } from '../../../../shared/preferences'
+import { useIpcRequest } from '../../hooks/use-ipc-request'
 import { preferencesFailureMessageKey } from '../../preferences/preferences-failure'
 
 // 首版学习能力仅支持英语；语言自称保持固定显示，说明文案进入翻译资源。
@@ -17,56 +18,52 @@ const TARGET_LANGUAGE_OPTIONS: ReadonlyArray<{ language: TargetLanguage; label: 
 export function TargetLanguageSection(): React.JSX.Element {
   const { t } = useTranslation(['common', 'errors'])
   const [selected, setSelected] = useState<TargetLanguage>('en')
-  const [saving, setSaving] = useState(false)
   const [failureCode, setFailureCode] = useState<PreferencesErrorCode | undefined>()
 
-  useEffect(() => {
-    let cancelled = false
-    const preferences: PreferencesApi = window.api.preferences
-    void preferences
-      .getLanguageSettings()
-      .then((result) => {
-        if (cancelled) return
-        if (result.status === 'ok') {
-          setSelected(result.settings.targetLanguage)
-        } else {
-          setFailureCode(result.error.code)
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setFailureCode('PREFERENCES_READ_FAILED')
-      })
-    return () => {
-      cancelled = true
+  // 挂载读取偏好；卸载或重复挂载的迟到结果由 hook 的 mounted 防护丢弃。
+  const readRequest = useIpcRequest(
+    async (): Promise<Awaited<ReturnType<PreferencesApi['getLanguageSettings']>>> =>
+      window.api.preferences.getLanguageSettings(),
+    {
+      onComplete: (result) => {
+        if (result.status === 'ok') setSelected(result.settings.targetLanguage)
+        else setFailureCode(result.error.code)
+      },
+      onError: () => setFailureCode('PREFERENCES_READ_FAILED')
     }
-  }, [])
+  )
+
+  const { run: runRead } = readRequest
+  useEffect(() => {
+    void runRead()
+  }, [runRead])
+
+  // pending 期间重复选择被静默忽略。
+  const saveRequest = useIpcRequest(
+    async (
+      language: TargetLanguage
+    ): Promise<Awaited<ReturnType<PreferencesApi['setTargetLanguage']>>> =>
+      window.api.preferences.setTargetLanguage({ targetLanguage: language }),
+    {
+      onComplete: (result) => {
+        if (result.status === 'ok') setSelected(result.settings.targetLanguage)
+        else setFailureCode(result.error.code)
+      },
+      onError: () => setFailureCode('PREFERENCES_WRITE_FAILED')
+    }
+  )
 
   const selectLanguage = (language: TargetLanguage): void => {
-    if (saving || language === selected) {
+    if (saveRequest.pending || language === selected) {
       return
     }
-    setSaving(true)
     setFailureCode(undefined)
-    window.api.preferences
-      .setTargetLanguage({ targetLanguage: language })
-      .then((result): void => {
-        if (result.status === 'ok') {
-          setSelected(result.settings.targetLanguage)
-          return
-        }
-        setFailureCode(result.error.code)
-      })
-      .catch(() => {
-        setFailureCode('PREFERENCES_WRITE_FAILED')
-      })
-      .finally(() => {
-        setSaving(false)
-      })
+    void saveRequest.run(language)
   }
 
   return (
     <>
-      <fieldset className="language-fieldset" disabled={saving}>
+      <fieldset className="language-fieldset" disabled={saveRequest.pending}>
         <legend>{t('common:settings.targetLanguage')}</legend>
         {TARGET_LANGUAGE_OPTIONS.map((option) => (
           <label className="language-option" key={option.language}>

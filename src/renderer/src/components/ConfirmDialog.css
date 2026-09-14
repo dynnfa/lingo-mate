@@ -1,0 +1,72 @@
+/* 共享确认对话框：取代原 dialog-backdrop/dialog-card 与 settings-confirm 两个家族，
+   统一为带遮罩与 aria-modal 的实现。 */
+.confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #30382e52;
+}
+
+.confirm-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(420px, 100%);
+  padding: 20px;
+  border: 1px solid var(--color-border-message);
+  border-radius: 12px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-composer);
+}
+
+.confirm-card h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.confirm-text {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.confirm-error[role='alert'] {
+  color: var(--color-text-active);
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.confirm-actions button {
+  padding: 6px 16px;
+  font-size: 13px;
+}
+
+.confirm-cancel-button,
+.confirm-button {
+  color: var(--color-text-secondary);
+  background: var(--color-surface-secondary);
+}
+
+.confirm-cancel-button:hover:not(:disabled),
+.confirm-button:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+/* 主操作确认按钮沿用原对话框家族的主色样式。 */
+.confirm-button-danger {
+  color: #ffffff;
+  background: var(--color-primary);
+}
+
+.confirm-button-danger:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}

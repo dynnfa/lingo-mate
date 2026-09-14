@@ -7,3 +7,8 @@ export function formatDateTime(locale: SupportedLocale, isoDateTime: string): st
     new Date(isoDateTime)
   )
 }
+
+// 列表分隔符随界面 locale 选择，避免在组件里硬编码全角标点。
+export function listSeparator(locale: SupportedLocale): string {
+  return locale === 'en' ? '; ' : '；'
+}

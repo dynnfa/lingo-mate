@@ -1,8 +1,11 @@
 import type { ModelsErrorCode } from '../../../../shared/models'
+import { COMMON_ERROR_KEY_ENTRIES, createErrorKeyResolver } from '../../i18n/error-messages'
 import type { ModelsTestOutcome } from './useModelsSettings'
 
+type CommonErrorKey = (typeof COMMON_ERROR_KEY_ENTRIES)[keyof typeof COMMON_ERROR_KEY_ENTRIES]
+
 type ModelsErrorKey =
-  | 'errors:models.untrustedSource'
+  | CommonErrorKey
   | 'errors:models.invalidConfigId'
   | 'errors:models.configNotFound'
   | 'errors:models.readFailed'
@@ -22,11 +25,10 @@ type ModelsErrorKey =
   | 'errors:models.testModelUnavailable'
   | 'errors:models.testNetworkError'
   | 'errors:models.testUnsupportedResponse'
-  | 'errors:models.unknown'
 
-// 穷尽的显式映射，不使用任意字符串断言绕过 key 校验。
+// 穷尽的显式映射，不使用任意字符串断言绕过 key 校验；跨域错误码走公共条目。
 const MODELS_ERROR_KEYS: Record<ModelsErrorCode, ModelsErrorKey> = {
-  UNTRUSTED_SOURCE: 'errors:models.untrustedSource',
+  ...COMMON_ERROR_KEY_ENTRIES,
   INVALID_CONFIG_ID: 'errors:models.invalidConfigId',
   CONFIG_NOT_FOUND: 'errors:models.configNotFound',
   INVALID_BASE_URL: 'errors:models.invalidBaseUrl',
@@ -43,12 +45,13 @@ const MODELS_ERROR_KEYS: Record<ModelsErrorCode, ModelsErrorKey> = {
   TEST_AUTH_FAILED: 'errors:models.testAuthFailed',
   TEST_MODEL_UNAVAILABLE: 'errors:models.testModelUnavailable',
   TEST_NETWORK_ERROR: 'errors:models.testNetworkError',
-  TEST_UNSUPPORTED_RESPONSE: 'errors:models.testUnsupportedResponse',
-  UNKNOWN_ERROR: 'errors:models.unknown'
+  TEST_UNSUPPORTED_RESPONSE: 'errors:models.testUnsupportedResponse'
 }
 
+const resolveModelsErrorKey = createErrorKeyResolver(COMMON_ERROR_KEY_ENTRIES)
+
 export function modelsErrorKey(code: ModelsErrorCode): ModelsErrorKey {
-  return MODELS_ERROR_KEYS[code]
+  return resolveModelsErrorKey(MODELS_ERROR_KEYS, code)
 }
 
 // 删除失败时写入错误换成删除语境文案，其余码保持原语义。

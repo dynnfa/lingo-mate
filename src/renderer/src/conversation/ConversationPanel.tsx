@@ -260,7 +260,11 @@ export function ConversationPanel({
               data-message-id={message.messageId}
               key={message.messageId}
             >
-              <span>{message.role === 'user' ? t('common:messages.userRole') : 'Lingo Mate'}</span>
+              <span>
+                {message.role === 'user'
+                  ? t('common:messages.userRole')
+                  : t('common:messages.assistantRole')}
+              </span>
               {message.role === 'assistant' &&
               message.streaming &&
               message.reasoning !== undefined ? (

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { normalizeI18nLocale } from '../../i18n'
-import { formatDateTime } from '../../i18n/formatters'
+import { formatDateTime, listSeparator } from '../../i18n/formatters'
+import { StateBlock } from '../../components/StateBlock'
 import type { UsageBucket } from '../../../../shared/usage'
 import { TokenUsageChart } from './TokenUsageChart'
 import { usageErrorKey } from './usage-messages'
@@ -25,32 +26,18 @@ export function UsageSettings({ state }: { state: UsageStatisticsState }): React
   const { loadState, overview, loadError, refreshing } = state
 
   if (loadState === 'idle' || loadState === 'loading') {
-    return (
-      <div
-        aria-busy="true"
-        aria-label={t('common:settings.usage.loading')}
-        className="usage-skeleton"
-        role="status"
-      >
-        <div className="usage-skeleton-summary">
-          <span className="usage-skeleton-block" />
-          <span className="usage-skeleton-block" />
-        </div>
-        <span className="usage-skeleton-block usage-skeleton-chart" />
-      </div>
-    )
+    return <StateBlock ariaLabel={t('common:settings.usage.loading')} skeleton variant="loading" />
   }
 
   if (loadState === 'error') {
     return (
-      <div className="usage-load-error">
-        <p className="settings-error" role="alert">
-          {t(usageErrorKey(loadError ?? 'UNKNOWN_ERROR'))}
-        </p>
-        <button onClick={state.reload} type="button">
-          {t('common:settings.usage.retryLoad')}
-        </button>
-      </div>
+      <StateBlock
+        className="usage-load-error"
+        message={t(usageErrorKey(loadError ?? 'UNKNOWN_ERROR'))}
+        onRetry={state.reload}
+        retryLabel={t('common:settings.usage.retryLoad')}
+        variant="error"
+      />
     )
   }
 
@@ -125,8 +112,11 @@ export function UsageSettings({ state }: { state: UsageStatisticsState }): React
       </div>
 
       {emptyLedger ? (
-        <div className="usage-empty">
-          <h3>{t('common:settings.usage.emptyTitle')}</h3>
+        <StateBlock
+          className="usage-empty"
+          title={t('common:settings.usage.emptyTitle')}
+          variant="empty"
+        >
           <p>{t('common:settings.usage.emptyBody')}</p>
           <p>
             {t('common:settings.usage.emptyTimeline', {
@@ -137,7 +127,7 @@ export function UsageSettings({ state }: { state: UsageStatisticsState }): React
               )
             })}
           </p>
-        </div>
+        </StateBlock>
       ) : state.dimension === 'daily' ? (
         <TokenUsageChart
           buckets={overview.days}
@@ -337,7 +327,9 @@ function UsageTableRow({
       <td>{metricText('input')}</td>
       <td>{metricText('output')}</td>
       <td>{formatTokenNumber(locale, bucket.requestCount)}</td>
-      <td>{notes.length > 0 ? notes.join('；') : '—'}</td>
+      <td>
+        {notes.length > 0 ? notes.join(listSeparator(locale)) : t('settings.usage.emptyNotes')}
+      </td>
     </tr>
   )
 }

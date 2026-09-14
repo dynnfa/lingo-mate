@@ -1,4 +1,10 @@
 {
+  "common": {
+    "unknown": "Something went wrong. Please try again later.",
+    "untrustedSource": "This action is only available from the application window.",
+    "invalidInput": "The request is invalid. Check the input and try again.",
+    "storageFailed": "Couldn't access local data. Please try again later."
+  },
   "notFound": {
     "conversation": "This conversation doesn't exist or has been deleted.",
     "message": "This message doesn't exist or has been deleted."
@@ -10,6 +16,7 @@
   "invalidInput": "The request is invalid. Check the vocabulary input and try again.",
   "untrustedSource": "This action is only available from the application window.",
   "persistence": "Couldn't access local conversation data. Please try again later.",
+  "credentialDecryptFailed": "The saved API key can't be read. Please re-enter or remove it.",
   "unknown": "Something went wrong. Please try again later.",
   "generation": {
     "model": "Couldn't generate a reply. Please try again later.",
@@ -47,8 +54,6 @@
     "testModelUnavailable": "The model is unavailable. Please check the Model ID.",
     "testNetworkError": "Network error. Please check the Base URL and your connection.",
     "testUnsupportedResponse": "The service returned an unsupported response format.",
-    "unknown": "Something went wrong. Please try again later.",
-    "untrustedSource": "Model settings are only available from the application window.",
     "invalidConfigId": "The configuration ID is invalid.",
     "configNotFound": "This model configuration no longer exists; it may have been deleted.",
     "deleteFailed": "Couldn't delete the model configuration. Please try again.",
@@ -56,32 +61,9 @@
   },
   "usage": {
     "readFailed": "Couldn't read usage statistics. Please try again later.",
-    "overflow": "Usage totals are too large to display.",
-    "invalidInput": "The usage request is invalid.",
-    "untrustedSource": "Usage statistics are only available from the application window.",
-    "unknown": "Something went wrong. Please try again later."
-  },
-  "vocabulary": {
-    "storageFailed": "Couldn't access your saved vocabulary. Please try again later.",
-    "invalidInput": "The vocabulary request is invalid.",
-    "untrustedSource": "Recorded vocabulary is only available from the application window.",
-    "unknown": "Something went wrong. Please try again later."
-  },
-  "phrase": {
-    "storageFailed": "Couldn't access your saved phrases. Please try again later.",
-    "invalidInput": "The phrase request is invalid.",
-    "untrustedSource": "Recorded phrases are only available from the application window.",
-    "unknown": "Something went wrong. Please try again later."
-  },
-  "synonym": {
-    "storageFailed": "Couldn't access your saved synonyms. Please try again later.",
-    "invalidInput": "The synonym request is invalid.",
-    "untrustedSource": "Recorded synonyms are only available from the application window.",
-    "unknown": "Something went wrong. Please try again later."
+    "overflow": "Usage totals are too large to display."
   },
   "vocabularyPractice": {
-    "untrustedSource": "Vocabulary practice can only be used from the app window.",
-    "invalidInput": "Invalid practice request. Confirm the count or your answers and try again.",
     "sessionNotFound": "This practice round is no longer valid. Confirm a count to start a new round.",
     "busy": "A review is already running. Wait for it or cancel it first.",
     "modelNotConfigured": "No model is configured yet. Set one up in Settings > Models first.",
@@ -91,13 +73,9 @@
     "toolCallNotSupported": "The current model or endpoint doesn't support the tool calls required for review. Switch models or endpoints and try again.",
     "timeout": "The review timed out. Try again.",
     "cancelled": "The review was cancelled.",
-    "roundLimit": "The review used too many rounds. Submit again.",
-    "storageFailed": "Failed to read the local vocabulary data. Try again later.",
-    "unknown": "An unknown error occurred. Try again later."
+    "roundLimit": "The review used too many rounds. Submit again."
   },
   "sentencePractice": {
-    "untrustedSource": "Sentence practice can only be used from the app window.",
-    "invalidInput": "Invalid practice request. Check your answer and try again.",
     "sessionNotFound": "This practice round is no longer valid. Start a new round with new words.",
     "busy": "A request is already running. Wait for it or cancel it first.",
     "modelNotConfigured": "No model is configured yet. Set one up in Settings > Models first.",
@@ -105,8 +83,6 @@
     "modelError": "The model request failed. Try again later.",
     "invalidAnalysis": "The model returned an invalid review. Try again.",
     "timeout": "The request timed out. Try again.",
-    "cancelled": "The request was cancelled.",
-    "storageFailed": "Failed to read the local vocabulary data. Try again later.",
-    "unknown": "An unknown error occurred. Try again later."
+    "cancelled": "The request was cancelled."
   }
 }

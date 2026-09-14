@@ -133,7 +133,7 @@ function translateRequestError(t: StatusTFunction, error: ConversationRequestErr
     case 'MODEL_NOT_CONFIGURED':
       return t('errors:generation.modelNotConfigured')
     case 'CREDENTIAL_DECRYPT_FAILED':
-      return t('errors:models.credentialDecryptFailed')
+      return t('errors:credentialDecryptFailed')
     case 'CANCELLED':
       return t('conversation:status.cancelled')
     case 'UNKNOWN_ERROR':
@@ -146,7 +146,7 @@ function translateGenerationError(t: StatusTFunction, error: GenerationEventErro
     case 'MODEL_ERROR':
       return t('errors:generation.model')
     case 'CREDENTIAL_DECRYPT_FAILED':
-      return t('errors:models.credentialDecryptFailed')
+      return t('errors:credentialDecryptFailed')
     case 'MODEL_NOT_CONFIGURED':
       return t('errors:generation.modelNotConfigured')
     case 'TOOL_CALL_NOT_SUPPORTED':

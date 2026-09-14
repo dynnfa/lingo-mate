@@ -1,8 +1,10 @@
 import type { VocabularyPracticeErrorCode } from '../../../../shared/vocabulary-practice'
+import { COMMON_ERROR_KEY_ENTRIES, createErrorKeyResolver } from '../../i18n/error-messages'
+
+type CommonErrorKey = (typeof COMMON_ERROR_KEY_ENTRIES)[keyof typeof COMMON_ERROR_KEY_ENTRIES]
 
 type VocabularyPracticeErrorKey =
-  | 'errors:vocabularyPractice.untrustedSource'
-  | 'errors:vocabularyPractice.invalidInput'
+  | CommonErrorKey
   | 'errors:vocabularyPractice.sessionNotFound'
   | 'errors:vocabularyPractice.busy'
   | 'errors:vocabularyPractice.modelNotConfigured'
@@ -13,16 +15,13 @@ type VocabularyPracticeErrorKey =
   | 'errors:vocabularyPractice.timeout'
   | 'errors:vocabularyPractice.cancelled'
   | 'errors:vocabularyPractice.roundLimit'
-  | 'errors:vocabularyPractice.storageFailed'
-  | 'errors:vocabularyPractice.unknown'
 
-// 穷尽的显式映射，不使用任意字符串断言绕过 key 校验。
+// 穷尽的显式映射，不使用任意字符串断言绕过 key 校验；跨域错误码走公共条目。
 const VOCABULARY_PRACTICE_ERROR_KEYS: Record<
   VocabularyPracticeErrorCode,
   VocabularyPracticeErrorKey
 > = {
-  UNTRUSTED_SOURCE: 'errors:vocabularyPractice.untrustedSource',
-  INVALID_INPUT: 'errors:vocabularyPractice.invalidInput',
+  ...COMMON_ERROR_KEY_ENTRIES,
   SESSION_NOT_FOUND: 'errors:vocabularyPractice.sessionNotFound',
   BUSY: 'errors:vocabularyPractice.busy',
   MODEL_NOT_CONFIGURED: 'errors:vocabularyPractice.modelNotConfigured',
@@ -32,13 +31,13 @@ const VOCABULARY_PRACTICE_ERROR_KEYS: Record<
   TOOL_CALL_NOT_SUPPORTED: 'errors:vocabularyPractice.toolCallNotSupported',
   TIMEOUT: 'errors:vocabularyPractice.timeout',
   CANCELLED: 'errors:vocabularyPractice.cancelled',
-  ROUND_LIMIT: 'errors:vocabularyPractice.roundLimit',
-  STORAGE_FAILED: 'errors:vocabularyPractice.storageFailed',
-  UNKNOWN_ERROR: 'errors:vocabularyPractice.unknown'
+  ROUND_LIMIT: 'errors:vocabularyPractice.roundLimit'
 }
+
+const resolveVocabularyPracticeErrorKey = createErrorKeyResolver(COMMON_ERROR_KEY_ENTRIES)
 
 export function vocabularyPracticeErrorKey(
   code: VocabularyPracticeErrorCode
 ): VocabularyPracticeErrorKey {
-  return VOCABULARY_PRACTICE_ERROR_KEYS[code]
+  return resolveVocabularyPracticeErrorKey(VOCABULARY_PRACTICE_ERROR_KEYS, code)
 }

@@ -92,7 +92,7 @@ describe('RecordedPage', () => {
   it('renders the vocabulary detail inside the right content container', async () => {
     renderPage()
 
-    const detail = document.querySelector('.recorded-detail')
+    const detail = document.querySelector('.page-shell-detail')
     expect(detail).toBeInstanceOf(HTMLElement)
     expect(detail).toContainElement(await screen.findByRole('heading', { name: '词汇' }))
     expect(screen.queryByRole('heading', { name: '短语' })).not.toBeInTheDocument()

@@ -764,8 +764,9 @@ describe('SettingsPage', () => {
     // 弹窗打开即聚焦其按钮：触发按钮已禁用，焦点落在 body 会让 Escape 收不到
     expect(within(dialog).getByRole('button', { name: '取消' })).toHaveFocus()
 
-    // Escape 关闭弹窗：在途测试被取消，锁定释放后可再次测试
-    fireEvent.keyDown(screen.getByRole('main', { name: '设置' }), { key: 'Escape' })
+    // Escape 关闭弹窗：在途测试被取消，锁定释放后可再次测试。
+    // 焦点被约束在弹窗内，按键从弹窗内发起，不冒泡到页面。
+    fireEvent.keyDown(screen.getByRole('dialog', { name: '连接测试' }), { key: 'Escape' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     await waitFor(() => {
       expect(calls.cancel).toHaveLength(1)
@@ -956,7 +957,8 @@ describe('SettingsPage', () => {
     await openModels()
 
     fireEvent.click(screen.getByRole('button', { name: '删除' }))
-    fireEvent.keyDown(screen.getByRole('main', { name: '设置' }), { key: 'Escape' })
+    // 焦点被约束在确认弹窗内，Escape 从弹窗内发起并吞在遮罩层
+    fireEvent.keyDown(screen.getByRole('dialog', { name: '删除模型配置？' }), { key: 'Escape' })
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(calls.delete).toHaveLength(0)

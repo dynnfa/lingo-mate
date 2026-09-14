@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { StateBlock } from '../../components/StateBlock'
 import { SENTENCE_PRACTICE_ANSWER_MAX_LENGTH } from '../../../../shared/sentence-practice'
 import { sentencePracticeErrorKey } from './sentence-practice-messages'
 import { useSentencePractice } from './use-sentence-practice'
@@ -13,17 +15,12 @@ export function SentencePracticeDetail(): React.JSX.Element {
     useSentencePractice()
   const [confirmNewRound, setConfirmNewRound] = useState(false)
   const [submitBlocked, setSubmitBlocked] = useState(false)
-  const dialogCancelButtonRef = useRef<HTMLButtonElement>(null)
   const newRoundButtonRef = useRef<HTMLButtonElement>(null)
 
   // 进入造句练习自动开始一轮；重复挂载由 hook 的迟到守卫收敛。
   useEffect(() => {
     startRound()
   }, [startRound])
-
-  useEffect(() => {
-    if (confirmNewRound) dialogCancelButtonRef.current?.focus()
-  }, [confirmNewRound])
 
   const practicing =
     state.phase === 'hinting' ||
@@ -49,17 +46,9 @@ export function SentencePracticeDetail(): React.JSX.Element {
     startRound()
   }
 
+  // 关闭后的焦点归还（回到换组按钮）由 ConfirmDialog 负责。
   const closeNewRoundDialog = (): void => {
     setConfirmNewRound(false)
-    newRoundButtonRef.current?.focus()
-  }
-
-  const handleDialogKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    if (event.key !== 'Escape') return
-    // Escape 只关闭对话框，不冒泡退出练习页。
-    event.preventDefault()
-    event.stopPropagation()
-    closeNewRoundDialog()
   }
 
   const requestReview = (): void => {
@@ -100,26 +89,29 @@ export function SentencePracticeDetail(): React.JSX.Element {
       </header>
 
       {state.error?.scope === 'start' ? (
-        <div className="sentence-practice-error" role="alert">
-          <p className="sentence-practice-error-title">
-            {t('common:practice.sentence.startFailedTitle')}
-          </p>
-          <p>{t(sentencePracticeErrorKey(state.error.code))}</p>
-        </div>
+        <StateBlock
+          className="sentence-practice-error"
+          message={t(sentencePracticeErrorKey(state.error.code))}
+          title={t('common:practice.sentence.startFailedTitle')}
+          variant="error"
+        />
       ) : null}
 
       {state.phase === 'loading' ? (
-        <div aria-busy="true" className="sentence-practice-state" role="status">
-          {t('common:practice.sentence.loading')}
-        </div>
+        <StateBlock
+          className="sentence-practice-state"
+          message={t('common:practice.sentence.loading')}
+          variant="loading"
+        />
       ) : state.phase === 'empty' ? (
-        <div className="sentence-practice-state">
-          <p className="sentence-practice-state-title">
-            {t('common:practice.sentence.emptyTitle')}
-          </p>
+        <StateBlock
+          className="sentence-practice-state"
+          title={t('common:practice.sentence.emptyTitle')}
+          variant="empty"
+        >
           <p>{t('common:practice.sentence.emptyCount', { count: state.entries.length })}</p>
           <p>{t('common:practice.sentence.emptyBody')}</p>
-        </div>
+        </StateBlock>
       ) : null}
 
       {practicing ? (
@@ -188,12 +180,12 @@ export function SentencePracticeDetail(): React.JSX.Element {
           </div>
 
           {submitBlocked ? (
-            <div className="sentence-practice-error" role="alert">
-              <p className="sentence-practice-error-title">
-                {t('common:practice.sentence.submitBlockedTitle')}
-              </p>
-              <p>{t('common:practice.sentence.submitBlockedBody')}</p>
-            </div>
+            <StateBlock
+              className="sentence-practice-error"
+              message={t('common:practice.sentence.submitBlockedBody')}
+              title={t('common:practice.sentence.submitBlockedTitle')}
+              variant="error"
+            />
           ) : null}
 
           {state.notice === 'cancelled' ? (
@@ -203,12 +195,12 @@ export function SentencePracticeDetail(): React.JSX.Element {
           ) : null}
 
           {state.error?.scope === 'review' ? (
-            <div className="sentence-practice-error" role="alert">
-              <p className="sentence-practice-error-title">
-                {t('common:practice.sentence.reviewFailedTitle')}
-              </p>
-              <p>{t(sentencePracticeErrorKey(state.error.code))}</p>
-            </div>
+            <StateBlock
+              className="sentence-practice-error"
+              message={t(sentencePracticeErrorKey(state.error.code))}
+              title={t('common:practice.sentence.reviewFailedTitle')}
+              variant="error"
+            />
           ) : null}
 
           {state.phase === 'reviewing' ? (
@@ -370,34 +362,17 @@ export function SentencePracticeDetail(): React.JSX.Element {
         </div>
       ) : null}
 
-      {confirmNewRound ? (
-        <div className="dialog-backdrop" onKeyDown={handleDialogKeyDown}>
-          <div
-            aria-labelledby="sentence-practice-new-round-title"
-            aria-modal="true"
-            className="dialog-card"
-            role="dialog"
-          >
-            <h3 id="sentence-practice-new-round-title">
-              {t('common:practice.sentence.confirmNewRoundTitle')}
-            </h3>
-            <p className="dialog-text">{t('common:practice.sentence.confirmNewRoundBody')}</p>
-            <div className="dialog-actions">
-              <button
-                className="dialog-cancel-button"
-                onClick={closeNewRoundDialog}
-                ref={dialogCancelButtonRef}
-                type="button"
-              >
-                {t('common:practice.sentence.confirmNewRoundCancel')}
-              </button>
-              <button className="dialog-danger-button" onClick={beginNewRound} type="button">
-                {t('common:practice.sentence.confirmNewRoundConfirm')}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <ConfirmDialog
+        cancelLabel={t('common:practice.sentence.confirmNewRoundCancel')}
+        confirmLabel={t('common:practice.sentence.confirmNewRoundConfirm')}
+        description={t('common:practice.sentence.confirmNewRoundBody')}
+        onCancel={closeNewRoundDialog}
+        onConfirm={beginNewRound}
+        open={confirmNewRound}
+        returnFocusRef={newRoundButtonRef}
+        title={t('common:practice.sentence.confirmNewRoundTitle')}
+        tone="danger"
+      />
     </section>
   )
 }

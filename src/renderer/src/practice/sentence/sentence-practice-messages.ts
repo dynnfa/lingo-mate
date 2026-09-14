@@ -1,8 +1,10 @@
 import type { SentencePracticeErrorCode } from '../../../../shared/sentence-practice'
+import { COMMON_ERROR_KEY_ENTRIES, createErrorKeyResolver } from '../../i18n/error-messages'
+
+type CommonErrorKey = (typeof COMMON_ERROR_KEY_ENTRIES)[keyof typeof COMMON_ERROR_KEY_ENTRIES]
 
 type SentencePracticeErrorKey =
-  | 'errors:sentencePractice.untrustedSource'
-  | 'errors:sentencePractice.invalidInput'
+  | CommonErrorKey
   | 'errors:sentencePractice.sessionNotFound'
   | 'errors:sentencePractice.busy'
   | 'errors:sentencePractice.modelNotConfigured'
@@ -11,13 +13,10 @@ type SentencePracticeErrorKey =
   | 'errors:sentencePractice.invalidAnalysis'
   | 'errors:sentencePractice.timeout'
   | 'errors:sentencePractice.cancelled'
-  | 'errors:sentencePractice.storageFailed'
-  | 'errors:sentencePractice.unknown'
 
-// 穷尽的显式映射，不使用任意字符串断言绕过 key 校验。
+// 穷尽的显式映射，不使用任意字符串断言绕过 key 校验；跨域错误码走公共条目。
 const SENTENCE_PRACTICE_ERROR_KEYS: Record<SentencePracticeErrorCode, SentencePracticeErrorKey> = {
-  UNTRUSTED_SOURCE: 'errors:sentencePractice.untrustedSource',
-  INVALID_INPUT: 'errors:sentencePractice.invalidInput',
+  ...COMMON_ERROR_KEY_ENTRIES,
   SESSION_NOT_FOUND: 'errors:sentencePractice.sessionNotFound',
   BUSY: 'errors:sentencePractice.busy',
   MODEL_NOT_CONFIGURED: 'errors:sentencePractice.modelNotConfigured',
@@ -25,13 +24,13 @@ const SENTENCE_PRACTICE_ERROR_KEYS: Record<SentencePracticeErrorCode, SentencePr
   MODEL_ERROR: 'errors:sentencePractice.modelError',
   INVALID_ANALYSIS: 'errors:sentencePractice.invalidAnalysis',
   TIMEOUT: 'errors:sentencePractice.timeout',
-  CANCELLED: 'errors:sentencePractice.cancelled',
-  STORAGE_FAILED: 'errors:sentencePractice.storageFailed',
-  UNKNOWN_ERROR: 'errors:sentencePractice.unknown'
+  CANCELLED: 'errors:sentencePractice.cancelled'
 }
+
+const resolveSentencePracticeErrorKey = createErrorKeyResolver(COMMON_ERROR_KEY_ENTRIES)
 
 export function sentencePracticeErrorKey(
   code: SentencePracticeErrorCode
 ): SentencePracticeErrorKey {
-  return SENTENCE_PRACTICE_ERROR_KEYS[code]
+  return resolveSentencePracticeErrorKey(SENTENCE_PRACTICE_ERROR_KEYS, code)
 }

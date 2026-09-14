@@ -53,113 +53,9 @@ body {
   display: none;
 }
 
-/* 已记录页、设置页与练习页共用左右分栏骨架和菜单交互样式，选择器并列共享纯布局规则。 */
-.settings-page,
-.recorded-page,
-.practice-page {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  width: 100%;
-  height: 100%;
-  background: var(--color-background);
-}
-
-.settings-menu,
-.recorded-menu,
-.practice-menu {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  padding: 12px 16px;
-  border-right: 1px solid var(--color-border-sidebar);
-  background: var(--color-surface-sidebar);
-}
-
-.settings-menu-header,
-.recorded-menu-header,
-.practice-menu-header {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--color-border-divider);
-}
-
-.settings-back-button,
-.recorded-back-button,
-.practice-back-button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 8px;
-  color: var(--color-text-secondary);
-  background: transparent;
-  font-size: 13px;
-  font-weight: 600;
-  text-align: left;
-}
-
-.settings-back-button svg,
-.recorded-back-button svg,
-.practice-back-button svg {
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.settings-title,
-.recorded-title,
-.practice-title {
-  padding: 0 8px;
-  color: var(--color-text-muted);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.settings-menu-list,
-.recorded-menu-list,
-.practice-menu-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-top: 12px;
-}
-
-.settings-menu-item,
-.recorded-menu-item,
-.practice-menu-item {
-  padding: 6px 10px;
-  color: var(--color-text-session);
-  background: transparent;
-  font-size: 14px;
-  font-weight: 600;
-  text-align: left;
-}
-
-.settings-menu-item[aria-current='true'],
-.recorded-menu-item[aria-current='true'],
-.practice-menu-item[aria-current='true'] {
-  color: var(--color-text-active);
-  background: var(--color-surface-active);
-}
-
-.settings-detail {
-  min-width: 0;
-  overflow-y: auto;
+/* 页面骨架已收敛到 PageShell；设置页详情区保留自己的内边距。 */
+.settings-page .page-shell-detail {
   padding: 32px 40px;
-}
-
-/* 已记录页/练习页右侧内容容器。 */
-.recorded-detail,
-.practice-detail {
-  min-width: 0;
-  overflow-y: auto;
 }
 
 /* 仅供屏幕阅读器的辅助文本（表格 caption、删除结果通知）。 */
@@ -194,39 +90,11 @@ body {
   font-weight: 600;
 }
 
+/* 三态块结构已收敛到 StateBlock；此处仅保留站点间距差异。 */
 .vocabulary-state,
 .phrase-state,
 .synonym-state {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
   padding: 32px 0;
-  color: var(--color-text-status);
-  font-size: 13px;
-}
-
-.vocabulary-state[role='alert'],
-.phrase-state[role='alert'],
-.synonym-state[role='alert'] {
-  color: var(--color-text-secondary);
-}
-
-.vocabulary-state-title,
-.phrase-state-title,
-.synonym-state-title {
-  color: var(--color-text);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.vocabulary-state button,
-.phrase-state button,
-.synonym-state button {
-  padding: 6px 14px;
-  color: var(--color-text-secondary);
-  background: var(--color-surface-secondary);
-  font-size: 12px;
 }
 
 .vocabulary-table-scroll,
@@ -374,64 +242,7 @@ body {
   background: var(--color-surface-hover);
 }
 
-.vocabulary-footer,
-.phrase-footer,
-.synonym-footer {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  min-height: 34px;
-}
-
-.vocabulary-footer-status,
-.phrase-footer-status,
-.synonym-footer-status {
-  color: var(--color-text-status);
-  font-size: 12px;
-}
-
-.vocabulary-load-more-button,
-.phrase-load-more-button,
-.synonym-load-more-button {
-  padding: 6px 16px;
-  color: var(--color-text-secondary);
-  background: var(--color-surface-secondary);
-  font-size: 12px;
-}
-
-.vocabulary-load-more-button:hover,
-.phrase-load-more-button:hover,
-.synonym-load-more-button:hover {
-  background: var(--color-surface-hover);
-}
-
-.vocabulary-more-error,
-.phrase-more-error,
-.synonym-more-error {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  color: var(--color-text-status);
-  font-size: 12px;
-}
-
-.vocabulary-more-error .vocabulary-state-title,
-.phrase-more-error .phrase-state-title,
-.synonym-more-error .synonym-state-title {
-  font-size: 13px;
-}
-
-.vocabulary-more-error button,
-.phrase-more-error button,
-.synonym-more-error button {
-  padding: 4px 12px;
-  color: var(--color-text-secondary);
-  background: var(--color-surface-secondary);
-  font-size: 12px;
-}
-
+/* 列表底部加载区已收敛到 LoadMoreBar。 */
 /* ── 词汇练习详情：数量确认表单、两列练习区、审查状态与标红反馈 ── */
 .vocabulary-practice {
   display: flex;
@@ -474,7 +285,7 @@ body {
 }
 
 .vocabulary-practice-setup input[aria-invalid='true'] {
-  border-color: var(--color-danger, #b42318);
+  border-color: var(--color-danger);
 }
 
 .vocabulary-practice-setup button {
@@ -491,27 +302,30 @@ body {
 .vocabulary-practice-field-error {
   flex-basis: 100%;
   margin: 0;
-  color: var(--color-danger, #b42318);
+  color: var(--color-danger);
   font-size: 12px;
 }
 
+/* 三态块结构已收敛到 StateBlock；错误盒与状态块的间距/字号皮肤保留在此。 */
 .vocabulary-practice-state {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
   padding: 32px 0;
-  color: var(--color-text-status);
-  font-size: 13px;
 }
 
-.vocabulary-practice-state-title {
-  color: var(--color-text);
-  font-size: 14px;
-  font-weight: 600;
+.state-block.vocabulary-practice-error {
+  gap: 4px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-danger);
+  border-radius: 10px;
+  background: var(--color-surface);
+  font-size: 12px;
 }
 
-.vocabulary-practice-error,
+/* 错误盒标题沿用盒内小字号与次要色（历史样式如此）。 */
+.vocabulary-practice-error .state-block-title {
+  font-size: inherit;
+  color: var(--color-text-secondary);
+}
+
 .vocabulary-practice-short,
 .vocabulary-practice-notice {
   display: flex;
@@ -522,20 +336,6 @@ body {
   border-radius: 10px;
   background: var(--color-surface);
   font-size: 12px;
-}
-
-.vocabulary-practice-error {
-  border-color: var(--color-danger, #b42318);
-}
-
-.vocabulary-practice-error-title {
-  color: var(--color-text);
-  font-weight: 600;
-}
-
-.vocabulary-practice-error p {
-  margin: 0;
-  color: var(--color-text-secondary);
 }
 
 .vocabulary-practice-short,
@@ -629,15 +429,15 @@ body {
 
 /* 标红：固定红色样式 + 图标与文本原因，不只依赖颜色传达错误 */
 .vocabulary-practice-input-marked {
-  border-color: var(--color-danger, #b42318);
-  color: var(--color-danger, #b42318);
+  border-color: var(--color-danger);
+  color: var(--color-danger);
 }
 
 .vocabulary-practice-mark-reason {
   display: flex;
   gap: 4px;
   margin: 0;
-  color: var(--color-danger, #b42318);
+  color: var(--color-danger);
   font-size: 12px;
   overflow-wrap: anywhere;
 }
@@ -669,7 +469,7 @@ body {
 }
 
 .vocabulary-practice-verdict-errors {
-  color: var(--color-danger, #b42318);
+  color: var(--color-danger);
 }
 
 .vocabulary-practice-summary,
@@ -738,30 +538,30 @@ body {
   opacity: 0.6;
 }
 
-.sentence-practice-state,
-.sentence-practice-status {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
+/* 三态块结构已收敛到 StateBlock；状态块保留间距，错误盒保留盒式皮肤。 */
+.sentence-practice-state {
   padding: 8px 0;
-  color: var(--color-text-status);
-  font-size: 13px;
 }
 
-.sentence-practice-state-title {
-  margin: 0;
-  color: var(--color-text);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.sentence-practice-state p,
-.sentence-practice-status {
+.sentence-practice-state > p {
   margin: 0;
 }
 
-.sentence-practice-error,
+.state-block.sentence-practice-error {
+  gap: 4px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-danger);
+  border-radius: 10px;
+  background: var(--color-surface);
+  font-size: 12px;
+}
+
+/* 错误盒标题沿用盒内小字号与次要色（历史样式如此）。 */
+.sentence-practice-error .state-block-title {
+  font-size: inherit;
+  color: var(--color-text-secondary);
+}
+
 .sentence-practice-notice {
   display: flex;
   flex-direction: column;
@@ -771,21 +571,6 @@ body {
   border-radius: 10px;
   background: var(--color-surface);
   font-size: 12px;
-}
-
-.sentence-practice-error {
-  border-color: var(--color-danger, #b42318);
-}
-
-.sentence-practice-error-title {
-  margin: 0;
-  color: var(--color-text);
-  font-weight: 600;
-}
-
-.sentence-practice-error p {
-  margin: 0;
-  color: var(--color-text-secondary);
 }
 
 .sentence-practice-notice {
@@ -962,7 +747,7 @@ body {
 }
 
 .sentence-practice-check-bad {
-  color: var(--color-danger, #b42318);
+  color: var(--color-danger);
 }
 
 .sentence-practice-usage-term {
@@ -980,7 +765,7 @@ body {
 }
 
 .sentence-practice-usage-state-bad {
-  color: var(--color-danger, #b42318);
+  color: var(--color-danger);
 }
 
 .sentence-practice-usage-feedback,
@@ -1006,86 +791,11 @@ body {
 }
 
 .sentence-practice-issue-original {
-  color: var(--color-danger, #b42318);
+  color: var(--color-danger);
 }
 
 .sentence-practice-issue-suggestion {
   color: var(--color-text-active);
-}
-
-/* 删除确认对话框 */
-.dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: #30382e52;
-}
-
-.dialog-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: min(420px, 100%);
-  padding: 20px;
-  border: 1px solid var(--color-border-message);
-  border-radius: 12px;
-  background: var(--color-surface);
-  box-shadow: var(--shadow-composer);
-}
-
-.dialog-card h3 {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.dialog-text {
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  overflow-wrap: anywhere;
-}
-
-.dialog-error[role='alert'] {
-  color: var(--color-text-active);
-}
-
-.dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  padding-top: 4px;
-}
-
-.dialog-actions button {
-  padding: 6px 16px;
-  font-size: 13px;
-}
-
-.dialog-cancel-button {
-  color: var(--color-text-secondary);
-  background: var(--color-surface-secondary);
-}
-
-.dialog-cancel-button:hover {
-  background: var(--color-surface-hover);
-}
-
-.dialog-danger-button {
-  color: #ffffff;
-  background: var(--color-primary);
-}
-
-.dialog-danger-button:hover {
-  background: var(--color-primary-hover);
-}
-
-.settings-detail h2 {
-  margin-bottom: 16px;
-  font-size: 16px;
-  font-weight: 600;
 }
 
 .settings-section-body {
@@ -1153,28 +863,28 @@ textarea:focus-visible {
   overflow-wrap: anywhere;
 }
 
-/* 详情区块保持挂载、按 hidden 切换；显式声明避免被布局 display 覆盖。 */
-.settings-detail-pane[hidden] {
-  display: none;
-}
-
 .settings-section-description {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: 13px;
 }
 
-.models-loading {
-  margin: 0;
+/* 三态块结构已收敛到 StateBlock；此处保留站点皮肤差异。 */
+.state-block.models-loading {
   color: var(--color-text-secondary);
-  font-size: 13px;
 }
 
-.models-load-error {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+.state-block.models-load-error {
   gap: 10px;
+  color: var(--color-text-status);
+}
+
+.state-block.models-empty {
+  gap: 6px;
+  padding: 18px;
+  border: 1px dashed var(--color-border-message);
+  border-radius: 10px;
+  color: var(--color-text-secondary);
 }
 
 .models-form {
@@ -1302,27 +1012,6 @@ textarea:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 14px;
-}
-
-.models-empty {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 18px;
-  border: 1px dashed var(--color-border-message);
-  border-radius: 10px;
-}
-
-.models-empty-title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.models-empty-body {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 13px;
 }
 
 .models-current {
@@ -1457,59 +1146,6 @@ textarea:focus-visible {
   background: var(--color-surface-hover);
 }
 
-.settings-confirm {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  z-index: 50;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: min(420px, calc(100vw - 48px));
-  padding: 18px;
-  border: 1px solid var(--color-border-message);
-  border-radius: 14px;
-  background: var(--color-surface);
-  box-shadow: var(--shadow-composer);
-  transform: translate(-50%, -50%);
-}
-
-.settings-confirm h3 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.settings-confirm p {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 13px;
-  overflow-wrap: anywhere;
-}
-
-/* 弹窗内的错误文案保持状态色，不被上面的次要文字色覆盖。 */
-.settings-confirm .settings-error {
-  color: var(--color-text-status);
-}
-
-.settings-confirm-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.settings-confirm-actions button {
-  padding: 6px 14px;
-  border-radius: 10px;
-  background: var(--color-surface-secondary);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.settings-confirm-actions button:hover:not(:disabled) {
-  background: var(--color-surface-hover);
-}
-
 .session-sidebar {
   display: flex;
   flex-direction: column;
@@ -1635,12 +1271,6 @@ button.new-session {
 .session-item:hover,
 .sidebar-menu-item:hover,
 .settings-button:hover,
-.settings-back-button:hover,
-.recorded-back-button:hover,
-.practice-back-button:hover,
-.settings-menu-item:hover,
-.recorded-menu-item:hover,
-.practice-menu-item:hover,
 .new-session:hover {
   background: var(--color-surface-hover);
 }
@@ -1841,7 +1471,7 @@ button.secondary {
 
 .composer-error {
   margin: 8px 10px 0;
-  color: var(--color-danger, #b42318);
+  color: var(--color-danger);
   font-size: 12px;
 }
 
@@ -2216,16 +1846,18 @@ textarea:disabled {
   font-weight: 400;
 }
 
-.usage-empty {
+/* 三态块结构已收敛到 StateBlock；此处保留空态盒与错误块的皮肤差异。 */
+.state-block.usage-empty {
+  gap: 0;
   padding: 16px;
   border: 1px dashed var(--color-border-composer);
   border-radius: 12px;
 }
 
-.usage-empty h3 {
+.usage-empty .state-block-title {
   margin: 0 0 6px;
+  color: var(--color-text);
   font-size: 14px;
-  font-weight: 600;
 }
 
 .usage-empty p {
@@ -2234,57 +1866,13 @@ textarea:disabled {
   font-size: 13px;
 }
 
-.usage-load-error {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+.state-block.usage-load-error {
   gap: 10px;
-}
-
-/* 首次加载骨架：区块形状占位，避免布局跳动。 */
-.usage-skeleton {
-  display: grid;
-  gap: 12px;
-}
-
-.usage-skeleton-summary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.usage-skeleton-block {
-  height: 92px;
-  border-radius: 12px;
-  background: var(--color-surface-secondary);
-  animation: usage-skeleton-pulse 1.2s ease-in-out infinite;
-}
-
-.usage-skeleton-chart {
-  height: 200px;
-  border-radius: 8px;
-}
-
-@keyframes usage-skeleton-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.55;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .usage-skeleton-block {
-    animation: none;
-  }
+  color: var(--color-text-status);
 }
 
 @media (max-width: 760px) {
-  .usage-summary,
-  .usage-skeleton-summary {
+  .usage-summary {
     grid-template-columns: 1fr;
   }
 }
@@ -2325,20 +1913,11 @@ textarea:disabled {
     grid-template-columns: 210px minmax(0, 1fr);
   }
 
-  .settings-page,
-  .recorded-page,
-  .practice-page {
-    grid-template-columns: 210px minmax(0, 1fr);
-  }
-
-  .session-sidebar,
-  .settings-menu,
-  .recorded-menu,
-  .practice-menu {
+  .session-sidebar {
     padding-inline: 10px;
   }
 
-  .settings-detail {
+  .settings-page .page-shell-detail {
     padding: 24px;
   }
 
@@ -2377,14 +1956,11 @@ textarea:disabled {
 }
 
 @media (max-width: 520px) {
-  .chat-shell,
-  .settings-page,
-  .recorded-page,
-  .practice-page {
+  .chat-shell {
     grid-template-columns: 150px minmax(0, 1fr);
   }
 
-  .settings-detail {
+  .settings-page .page-shell-detail {
     padding: 16px;
   }
 
