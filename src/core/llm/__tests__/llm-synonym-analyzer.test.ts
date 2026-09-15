@@ -30,7 +30,8 @@ function response(name: string, args: unknown, id = randomUUID()): Record<string
 }
 function setup(
   responses: unknown[],
-  maxRounds = 52
+  maxRounds = 52,
+  runtimeConfig: RuntimeModelConfig = config
 ): {
   complete: ReturnType<typeof vi.fn>
   save: ReturnType<typeof vi.fn>
@@ -57,7 +58,7 @@ function setup(
   }
   const signal = new AbortController().signal
   const executor = new SynonymToolExecutor('adequate', repository, save, signal)
-  const analyzer = new LlmSynonymAnalyzer(config, 1000, () => client, maxRounds)
+  const analyzer = new LlmSynonymAnalyzer(runtimeConfig, 1000, () => client, maxRounds)
   return {
     complete,
     save,
@@ -155,4 +156,48 @@ describe('synonym multi-turn adapter', () => {
     await run()
     expect(save).not.toHaveBeenCalled()
   })
+  it.each([
+    {
+      label: 'disables parallel tool calls on OpenAI-compatible protocols',
+      runtimeConfig: config,
+      expectParallelToolCalls: false
+    },
+    {
+      label: 'omits parallel tool calls on the Gemini protocol',
+      runtimeConfig: {
+        configured: true,
+        protocol: 'gemini',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        modelId: 'gemini-3-flash',
+        apiKey: undefined
+      } satisfies RuntimeModelConfig,
+      expectParallelToolCalls: undefined
+    },
+    {
+      label: 'does not spread DeepSeek thinking parameters into multi-turn requests',
+      runtimeConfig: {
+        configured: true,
+        protocol: 'openai-compatible',
+        baseUrl: 'https://api.deepseek.com/v1',
+        modelId: 'deepseek-v4-chat',
+        apiKey: undefined
+      } satisfies RuntimeModelConfig,
+      expectParallelToolCalls: false
+    }
+  ])(
+    'applies the multi-turn request policy: $label',
+    async ({ runtimeConfig, expectParallelToolCalls }) => {
+      const { run, complete } = setup(
+        [response('report_unrecognized_word', { word: 'adequate' })],
+        52,
+        runtimeConfig
+      )
+      await run()
+      const body = complete.mock.calls[0][0]
+      expect(body.tool_choice).toBe('auto')
+      expect(body.parallel_tool_calls).toBe(expectParallelToolCalls)
+      expect(body.thinking).toBeUndefined()
+      expect(body.reasoning_effort).toBeUndefined()
+    }
+  )
 })

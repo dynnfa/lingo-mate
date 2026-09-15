@@ -15,7 +15,8 @@ import { abortablePhraseOperation } from '../learning/phrase/abortable-operation
 import { PHRASE_PROMPT_VERSION, phraseSystemMessage } from '../prompt/phrase-analysis'
 import type { RuntimeModelConfig } from './model-config'
 import { classifyModelRequestError, type CreateLlmClient } from './llm-client'
-import { isUnsupportedToolCall, toolCompletionResponseSchema } from './tool-protocol'
+import { isUnsupportedToolCall, parseSingleToolCallResponse } from './tool-protocol'
+import { toolRequestParams } from './tool-request-policy'
 
 export class LlmPhraseAnalyzer implements PhraseAnalyzer {
   // 无默认值：调用方（PhraseModule 通过工厂）持有单项超时策略，保持单一来源。
@@ -30,11 +31,6 @@ export class LlmPhraseAnalyzer implements PhraseAnalyzer {
     return abortablePhraseOperation(input.signal, this.timeoutMs, async (signal) => {
       try {
         const client = this.createClient(config)
-        // 与 vocabulary 适配器保持同一兼容策略：DeepSeek V4 思考模式拒绝
-        // required tool_choice，使用 auto；响应仍须通过单工具与入库参数校验。
-        const useDeepSeekThinking =
-          new URL(config.baseUrl).hostname === 'api.deepseek.com' &&
-          config.modelId.startsWith('deepseek-v4-')
         const response = await client.complete(
           {
             model: config.modelId,
@@ -49,47 +45,31 @@ export class LlmPhraseAnalyzer implements PhraseAnalyzer {
               }
             ],
             tools: phraseInsertTools(),
-            tool_choice: 'auto',
-            ...(useDeepSeekThinking
-              ? { thinking: { type: 'enabled' }, reasoning_effort: 'high' as const }
-              : {})
+            ...toolRequestParams('single-tool-result', config)
           },
           { operation: 'phrase_analysis', timeoutMs: this.timeoutMs, signal }
         )
-        const choice = toolCompletionResponseSchema.parse(response).choices?.[0]
-        const toolCalls = choice?.message.tool_calls ?? []
-        // 非空正文、多个工具、未知工具或无工具响应均为协议错误，不提取正文中的 SQL。
+        const parsed = parseSingleToolCallResponse(response)
+        if (parsed.status === 'malformed-response')
+          throw new PhraseError('MODEL_ERROR', { cause: parsed.cause })
+        if (parsed.status === 'invalid-tool-call')
+          throw new PhraseError('INVALID_ANALYSIS', { cause: parsed.cause })
+        // 剩余为领域规则：只接受本领域工具名，不提取正文中的 SQL。
         if (
-          !choice ||
-          choice.finish_reason !== 'tool_calls' ||
-          choice.message.refusal ||
-          (choice.message.content ?? '') !== '' ||
-          toolCalls.length !== 1
+          parsed.toolName !== PHRASE_INSERT_TOOL_NAME &&
+          parsed.toolName !== PHRASE_UNRECOGNIZED_TOOL_NAME
         ) {
           throw new PhraseError('INVALID_ANALYSIS')
         }
-        const call = toolCalls[0]
-        if (
-          call.function.name !== PHRASE_INSERT_TOOL_NAME &&
-          call.function.name !== PHRASE_UNRECOGNIZED_TOOL_NAME
-        ) {
-          throw new PhraseError('INVALID_ANALYSIS')
-        }
-        let argumentsJson: unknown
-        try {
-          argumentsJson = JSON.parse(call.function.arguments)
-        } catch (cause) {
-          throw new PhraseError('INVALID_ANALYSIS', { cause })
-        }
-        if (call.function.name === PHRASE_UNRECOGNIZED_TOOL_NAME) {
-          if (!phraseUnrecognizedToolArgumentsSchema.safeParse(argumentsJson).success) {
+        if (parsed.toolName === PHRASE_UNRECOGNIZED_TOOL_NAME) {
+          if (!phraseUnrecognizedToolArgumentsSchema.safeParse(parsed.arguments).success) {
             throw new PhraseError('INVALID_ANALYSIS')
           }
           return { status: 'unrecognized' }
         }
         return {
           status: 'insert',
-          content: validatePhraseInsertArguments(argumentsJson, input.phrase),
+          content: validatePhraseInsertArguments(parsed.arguments, input.phrase),
           modelId: config.modelId,
           promptVersion: PHRASE_PROMPT_VERSION
         }

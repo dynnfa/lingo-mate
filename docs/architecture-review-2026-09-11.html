@@ -235,6 +235,9 @@
     <li>供应商 workaround 单点化</li>
     <li>循环行为在一个接口上可测</li>
   </ul>
+  <div class="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+    <b>2026-09-15 复核结论（建议修订）</b>：实际只有两个多轮循环（synonym 52 轮、vocabulary-practice 8 轮，二者的完成条件、call id 检查、回放与纠错预算互不相同）；vocabulary / phrase 为单次工具调用，llm-sentence-practice-completion 为无工具单次 JSON。通用 <code>runToolLoop</code> 与 <code>maxRounds: 1</code> 包装的建议<b>废弃</b>——统一两个异构状态机需把结束条件暴露为配置与回调，复杂度反而回到调用方；两个单次分析器的响应 schema 与多轮 schema 有实际差异（多轮必须保留非空 call id 与 reasoning 字段），不能描述为可直接互换。已按局部收敛方案实施：工具请求参数策略收敛至 <code>src/core/llm/tool-request-policy.ts</code>，单次响应协议检查收敛至 <code>tool-protocol.ts</code> 的 <code>parseSingleToolCallResponse</code>；两个多轮状态机保留独立实现。详见 <b>docs/plans/2026-09-15-llm-tool-protocol-refactor.md</b>（状态：已实施）。
+  </div>
 </article>
 
 <!-- ============ 卡 4 ============ -->

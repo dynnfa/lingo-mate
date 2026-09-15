@@ -7,6 +7,7 @@ import { synonymSystemMessage } from '../prompt/synonym-analysis'
 import type { RuntimeModelConfig } from './model-config'
 import { classifyModelRequestError, type CreateLlmClient } from './llm-client'
 import { isUnsupportedToolCall } from './tool-protocol'
+import { toolRequestParams } from './tool-request-policy'
 
 const responseSchema = z.object({
   choices: z
@@ -56,8 +57,7 @@ export class LlmSynonymAnalyzer implements SynonymAnalyzer {
             model: this.config.modelId,
             messages,
             tools: synonymTools(),
-            tool_choice: 'auto',
-            ...(this.config.protocol === 'gemini' ? {} : { parallel_tool_calls: false })
+            ...toolRequestParams('multi-turn-tool-loop', this.config)
           },
           { operation: 'synonym_analysis', signal: input.signal, timeoutMs: this.timeoutMs }
         )

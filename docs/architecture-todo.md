@@ -27,7 +27,9 @@
 ## P2：LLM 多模型兼容与可靠性
 
 - [ ] 集中管理模型能力与参数策略，包括流式响应、usage、tool calling、结构化输出和供应商扩展参数。
-- [ ] 移除学习业务中的供应商域名 / 模型名特殊判断，将适配规则收敛到 LLM 层。
+  - 2026-09-15：工具请求参数策略（`tool_choice`、`parallel_tool_calls`、DeepSeek thinking / reasoning effort）已收敛至 `src/core/llm/tool-request-policy.ts`，覆盖 vocabulary / phrase / synonym / vocabulary-practice 四个工具调用入口（见 `docs/plans/2026-09-15-llm-tool-protocol-refactor.md`）。流式响应、usage、结构化输出等其余参数策略仍待收敛。
+- [x] 移除学习业务中的供应商域名 / 模型名特殊判断，将适配规则收敛到 LLM 层。
+  - 2026-09-15：vocabulary / phrase 分析器中的 DeepSeek hostname / 模型前缀判断与两个多轮分析器中的 `parallel_tool_calls` 分支已移除，统一由 `src/core/llm/tool-request-policy.ts` 生成；synonym 分析器内基于 Gemini 协议的「整轮拒绝多工具并允许一次纠正」属执行流程而非请求参数，按计划保留原位。
 - [ ] 将连接测试拆分为文本、流式和工具调用能力验证，避免一次非流式成功被视为所有能力兼容。
 - [ ] 明确当前仅支持 OpenAI-compatible 协议；有原生协议接入需求时增加独立适配器及契约测试。
 - [ ] 细化限流、服务端故障、认证、网络、超时与协议错误分类。

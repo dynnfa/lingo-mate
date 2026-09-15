@@ -46,7 +46,8 @@ function finalResponse(content: string): unknown {
 
 function setup(
   responses: unknown[],
-  maxRounds = 8
+  maxRounds = 8,
+  runtimeConfig: RuntimeModelConfig = config
 ): {
   complete: ReturnType<typeof vi.fn>
   run: () => Promise<unknown>
@@ -54,7 +55,7 @@ function setup(
 } {
   const complete = vi.fn().mockImplementation(async () => responses.shift())
   const client = { complete, stream: vi.fn() } satisfies ReturnType<CreateLlmClient>
-  const reviewer = new LlmVocabularyPracticeReviewer(config, 1000, () => client, maxRounds)
+  const reviewer = new LlmVocabularyPracticeReviewer(runtimeConfig, 1000, () => client, maxRounds)
   const signal = new AbortController().signal
   return {
     complete,
@@ -123,6 +124,36 @@ describe('llm vocabulary practice reviewer', () => {
     expect(outcome).toEqual({ verdict: 'all_correct', summary: '全部正确。', marks: [] })
     expect(complete).toHaveBeenCalledTimes(1)
   })
+
+  it.each([
+    {
+      label: 'disables parallel tool calls on OpenAI-compatible protocols',
+      runtimeConfig: config,
+      expectParallelToolCalls: false
+    },
+    {
+      label: 'omits parallel tool calls on the Gemini protocol',
+      runtimeConfig: {
+        configured: true,
+        protocol: 'gemini',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        modelId: 'gemini-3-flash',
+        apiKey: undefined
+      } satisfies RuntimeModelConfig,
+      expectParallelToolCalls: undefined
+    }
+  ])(
+    'applies the multi-turn request policy: $label',
+    async ({ runtimeConfig, expectParallelToolCalls }) => {
+      const { run, complete } = setup([finalResponse(ALL_CORRECT)], 8, runtimeConfig)
+      await run()
+      const body = complete.mock.calls[0][0]
+      expect(body.tool_choice).toBe('auto')
+      expect(body.parallel_tool_calls).toBe(expectParallelToolCalls)
+      expect(body.thinking).toBeUndefined()
+      expect(body.reasoning_effort).toBeUndefined()
+    }
+  )
 
   it('asks the model to complete missing marks before accepting has_errors feedback', async () => {
     const { run, complete } = setup([

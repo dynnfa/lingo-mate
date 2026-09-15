@@ -15,7 +15,8 @@ import { abortableOperation } from '../learning/vocabulary/abortable-operation'
 import { VOCABULARY_PROMPT_VERSION, vocabularySystemMessage } from '../prompt/vocabulary-analysis'
 import type { RuntimeModelConfig } from './model-config'
 import { classifyModelRequestError, type CreateLlmClient } from './llm-client'
-import { isUnsupportedToolCall, toolCompletionResponseSchema } from './tool-protocol'
+import { isUnsupportedToolCall, parseSingleToolCallResponse } from './tool-protocol'
+import { toolRequestParams } from './tool-request-policy'
 
 export class LlmVocabularyAnalyzer implements VocabularyAnalyzer {
   // No default: the caller (VocabularyModule via its factory) owns the word
@@ -31,11 +32,6 @@ export class LlmVocabularyAnalyzer implements VocabularyAnalyzer {
     return abortableOperation(input.signal, this.timeoutMs, async (signal) => {
       try {
         const client = this.createClient(config)
-        // DeepSeek V4 默认开启思考模式，该模式拒绝 required tool_choice。
-        // 使用 auto 兼容思考与工具调用；响应仍须通过单工具与入库参数校验。
-        const useDeepSeekThinking =
-          new URL(config.baseUrl).hostname === 'api.deepseek.com' &&
-          config.modelId.startsWith('deepseek-v4-')
         const response = await client.complete(
           {
             model: config.modelId,
@@ -50,47 +46,31 @@ export class LlmVocabularyAnalyzer implements VocabularyAnalyzer {
               }
             ],
             tools: vocabularyInsertTools(),
-            tool_choice: 'auto',
-            ...(useDeepSeekThinking
-              ? { thinking: { type: 'enabled' }, reasoning_effort: 'high' as const }
-              : {})
+            ...toolRequestParams('single-tool-result', config)
           },
           { operation: 'vocabulary_analysis', timeoutMs: this.timeoutMs, signal }
         )
-        const choice = toolCompletionResponseSchema.parse(response).choices?.[0]
-        const toolCalls = choice?.message.tool_calls ?? []
-        // 非空正文、多个工具、未知工具或无工具响应均为协议错误，不提取正文中的 SQL。
+        const parsed = parseSingleToolCallResponse(response)
+        if (parsed.status === 'malformed-response')
+          throw new VocabularyError('MODEL_ERROR', { cause: parsed.cause })
+        if (parsed.status === 'invalid-tool-call')
+          throw new VocabularyError('INVALID_ANALYSIS', { cause: parsed.cause })
+        // 剩余为领域规则：只接受本领域工具名，不提取正文中的 SQL。
         if (
-          !choice ||
-          choice.finish_reason !== 'tool_calls' ||
-          choice.message.refusal ||
-          (choice.message.content ?? '') !== '' ||
-          toolCalls.length !== 1
+          parsed.toolName !== VOCABULARY_INSERT_TOOL_NAME &&
+          parsed.toolName !== VOCABULARY_UNRECOGNIZED_TOOL_NAME
         ) {
           throw new VocabularyError('INVALID_ANALYSIS')
         }
-        const call = toolCalls[0]
-        if (
-          call.function.name !== VOCABULARY_INSERT_TOOL_NAME &&
-          call.function.name !== VOCABULARY_UNRECOGNIZED_TOOL_NAME
-        ) {
-          throw new VocabularyError('INVALID_ANALYSIS')
-        }
-        let argumentsJson: unknown
-        try {
-          argumentsJson = JSON.parse(call.function.arguments)
-        } catch (cause) {
-          throw new VocabularyError('INVALID_ANALYSIS', { cause })
-        }
-        if (call.function.name === VOCABULARY_UNRECOGNIZED_TOOL_NAME) {
-          if (!unrecognizedToolArgumentsSchema.safeParse(argumentsJson).success) {
+        if (parsed.toolName === VOCABULARY_UNRECOGNIZED_TOOL_NAME) {
+          if (!unrecognizedToolArgumentsSchema.safeParse(parsed.arguments).success) {
             throw new VocabularyError('INVALID_ANALYSIS')
           }
           return { status: 'unrecognized' }
         }
         return {
           status: 'insert',
-          content: validateInsertArguments(argumentsJson, input.term),
+          content: validateInsertArguments(parsed.arguments, input.term),
           modelId: config.modelId,
           promptVersion: VOCABULARY_PROMPT_VERSION
         }

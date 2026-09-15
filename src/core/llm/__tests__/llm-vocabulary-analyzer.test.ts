@@ -130,6 +130,53 @@ describe('LlmVocabularyAnalyzer', () => {
     )
     expect(await makeAnalyzer().analyze(input())).toEqual({ status: 'unrecognized' })
   })
+  it('enables DeepSeek V4 thinking parameters on matching configurations', async () => {
+    create.mockResolvedValue(insertCompletion())
+    const analyzer = new LlmVocabularyAnalyzer(
+      {
+        configured: true,
+        protocol: 'openai-compatible',
+        baseUrl: 'https://api.deepseek.com/v1',
+        modelId: 'deepseek-v4-chat',
+        apiKey: undefined
+      },
+      30_000,
+      createClient
+    )
+    await expect(analyzer.analyze(input())).resolves.toMatchObject({ status: 'insert' })
+    const body = create.mock.calls[0][0]
+    expect(body.tool_choice).toBe('auto')
+    expect(body.thinking).toEqual({ type: 'enabled' })
+    expect(body.reasoning_effort).toBe('high')
+    expect(body.parallel_tool_calls).toBeUndefined()
+  })
+  it.each([
+    ['non-v4 model on the DeepSeek host', 'https://api.deepseek.com/v1', 'deepseek-chat'],
+    ['v4-prefixed model on another host', 'https://api.example.com/v1', 'deepseek-v4-chat'],
+    ['subdomain lookalike host', 'https://api.deepseek.com.evil.example/v1', 'deepseek-v4-chat']
+  ])(
+    'keeps plain auto tool choice on non-matching configurations: %s',
+    async (_name, baseUrl, modelId) => {
+      create.mockResolvedValue(insertCompletion())
+      const analyzer = new LlmVocabularyAnalyzer(
+        {
+          configured: true,
+          protocol: 'openai-compatible',
+          baseUrl,
+          modelId,
+          apiKey: undefined
+        },
+        30_000,
+        createClient
+      )
+      await expect(analyzer.analyze(input())).resolves.toMatchObject({ status: 'insert' })
+      const body = create.mock.calls[0][0]
+      expect(body.tool_choice).toBe('auto')
+      expect(body.thinking).toBeUndefined()
+      expect(body.reasoning_effort).toBeUndefined()
+      expect(body.parallel_tool_calls).toBeUndefined()
+    }
+  )
   it.each([
     ['plain text only', completionWith(null, { finishReason: 'stop', content: '{"sql": "..."}' })],
     ['no tool calls', completionWith([])],
@@ -159,6 +206,7 @@ describe('LlmVocabularyAnalyzer', () => {
       )
     ],
     ['empty choices', { choices: [] }],
+    ['missing choices', {}],
     ['term replacement', insertCompletion('banana')],
     [
       'extra tool arguments',
@@ -192,6 +240,27 @@ describe('LlmVocabularyAnalyzer', () => {
       ])
     )
     await expect(makeAnalyzer().analyze(input())).rejects.toThrow('INVALID_ANALYSIS')
+  })
+  it.each([
+    ['choices is not an array', { choices: 'busy' }],
+    ['message is not an object', { choices: [{ finish_reason: 'tool_calls', message: 'busy' }] }],
+    ['finish_reason is not a string', { choices: [{ finish_reason: 7, message: {} }] }],
+    [
+      'non-function tool call type',
+      {
+        choices: [
+          {
+            finish_reason: 'tool_calls',
+            message: {
+              tool_calls: [{ type: 'custom', function: { name: 'x', arguments: '{}' } }]
+            }
+          }
+        ]
+      }
+    ]
+  ])('maps malformed response structures to model errors: %s', async (_name, completion) => {
+    create.mockResolvedValue(completion)
+    await expect(makeAnalyzer().analyze(input())).rejects.toThrow('MODEL_ERROR')
   })
   it.each([
     { status: 400, message: 'tools is not supported for this model' },
