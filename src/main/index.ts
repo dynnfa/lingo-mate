@@ -199,7 +199,7 @@ app.whenReady().then(() => {
     try {
       return new LlmVocabularyPracticeReviewer(
         modelsService.resolveSnapshot(),
-        30_000,
+        60_000,
         createLlmClient
       )
     } catch (cause) {
@@ -236,7 +236,7 @@ app.whenReady().then(() => {
       try {
         return new LlmSentencePracticeHintGenerator(
           modelsService.resolveSnapshot(),
-          30_000,
+          60_000,
           createLlmClient
         )
       } catch (cause) {
@@ -247,7 +247,7 @@ app.whenReady().then(() => {
       try {
         return new LlmSentencePracticeReviewer(
           modelsService.resolveSnapshot(),
-          30_000,
+          60_000,
           createLlmClient
         )
       } catch (cause) {
