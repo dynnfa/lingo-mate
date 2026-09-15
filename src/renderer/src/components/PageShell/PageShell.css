@@ -85,9 +85,11 @@
   background: var(--color-surface-active);
 }
 
+/* 详情区内边距统一在此声明，各详情页根容器不再自带 padding。 */
 .page-shell-detail {
   min-width: 0;
   overflow-y: auto;
+  padding: 24px 28px;
 }
 
 /* keepMounted 面板按 hidden 切换；显式声明避免被布局 display 覆盖。 */
@@ -109,10 +111,18 @@
   .page-shell-menu {
     padding-inline: 10px;
   }
+
+  .page-shell-detail {
+    padding: 20px 24px;
+  }
 }
 
 @media (max-width: 520px) {
   .page-shell {
     grid-template-columns: 150px minmax(0, 1fr);
+  }
+
+  .page-shell-detail {
+    padding: 16px;
   }
 }

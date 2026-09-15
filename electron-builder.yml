@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: lingo-mate
+appId: com.lingomate.app
+productName: Lingo Mate
 directories:
   buildResources: build
 files:
