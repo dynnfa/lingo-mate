@@ -14,6 +14,7 @@ import {
 import type { RuntimeModelConfig } from './model-config'
 import { classifyModelRequestError, type CreateLlmClient } from './llm-client'
 import { isUnsupportedToolCall } from './tool-protocol'
+import { toolRequestParams } from './tool-request-policy'
 
 // 最终反馈是正常文本响应里的 JSON，不是工具结果：只有它和累计标记
 // 一致时审查才算完成，空响应、非法 JSON 或矛盾反馈都按失败处理。
@@ -86,8 +87,7 @@ export class LlmVocabularyPracticeReviewer implements VocabularyPracticeReviewer
             model: this.config.modelId,
             messages,
             tools: vocabularyPracticeTools(),
-            tool_choice: 'auto',
-            ...(this.config.protocol === 'gemini' ? {} : { parallel_tool_calls: false })
+            ...toolRequestParams('multi-turn-tool-loop', this.config)
           },
           // 审查复用词汇域的用量口径，不新增数据库 operation 枚举。
           { operation: 'vocabulary_analysis', signal: input.signal, timeoutMs: this.timeoutMs }
