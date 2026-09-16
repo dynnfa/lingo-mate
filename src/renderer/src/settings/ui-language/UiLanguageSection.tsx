@@ -5,7 +5,7 @@ import type {
   PreferencesErrorCode,
   UiLanguagePreference
 } from '../../../../shared/preferences'
-import { useIpcRequest } from '../../hooks/use-ipc-request'
+import { useIpcRequest } from '../../hooks/useIpcRequest'
 import { preferencesFailureMessageKey } from '../../preferences/preferences-failure'
 
 // 语言名称使用各自的本地语言自称并保持固定，

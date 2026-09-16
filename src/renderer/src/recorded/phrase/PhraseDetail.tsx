@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { LoadMoreBar } from '../../components/LoadMoreBar'
 import { StateBlock } from '../../components/StateBlock'
-import { useCursorList } from '../../hooks/use-cursor-list'
+import { useCursorList } from '../../hooks/useCursorList'
 import type { PhraseEntry, PhraseManagementErrorCode } from '../../../../shared/phrase'
 import { phraseManagementErrorKey, toPhraseManagementError } from './phrase-messages'
 
