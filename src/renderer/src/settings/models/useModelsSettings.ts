@@ -10,7 +10,7 @@ import {
   type ModelsErrorField,
   type TestModelsConnectionResult
 } from '../../../../shared/models'
-import { useIpcRequest } from '../../hooks/use-ipc-request'
+import { useIpcRequest } from '../../hooks/useIpcRequest'
 
 export interface ModelsDraft {
   protocol: ModelProtocol

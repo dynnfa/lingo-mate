@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LoadMoreBar } from '../../components/LoadMoreBar'
 import { StateBlock } from '../../components/StateBlock'
-import { useCursorList } from '../../hooks/use-cursor-list'
+import { useCursorList } from '../../hooks/useCursorList'
 import type { SynonymGroup } from '../../../../shared/synonym'
 import { synonymManagementErrorKey, toSynonymManagementError } from './synonym-messages'
 

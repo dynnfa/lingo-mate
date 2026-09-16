@@ -9,7 +9,7 @@ import {
   VOCABULARY_PRACTICE_MEANING_MAX_LENGTH
 } from '../../../../shared/vocabulary-practice'
 import { vocabularyPracticeErrorKey } from './vocabulary-practice-messages'
-import { useVocabularyPractice } from './use-vocabulary-practice'
+import { useVocabularyPractice } from './useVocabularyPractice'
 
 // 词汇练习详情：顶部确认数量开启新一轮，主体为左单词右释义的两列
 // 练习区；提交后由模型审查，错误释义整行标红并显示原因。所有静态

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
-import { useCursorList, type CursorPage } from '../use-cursor-list'
+import { useCursorList, type CursorPage } from '../useCursorList'
 
 interface Item {
   id: string
