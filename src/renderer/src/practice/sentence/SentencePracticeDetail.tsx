@@ -4,7 +4,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { StateBlock } from '../../components/StateBlock'
 import { SENTENCE_PRACTICE_ANSWER_MAX_LENGTH } from '../../../../shared/sentence-practice'
 import { sentencePracticeErrorKey } from './sentence-practice-messages'
-import { useSentencePractice } from './use-sentence-practice'
+import { useSentencePractice } from './useSentencePractice'
 
 // 造句练习详情：顶部三个随机单词与换组入口，中间 LLM 生成的短语提示，
 // 底部 Textarea 造句；提交后按单词使用、通顺度与语法三个维度展示
