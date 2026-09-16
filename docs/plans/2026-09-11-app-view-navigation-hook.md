@@ -1,7 +1,7 @@
 # App 视图导航 Hook 重构计划
 
 - 日期：2026-09-11
-- 状态：待实施
+- 状态：已实施
 
 ## 目标与范围
 
@@ -33,7 +33,7 @@
 
 ### 文件与类型
 
-新文件 `src/renderer/src/useAppViewNavigation.ts`（应用级公共能力，放 renderer 根目录，与 `App.tsx` 同级；hook 文件沿用项目 camelCase 命名，如 `useModelsSettings.ts`）。
+新文件 `src/renderer/src/hooks/useAppViewNavigation.ts`（应用级公共 hook，放 `src/renderer/src/hooks/` 目录，与 `use-cursor-list.ts`、`use-ipc-request.ts` 同目录；hook 文件沿用项目 camelCase 命名，如 `useModelsSettings.ts`）。
 
 `AppView` 类型从 `App.tsx` 迁移至此并导出，`App.tsx` 改为从 hook 导入。新增一个“子页面视图”类型，收窄可主动打开的目标：
 
@@ -47,7 +47,7 @@ export type SecondaryView = Exclude<AppView, 'conversation'>
 
 ```ts
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import type { AppView, SecondaryView } from './useAppViewNavigation'
+import type { AppView, SecondaryView } from './hooks/useAppViewNavigation'
 
 export interface AppViewNavigation {
   /** 当前激活视图，初始为 'conversation' */
@@ -124,7 +124,7 @@ const { activeView, openView, returnToConversation, entryButtonRefs } = useAppVi
 
 ### 1. 新建 hook
 
-创建 `src/renderer/src/useAppViewNavigation.ts`，包含类型迁移、状态、refs 与焦点恢复 effect，导出 `AppViewNavigation` 接口。
+创建 `src/renderer/src/hooks/useAppViewNavigation.ts`，包含类型迁移、状态、refs 与焦点恢复 effect，导出 `AppViewNavigation` 接口。
 
 ### 2. 改造 App.tsx
 
@@ -133,7 +133,7 @@ const { activeView, openView, returnToConversation, entryButtonRefs } = useAppVi
 ### 3. 测试
 
 - `src/renderer/src/__tests__/App.test.tsx` 现有断言不修改，全部保持通过——这是“行为不变”的主验收门。
-- 新增 `src/renderer/src/__tests__/useAppViewNavigation.test.ts`，用 `renderHook` 覆盖 hook 单元行为：
+- 新增 `src/renderer/src/hooks/__tests__/useAppViewNavigation.test.ts`，用 `renderHook` 覆盖 hook 单元行为：
   - 初始 `activeView` 为 `'conversation'`，挂载时不移动焦点；
   - `openView('recorded')` 切换视图；
   - `returnToConversation()` 后焦点落在与前一视图对应的入口按钮上（三个视图各一例）；
@@ -149,3 +149,10 @@ const { activeView, openView, returnToConversation, entryButtonRefs } = useAppVi
 - `App.tsx` 不再包含视图切换 state、entry refs 与焦点恢复 effect；上述逻辑唯一存在于 `useAppViewNavigation.ts`。
 - 手动冒烟（`pnpm dev`）：打开设置 / 已记录 / 练习页 → 返回按钮或 Escape 退出 → 焦点回到对应入口；对话草稿与滚动位置在往返后保留；子页面打开期间后台流式生成不中断。
 - 无用户可见文案变化，不涉及 i18n 资源与数据库变更。
+
+## 实施备注（2026-09-16）
+
+与原设计样例的两处偏差，均不改变行为：
+
+- `entryButtonRefs` 记录用 `useMemo` 包裹并列入焦点恢复 effect 依赖：保持引用稳定以满足 `react-hooks/exhaustive-deps`，且避免 effect 每次渲染都执行。
+- `App.tsx` 接线时先将 `entryButtonRefs` 解构为局部标识符再绑定 `ref`：eslint-plugin-react-hooks 7.1.1 的 `react-hooks/refs` 规则会将 `ref={entryButtonRefs.x}` 判定为渲染期访问 ref 并报错，解构后写法与重构前一致。
