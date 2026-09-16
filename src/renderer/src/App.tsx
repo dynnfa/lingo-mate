@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { ConversationController } from './conversation/conversation-controller'
@@ -6,14 +6,13 @@ import { isGenerating } from './conversation/conversation-state'
 import { ConversationPanel } from './conversation/ConversationPanel'
 import { formatDateTime } from './i18n/formatters'
 import { normalizeI18nLocale } from './i18n'
+import { useAppViewNavigation } from './hooks/useAppViewNavigation'
 import { RecordedPage } from './recorded/RecordedPage'
 import { SettingsPage } from './settings/SettingsPage'
 import { PracticePage } from './practice/PracticePage'
 import type { ConversationSummary } from '../../shared/conversation'
 
 type AppTFunction = TFunction<['common', 'conversation', 'errors']>
-
-type AppView = 'conversation' | 'settings' | 'recorded' | 'practice'
 
 // 翻译完整模板并显式传入当前界面 locale 格式化的时间，不拼接词语。
 function formatConversationLabel(
@@ -37,35 +36,23 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
   // 语言切换只触发重渲染，控制器与订阅不在此时重建。
   const [controller] = useState(() => new ConversationController(window.api.conversation))
   const state = useSyncExternalStore(controller.subscribe, controller.getState)
-  const [activeView, setActiveView] = useState<AppView>('conversation')
+  const { activeView, openView, returnToConversation, entryButtonRefs } = useAppViewNavigation()
+  // 先解构为局部标识符再绑定 ref；直接 ref={entryButtonRefs.x} 会被
+  // react-hooks/refs 规则判定为渲染期访问 ref。
+  const {
+    settings: settingsButtonRef,
+    recorded: recordedButtonRef,
+    practice: practiceButtonRef
+  } = entryButtonRefs
   const [preferenceNoticeVisible, setPreferenceNoticeVisible] = useState(initialPreferenceError)
   // 启动焦点请求会在会话加载完成、输入框解锁后执行。
   const [composerFocusRequest, setComposerFocusRequest] = useState(1)
-  const settingsButtonRef = useRef<HTMLButtonElement>(null)
-  const recordedButtonRef = useRef<HTMLButtonElement>(null)
-  const practiceButtonRef = useRef<HTMLButtonElement>(null)
-  const previousViewRef = useRef<AppView>('conversation')
 
   useEffect(() => {
     const detach = controller.attach()
     void controller.initialize()
     return detach
   }, [controller])
-
-  // 从设置页或已记录页返回时把焦点还给对应入口按钮；初次挂载不抢焦点。
-  useEffect(() => {
-    if (activeView === 'conversation') {
-      const previousView = previousViewRef.current
-      if (previousView === 'settings') {
-        settingsButtonRef.current?.focus()
-      } else if (previousView === 'recorded') {
-        recordedButtonRef.current?.focus()
-      } else if (previousView === 'practice') {
-        practiceButtonRef.current?.focus()
-      }
-    }
-    previousViewRef.current = activeView
-  }, [activeView])
 
   const generating = isGenerating(state)
   const composerLocked = state.phase !== 'ready' || generating || state.commandPending
@@ -95,7 +82,7 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
           <nav className="sidebar-menu" aria-label={t('common:sidebar.menuLabel')}>
             <button
               className="sidebar-menu-item"
-              onClick={() => setActiveView('recorded')}
+              onClick={() => openView('recorded')}
               ref={recordedButtonRef}
               type="button"
             >
@@ -106,7 +93,7 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
             </button>
             <button
               className="sidebar-menu-item"
-              onClick={() => setActiveView('practice')}
+              onClick={() => openView('practice')}
               ref={practiceButtonRef}
               type="button"
             >
@@ -163,7 +150,7 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
             <button
               aria-label={t('common:settings.title')}
               className="settings-button"
-              onClick={() => setActiveView('settings')}
+              onClick={() => openView('settings')}
               ref={settingsButtonRef}
               title={t('common:settings.title')}
               type="button"
@@ -189,15 +176,9 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
         />
       </main>
 
-      {activeView === 'settings' ? (
-        <SettingsPage onExit={() => setActiveView('conversation')} />
-      ) : null}
-      {activeView === 'recorded' ? (
-        <RecordedPage onExit={() => setActiveView('conversation')} />
-      ) : null}
-      {activeView === 'practice' ? (
-        <PracticePage onExit={() => setActiveView('conversation')} />
-      ) : null}
+      {activeView === 'settings' ? <SettingsPage onExit={returnToConversation} /> : null}
+      {activeView === 'recorded' ? <RecordedPage onExit={returnToConversation} /> : null}
+      {activeView === 'practice' ? <PracticePage onExit={returnToConversation} /> : null}
     </>
   )
 }
