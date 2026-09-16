@@ -5,7 +5,7 @@ import type {
   PreferencesErrorCode,
   TargetLanguage
 } from '../../../../shared/preferences'
-import { useIpcRequest } from '../../hooks/use-ipc-request'
+import { useIpcRequest } from '../../hooks/useIpcRequest'
 import { preferencesFailureMessageKey } from '../../preferences/preferences-failure'
 
 // 首版学习能力仅支持英语；语言自称保持固定显示，说明文案进入翻译资源。

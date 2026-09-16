@@ -1,5 +1,5 @@
 import { useId, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
-import { useFocusTrap } from './use-focus-trap'
+import { useFocusTrap } from './useFocusTrap'
 import './ConfirmDialog.css'
 
 export interface ConfirmDialogProps {
