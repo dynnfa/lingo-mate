@@ -1,15 +1,12 @@
-import type { IpcMainInvokeEvent } from 'electron'
-import { BrowserWindow, ipcMain } from 'electron'
+import type { RegisterTrustedHandler, TrustedHandlerConfig } from './ipc-guard'
 import { VocabularyError } from '../core/learning/vocabulary/parse-vocabulary-input'
 import type { VocabularyManagementService } from '../core/learning/vocabulary/vocabulary-management'
 import {
   deleteVocabularyInputSchema,
+  deleteVocabularyResultSchema,
   listVocabularyInputSchema,
   listVocabularyResultSchema,
-  deleteVocabularyResultSchema,
   VOCABULARY_CHANNELS,
-  type DeleteVocabularyResult,
-  type ListVocabularyResult,
   type VocabularyManagementError
 } from '../shared/vocabulary'
 
@@ -22,63 +19,46 @@ export function toSafeVocabularyManagementError(error: unknown): VocabularyManag
   return { code: 'UNKNOWN_ERROR' }
 }
 
-// 注册已记录页词汇列表与删除 handler；返回清理函数用于卸载时移除注册。
+// 注册已记录页词汇列表与删除 handler；来源检查、输入与结果校验由公共守卫执行。
 export function registerVocabularyIpc(
   service: VocabularyManagementService,
-  trustedRendererUrl: string
+  registerTrustedHandler: RegisterTrustedHandler
 ): () => void {
-  const listHandler = (event: IpcMainInvokeEvent, rawInput: unknown): ListVocabularyResult => {
-    if (!isTrustedSource(event, trustedRendererUrl)) {
-      return { status: 'error', error: { code: 'UNTRUSTED_SOURCE' } }
-    }
-    const input = listVocabularyInputSchema.safeParse(rawInput)
-    if (!input.success) {
-      return { status: 'error', error: { code: 'INVALID_INPUT' } }
-    }
-    try {
-      // 出口同样过 schema：分页结果不符合协议时按安全错误报告，不外泄内部结构。
-      const page = service.list(input.data)
-      return listVocabularyResultSchema.parse({
+  const removeList = registerTrustedHandler({
+    channel: VOCABULARY_CHANNELS.list,
+    inputSchema: listVocabularyInputSchema,
+    resultSchema: listVocabularyResultSchema,
+    invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+    mapError: toSafeVocabularyManagementError,
+    fallbackError: { code: 'UNKNOWN_ERROR' },
+    handler: (input) => {
+      const page = service.list(input)
+      return {
         status: 'ok',
         entries: page.entries,
         ...(page.nextCursor ? { nextCursor: page.nextCursor } : {})
-      })
-    } catch (error) {
-      return { status: 'error', error: toSafeVocabularyManagementError(error) }
+      }
     }
-  }
+  } satisfies TrustedHandlerConfig<
+    typeof listVocabularyInputSchema,
+    typeof listVocabularyResultSchema
+  >)
 
-  const deleteHandler = (event: IpcMainInvokeEvent, rawInput: unknown): DeleteVocabularyResult => {
-    if (!isTrustedSource(event, trustedRendererUrl)) {
-      return { status: 'error', error: { code: 'UNTRUSTED_SOURCE' } }
-    }
-    const input = deleteVocabularyInputSchema.safeParse(rawInput)
-    if (!input.success) {
-      return { status: 'error', error: { code: 'INVALID_INPUT' } }
-    }
-    try {
-      const outcome = service.deleteById(input.data)
-      return deleteVocabularyResultSchema.parse({ status: 'ok', ...outcome })
-    } catch (error) {
-      return { status: 'error', error: toSafeVocabularyManagementError(error) }
-    }
-  }
+  const removeDelete = registerTrustedHandler({
+    channel: VOCABULARY_CHANNELS.delete,
+    inputSchema: deleteVocabularyInputSchema,
+    resultSchema: deleteVocabularyResultSchema,
+    invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+    mapError: toSafeVocabularyManagementError,
+    fallbackError: { code: 'UNKNOWN_ERROR' },
+    handler: (input) => ({ status: 'ok', ...service.deleteById(input) })
+  } satisfies TrustedHandlerConfig<
+    typeof deleteVocabularyInputSchema,
+    typeof deleteVocabularyResultSchema
+  >)
 
-  ipcMain.handle(VOCABULARY_CHANNELS.list, listHandler)
-  ipcMain.handle(VOCABULARY_CHANNELS.delete, deleteHandler)
   return () => {
-    ipcMain.removeHandler(VOCABULARY_CHANNELS.list)
-    ipcMain.removeHandler(VOCABULARY_CHANNELS.delete)
+    removeList()
+    removeDelete()
   }
-}
-
-// 只允许本应用窗口当前加载的可信主文档；同源子 frame 也不继承词汇管理权限。
-function isTrustedSource(event: IpcMainInvokeEvent, rendererUrl: string): boolean {
-  return (
-    !event.sender.isDestroyed() &&
-    BrowserWindow.fromWebContents(event.sender)?.webContents === event.sender &&
-    event.senderFrame != null &&
-    event.senderFrame === event.sender.mainFrame &&
-    event.senderFrame.url === rendererUrl
-  )
 }

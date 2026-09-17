@@ -1,46 +1,19 @@
-import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PhraseError } from '../../core/learning/phrase/parse-phrase-input'
 import { PHRASE_CHANNELS, type ListPhraseResult, type PhrasePage } from '../../shared/phrase'
+import { createTrustedHandlerRegistrar } from '../ipc-guard'
 import { registerPhraseIpc, toSafePhraseManagementError } from '../phrase-ipc'
+import {
+  electronMocks,
+  FakeSender,
+  registeredHandler,
+  RENDERER_URL,
+  resetIpcMocks
+} from './helpers/ipc-test-env'
 
-const electronMocks = vi.hoisted(() => ({
-  handle: vi.fn(),
-  removeHandler: vi.fn(),
-  fromWebContents: vi.fn((sender: { owned: boolean }) =>
-    sender.owned ? { webContents: sender } : null
-  )
-}))
+vi.mock('electron', async () => (await import('./helpers/ipc-test-env')).electronTestModule())
 
-vi.mock('electron', () => ({
-  ipcMain: { handle: electronMocks.handle, removeHandler: electronMocks.removeHandler },
-  BrowserWindow: { fromWebContents: electronMocks.fromWebContents }
-}))
-
-const RENDERER_URL = 'file:///app/renderer/index.html'
-
-class FakeSender extends EventEmitter {
-  readonly id = 7
-  owned = true
-  destroyed = false
-  mainFrame = { url: RENDERER_URL }
-
-  isDestroyed(): boolean {
-    return this.destroyed
-  }
-}
-
-type IpcHandler = (
-  event: { sender: FakeSender; senderFrame?: { url: string } | null },
-  input: unknown
-) => unknown
-
-function registeredHandler(channel: string): IpcHandler {
-  const registration = electronMocks.handle.mock.calls.find(([name]) => name === channel)
-  if (!registration) throw new Error(`Missing IPC handler for ${channel}`)
-  const handler = registration[1] as IpcHandler
-  return (event, input) => handler({ senderFrame: event.sender.mainFrame, ...event }, input)
-}
+const registerTrustedHandler = createTrustedHandlerRegistrar({ rendererUrl: RENDERER_URL })
 
 const ENTRY = {
   phrase: 'look forward to',
@@ -63,15 +36,12 @@ function fakeService(
   }
 }
 
-beforeEach(() => {
-  electronMocks.handle.mockReset()
-  electronMocks.removeHandler.mockReset()
-})
+beforeEach(resetIpcMocks)
 
 describe('phrase IPC', () => {
   it('rejects untrusted callers before touching the service', () => {
     const service = fakeService()
-    registerPhraseIpc(service as never, RENDERER_URL)
+    registerPhraseIpc(service as never, registerTrustedHandler)
     const list = registeredHandler(PHRASE_CHANNELS.list)
     const remove = registeredHandler(PHRASE_CHANNELS.delete)
 
@@ -103,7 +73,7 @@ describe('phrase IPC', () => {
 
   it('rejects inputs outside the predefined window', () => {
     const service = fakeService()
-    registerPhraseIpc(service as never, RENDERER_URL)
+    registerPhraseIpc(service as never, registerTrustedHandler)
 
     expect(
       registeredHandler(PHRASE_CHANNELS.list)({ sender: new FakeSender() }, { limit: 0 })
@@ -128,7 +98,7 @@ describe('phrase IPC', () => {
       nextCursor: 'piece of cake'
     }
     const service = fakeService({ list: () => page })
-    registerPhraseIpc(service as never, RENDERER_URL)
+    registerPhraseIpc(service as never, registerTrustedHandler)
 
     expect(service.list).not.toHaveBeenCalled()
     const result = registeredHandler(PHRASE_CHANNELS.list)(
@@ -143,7 +113,7 @@ describe('phrase IPC', () => {
     const service = fakeService({
       deleteByPhrase: () => ({ phrase: ENTRY.phrase, deleted: false })
     })
-    registerPhraseIpc(service as never, RENDERER_URL)
+    registerPhraseIpc(service as never, registerTrustedHandler)
 
     expect(
       registeredHandler(PHRASE_CHANNELS.delete)(
@@ -159,7 +129,7 @@ describe('phrase IPC', () => {
     service.list.mockImplementation(() => {
       throw new PhraseError('STORAGE_FAILED', { cause: new Error('sqlite locked') })
     })
-    registerPhraseIpc(service as never, RENDERER_URL)
+    registerPhraseIpc(service as never, registerTrustedHandler)
     const stored = registeredHandler(PHRASE_CHANNELS.list)({ sender: new FakeSender() }, {})
     expect(stored).toEqual({ status: 'error', error: { code: 'STORAGE_FAILED' } })
     expect(JSON.stringify(stored)).not.toContain('sqlite')
@@ -178,7 +148,7 @@ describe('phrase IPC', () => {
   it('reports a safe error when the result violates the protocol', () => {
     const service = fakeService()
     service.list.mockReturnValue({ entries: [{ ...ENTRY, phrase: 42 }] } as unknown as PhrasePage)
-    registerPhraseIpc(service as never, RENDERER_URL)
+    registerPhraseIpc(service as never, registerTrustedHandler)
     expect(registeredHandler(PHRASE_CHANNELS.list)({ sender: new FakeSender() }, {})).toEqual({
       status: 'error',
       error: { code: 'UNKNOWN_ERROR' }
@@ -194,7 +164,7 @@ describe('phrase IPC', () => {
   })
 
   it('unregisters both handlers via the returned cleanup', () => {
-    const cleanup = registerPhraseIpc(fakeService() as never, RENDERER_URL)
+    const cleanup = registerPhraseIpc(fakeService() as never, registerTrustedHandler)
     expect(electronMocks.handle).toHaveBeenCalledTimes(2)
     expect(electronMocks.removeHandler).not.toHaveBeenCalled()
     cleanup()

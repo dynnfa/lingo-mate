@@ -1,4 +1,3 @@
-import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ModelConnectionTester } from '../../core/llm/model-connection-tester'
 import { LlmClient, type CreateLlmClient } from '../../core/llm/llm-client'
@@ -19,21 +18,13 @@ import {
   type TestSavedModelsConnectionInput,
   type UpdateModelConfigInput
 } from '../../shared/models'
+import { createTrustedHandlerRegistrar } from '../ipc-guard'
 import { registerModelsIpc } from '../models-ipc'
+import { FakeSender, registeredHandler, RENDERER_URL, resetIpcMocks } from './helpers/ipc-test-env'
 
-const electronMocks = vi.hoisted(() => ({
-  handle: vi.fn(),
-  fromWebContents: vi.fn((sender: { owned: boolean }) =>
-    sender.owned ? { webContents: sender } : null
-  )
-}))
+vi.mock('electron', async () => (await import('./helpers/ipc-test-env')).electronTestModule())
 
-vi.mock('electron', () => ({
-  ipcMain: { handle: electronMocks.handle },
-  BrowserWindow: { fromWebContents: electronMocks.fromWebContents }
-}))
-
-const RENDERER_URL = 'file:///app/renderer/index.html'
+const registerTrustedHandler = createTrustedHandlerRegistrar({ rendererUrl: RENDERER_URL })
 
 // IPC 层测试不发起真实请求；客户端工厂只满足装配形状。
 const createClient: CreateLlmClient = (config) =>
@@ -50,30 +41,6 @@ const createClient: CreateLlmClient = (config) =>
 const REQUEST_ID = '3f70b8ae-7ad9-4eab-aaf4-1cae54aa2477'
 const OTHER_REQUEST_ID = '0d4b2f7e-52c8-4a61-9ac1-30b1e6de9d02'
 const CONFIG_ID = 'f9364f0f-f3f4-4ea6-a31d-b55754aa2477'
-
-class FakeSender extends EventEmitter {
-  readonly id = 42
-  owned = true
-  destroyed = false
-  mainFrame = { url: RENDERER_URL }
-  readonly send = vi.fn()
-
-  isDestroyed(): boolean {
-    return this.destroyed
-  }
-}
-
-type IpcHandler = (
-  event: { sender: FakeSender; senderFrame?: { url: string } | null },
-  input: unknown
-) => unknown
-
-function registeredHandler(channel: string): IpcHandler {
-  const registration = electronMocks.handle.mock.calls.find(([candidate]) => candidate === channel)
-  if (!registration) throw new Error(`Missing IPC handler: ${channel}`)
-  const handler = registration[1] as IpcHandler
-  return (event, input) => handler({ senderFrame: event.sender.mainFrame, ...event }, input)
-}
 
 const CONFIGURED_SNAPSHOT: RuntimeModelConfig & { configured: true } = {
   configured: true,
@@ -134,9 +101,7 @@ const DRAFT_TEST_INPUT: TestDraftModelsConnectionInput = {
   ...CREATE_INPUT
 }
 
-beforeEach(() => {
-  electronMocks.handle.mockReset()
-})
+beforeEach(resetIpcMocks)
 
 describe('models IPC', () => {
   it.each(Object.values(MODELS_CHANNELS))(
@@ -144,7 +109,7 @@ describe('models IPC', () => {
     async (channel) => {
       const service = fakeService()
       const tester = { test: vi.fn() } as unknown as ModelConnectionTester
-      registerModelsIpc(service, tester, RENDERER_URL)
+      registerModelsIpc(service, tester, registerTrustedHandler)
       const foreign = new FakeSender()
       foreign.owned = false
       const navigated = new FakeSender()
@@ -176,7 +141,11 @@ describe('models IPC', () => {
   )
 
   it('returns the safe collection summary for listConfigs', () => {
-    registerModelsIpc(fakeService(), new ModelConnectionTester(1_000, createClient), RENDERER_URL)
+    registerModelsIpc(
+      fakeService(),
+      new ModelConnectionTester(1_000, createClient),
+      registerTrustedHandler
+    )
 
     const result = registeredHandler(MODELS_CHANNELS.listConfigs)(
       { sender: new FakeSender() },
@@ -191,7 +160,11 @@ describe('models IPC', () => {
         throw new Error('EACCES disk')
       }
     })
-    registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
+    registerModelsIpc(
+      service,
+      new ModelConnectionTester(1_000, createClient),
+      registerTrustedHandler
+    )
 
     const result = registeredHandler(MODELS_CHANNELS.listConfigs)(
       { sender: new FakeSender() },
@@ -204,7 +177,11 @@ describe('models IPC', () => {
     const service = fakeService({
       createConfig: vi.fn(() => SAFE_LIST)
     })
-    registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
+    registerModelsIpc(
+      service,
+      new ModelConnectionTester(1_000, createClient),
+      registerTrustedHandler
+    )
 
     const result = registeredHandler(MODELS_CHANNELS.createConfig)(
       { sender: new FakeSender() },
@@ -226,7 +203,11 @@ describe('models IPC', () => {
         throw new ModelsWriteError(new Error('io'))
       }
     })
-    registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
+    registerModelsIpc(
+      service,
+      new ModelConnectionTester(1_000, createClient),
+      registerTrustedHandler
+    )
 
     const invalid = registeredHandler(channel)(
       { sender: new FakeSender() },
@@ -243,7 +224,11 @@ describe('models IPC', () => {
 
   it('rejects non-uuid config ids with a stable code before touching the service', async () => {
     const service = fakeService()
-    registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
+    registerModelsIpc(
+      service,
+      new ModelConnectionTester(1_000, createClient),
+      registerTrustedHandler
+    )
 
     expect(
       registeredHandler(MODELS_CHANNELS.updateConfig)(
@@ -263,12 +248,13 @@ describe('models IPC', () => {
         { configId: 'model-a' }
       )
     ).toEqual({ status: 'error', error: { code: 'INVALID_CONFIG_ID' } })
-    await expect(
+    // 输入校验失败在进入异步测试流程前同步返回安全错误。
+    expect(
       registeredHandler(MODELS_CHANNELS.testSavedConnection)(
         { sender: new FakeSender() },
         { configId: 'model-a', requestId: REQUEST_ID }
       )
-    ).resolves.toEqual({ status: 'error', error: { code: 'INVALID_CONFIG_ID' } })
+    ).toEqual({ status: 'error', error: { code: 'INVALID_CONFIG_ID' } })
     expect(service.updateConfig).not.toHaveBeenCalled()
   })
 
@@ -287,7 +273,11 @@ describe('models IPC', () => {
         throw new ModelConfigNotFoundError(CONFIG_ID)
       }
     })
-    registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
+    registerModelsIpc(
+      service,
+      new ModelConnectionTester(1_000, createClient),
+      registerTrustedHandler
+    )
 
     expect(
       registeredHandler(MODELS_CHANNELS.updateConfig)({ sender: new FakeSender() }, UPDATE_INPUT)
@@ -317,7 +307,11 @@ describe('models IPC', () => {
       deleteConfig: vi.fn(() => SAFE_LIST),
       setActiveConfig: vi.fn(() => SAFE_LIST)
     })
-    registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
+    registerModelsIpc(
+      service,
+      new ModelConnectionTester(1_000, createClient),
+      registerTrustedHandler
+    )
 
     expect(
       registeredHandler(MODELS_CHANNELS.deleteConfig)(
@@ -341,7 +335,7 @@ describe('models IPC', () => {
     const tester = {
       test: vi.fn(async () => ({ status: 'ok' }) as TestModelsConnectionResult)
     } as unknown as ModelConnectionTester
-    registerModelsIpc(service, tester, RENDERER_URL)
+    registerModelsIpc(service, tester, registerTrustedHandler)
 
     await expect(
       registeredHandler(MODELS_CHANNELS.testSavedConnection)(
@@ -358,7 +352,7 @@ describe('models IPC', () => {
     const tester = {
       test: vi.fn(async () => ({ status: 'ok' }) as TestModelsConnectionResult)
     } as unknown as ModelConnectionTester
-    registerModelsIpc(service, tester, RENDERER_URL)
+    registerModelsIpc(service, tester, registerTrustedHandler)
 
     const sender = new FakeSender()
     const saved = registeredHandler(MODELS_CHANNELS.testSavedConnection)(
@@ -381,7 +375,7 @@ describe('models IPC', () => {
     const tester = {
       test: vi.fn(async () => ({ status: 'ok' }) as TestModelsConnectionResult)
     } as unknown as ModelConnectionTester
-    registerModelsIpc(service, tester, RENDERER_URL)
+    registerModelsIpc(service, tester, registerTrustedHandler)
 
     await registeredHandler(MODELS_CHANNELS.testDraftConnection)(
       { sender: new FakeSender() },
@@ -401,7 +395,11 @@ describe('models IPC', () => {
         throw new ModelConfigValidationError('CROSS_ORIGIN_CREDENTIAL', 'apiKey')
       }
     })
-    registerModelsIpc(service, new ModelConnectionTester(1_000, createClient), RENDERER_URL)
+    registerModelsIpc(
+      service,
+      new ModelConnectionTester(1_000, createClient),
+      registerTrustedHandler
+    )
 
     await expect(
       registeredHandler(MODELS_CHANNELS.testDraftConnection)(
@@ -420,7 +418,7 @@ describe('models IPC', () => {
       releaseTest = resolve
     })
     const tester = { test: vi.fn(() => pending) } as unknown as ModelConnectionTester
-    registerModelsIpc(fakeService(), tester, RENDERER_URL)
+    registerModelsIpc(fakeService(), tester, registerTrustedHandler)
 
     const sender = new FakeSender()
     const inFlight = registeredHandler(MODELS_CHANNELS.testSavedConnection)(
@@ -456,7 +454,7 @@ describe('models IPC', () => {
       releaseTest = resolve
     })
     const tester = { test: vi.fn(() => pending) } as unknown as ModelConnectionTester
-    registerModelsIpc(fakeService(), tester, RENDERER_URL)
+    registerModelsIpc(fakeService(), tester, registerTrustedHandler)
 
     const sender = new FakeSender()
     const inFlight = registeredHandler(MODELS_CHANNELS.testSavedConnection)(

@@ -1,15 +1,12 @@
-import type { IpcMainInvokeEvent } from 'electron'
-import { BrowserWindow, ipcMain } from 'electron'
+import type { RegisterTrustedHandler, TrustedHandlerConfig } from './ipc-guard'
 import { PhraseError } from '../core/learning/phrase/parse-phrase-input'
 import type { PhraseManagementService } from '../core/learning/phrase/phrase-management'
 import {
   deletePhraseInputSchema,
+  deletePhraseResultSchema,
   listPhraseInputSchema,
   listPhraseResultSchema,
-  deletePhraseResultSchema,
   PHRASE_CHANNELS,
-  type DeletePhraseResult,
-  type ListPhraseResult,
   type PhraseManagementError
 } from '../shared/phrase'
 
@@ -22,63 +19,40 @@ export function toSafePhraseManagementError(error: unknown): PhraseManagementErr
   return { code: 'UNKNOWN_ERROR' }
 }
 
-// 注册已记录页短语列表与删除 handler；返回清理函数用于卸载时移除注册。
+// 注册已记录页短语列表与删除 handler；来源检查、输入与结果校验由公共守卫执行。
 export function registerPhraseIpc(
   service: PhraseManagementService,
-  trustedRendererUrl: string
+  registerTrustedHandler: RegisterTrustedHandler
 ): () => void {
-  const listHandler = (event: IpcMainInvokeEvent, rawInput: unknown): ListPhraseResult => {
-    if (!isTrustedSource(event, trustedRendererUrl)) {
-      return { status: 'error', error: { code: 'UNTRUSTED_SOURCE' } }
-    }
-    const input = listPhraseInputSchema.safeParse(rawInput)
-    if (!input.success) {
-      return { status: 'error', error: { code: 'INVALID_INPUT' } }
-    }
-    try {
-      // 出口同样过 schema：分页结果不符合协议时按安全错误报告，不外泄内部结构。
-      const page = service.list(input.data)
-      return listPhraseResultSchema.parse({
+  const removeList = registerTrustedHandler({
+    channel: PHRASE_CHANNELS.list,
+    inputSchema: listPhraseInputSchema,
+    resultSchema: listPhraseResultSchema,
+    invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+    mapError: toSafePhraseManagementError,
+    fallbackError: { code: 'UNKNOWN_ERROR' },
+    handler: (input) => {
+      const page = service.list(input)
+      return {
         status: 'ok',
         entries: page.entries,
         ...(page.nextCursor ? { nextCursor: page.nextCursor } : {})
-      })
-    } catch (error) {
-      return { status: 'error', error: toSafePhraseManagementError(error) }
+      }
     }
-  }
+  } satisfies TrustedHandlerConfig<typeof listPhraseInputSchema, typeof listPhraseResultSchema>)
 
-  const deleteHandler = (event: IpcMainInvokeEvent, rawInput: unknown): DeletePhraseResult => {
-    if (!isTrustedSource(event, trustedRendererUrl)) {
-      return { status: 'error', error: { code: 'UNTRUSTED_SOURCE' } }
-    }
-    const input = deletePhraseInputSchema.safeParse(rawInput)
-    if (!input.success) {
-      return { status: 'error', error: { code: 'INVALID_INPUT' } }
-    }
-    try {
-      const outcome = service.deleteByPhrase(input.data)
-      return deletePhraseResultSchema.parse({ status: 'ok', ...outcome })
-    } catch (error) {
-      return { status: 'error', error: toSafePhraseManagementError(error) }
-    }
-  }
+  const removeDelete = registerTrustedHandler({
+    channel: PHRASE_CHANNELS.delete,
+    inputSchema: deletePhraseInputSchema,
+    resultSchema: deletePhraseResultSchema,
+    invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+    mapError: toSafePhraseManagementError,
+    fallbackError: { code: 'UNKNOWN_ERROR' },
+    handler: (input) => ({ status: 'ok', ...service.deleteByPhrase(input) })
+  } satisfies TrustedHandlerConfig<typeof deletePhraseInputSchema, typeof deletePhraseResultSchema>)
 
-  ipcMain.handle(PHRASE_CHANNELS.list, listHandler)
-  ipcMain.handle(PHRASE_CHANNELS.delete, deleteHandler)
   return () => {
-    ipcMain.removeHandler(PHRASE_CHANNELS.list)
-    ipcMain.removeHandler(PHRASE_CHANNELS.delete)
+    removeList()
+    removeDelete()
   }
-}
-
-// 只允许本应用窗口当前加载的可信主文档；同源子 frame 也不继承短语管理权限。
-function isTrustedSource(event: IpcMainInvokeEvent, rendererUrl: string): boolean {
-  return (
-    !event.sender.isDestroyed() &&
-    BrowserWindow.fromWebContents(event.sender)?.webContents === event.sender &&
-    event.senderFrame != null &&
-    event.senderFrame === event.sender.mainFrame &&
-    event.senderFrame.url === rendererUrl
-  )
 }

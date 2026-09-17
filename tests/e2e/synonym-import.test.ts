@@ -3,6 +3,7 @@ import Database from 'better-sqlite3'
 import {
   expect,
   launchApp,
+  openLatestConversation,
   test,
   waitForReady,
   withTempUserData,
@@ -62,6 +63,8 @@ test('synonym command groups, skips, handles failures and cancellation, and rest
         app = await launchApp(directory)
         window = await app.firstWindow()
         await waitForReady(window)
+        // 启动打开空白草稿；经侧栏打开原会话后历史完整恢复
+        await openLatestConversation(window)
         await expect(window.locator('.message.assistant')).toHaveCount(4)
         await expect(window.locator('.message.assistant').last()).toContainText(
           'untouched: cancelled'

@@ -6,9 +6,12 @@
 
 ## P1：统一 IPC 信任边界
 
-- [ ] 在 Main 内封装可信 Renderer 来源校验，覆盖会话、偏好设置、模型设置和用量相关 IPC。
+- [x] 在 Main 内封装可信 Renderer 来源校验，覆盖会话、偏好设置、模型设置和用量相关 IPC。
+  - 2026-09-17：已落地 `src/main/ipc-guard.ts` 的 `createTrustedHandlerRegistrar`，九个模块全部 32 个 Renderer → Main 请求入口统一注册，并加 ESLint 限制禁止 Main 生产代码直接使用 `ipcMain`（见 `docs/plans/2026-09-14-ipc-guard.md`）。
 - [ ] 统一校验发送窗口、主 frame 和允许的页面来源，并补齐窗口导航限制。
-- [ ] 统一外部输入校验和安全错误转换，避免原始异常跨进程暴露。
+  - 2026-09-17：窗口、主 frame 与页面来源校验已由 ipc-guard 统一执行；窗口导航限制仍未实施。
+- [x] 统一外部输入校验和安全错误转换，避免原始异常跨进程暴露。
+  - 2026-09-17：输入 `safeParse`、同步/异步异常捕获、错误映射与完整结果校验收敛进注册器；conversation 抛出式输入解析已消除，preferences 补齐 `UNTRUSTED_SOURCE`/`INVALID_INPUT` 错误契约。
 
 验收：合法窗口调用正常；非可信页面、子 frame、无效参数被拒绝。Preload 继续只暴露明确命名的业务 API。
 

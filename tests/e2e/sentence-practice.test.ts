@@ -51,7 +51,7 @@ function writeVocabularyFixture(userDataPath: string): void {
 
 async function openSentencePractice(window: Page): Promise<void> {
   await window.getByRole('button', { name: 'Start practicing' }).click()
-  const page = window.locator('main.practice-page')
+  const page = window.getByRole('main', { name: 'Start practicing' })
   await expect(page).toBeVisible()
   await page.getByRole('button', { name: 'Sentence practice' }).click()
   await expect(page.getByRole('button', { name: 'Sentence practice' })).toHaveAttribute(
@@ -132,7 +132,7 @@ test('switching menus aborts in-flight hint generation and starts a fresh round'
 
         // 切回词汇练习：造句详情卸载，在途提示请求被中止
         await window
-          .locator('main.practice-page')
+          .getByRole('main', { name: 'Start practicing' })
           .getByRole('button', { name: 'Vocabulary practice' })
           .click()
         await expect(() => {
@@ -141,7 +141,7 @@ test('switching menus aborts in-flight hint generation and starts a fresh round'
 
         // 切回造句练习：自动开始新一轮并重新生成提示
         await window
-          .locator('main.practice-page')
+          .getByRole('main', { name: 'Start practicing' })
           .getByRole('button', { name: 'Sentence practice' })
           .click()
         await expect(window.locator('.sentence-practice-word')).toHaveCount(3)

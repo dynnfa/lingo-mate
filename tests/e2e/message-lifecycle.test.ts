@@ -4,6 +4,7 @@ import type { ConversationMessage, LingoMateApi } from '../../src/shared/convers
 import {
   expect,
   launchApp,
+  openLatestConversation,
   test,
   waitForReady,
   withTempUserData,
@@ -125,7 +126,8 @@ test('destroying the sender cancels its request and relaunch offers retry', asyn
     const secondWindow = await secondLaunch.firstWindow()
     await waitForReady(secondWindow)
 
-    // 恢复后最后一条未回答的 user 消息可重试
+    // 启动打开空白草稿；通过侧栏打开被中断的会话后，最后一条未回答的 user 消息可重试
+    await openLatestConversation(secondWindow)
     await expect(secondWindow.locator('.message.user')).toContainText('Hello')
     await expect(secondWindow.locator('button:has-text("重试")')).toHaveCount(1)
 

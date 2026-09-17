@@ -1,4 +1,3 @@
-import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   ConversationEventListener,
@@ -12,10 +11,18 @@ import {
   type SendMessageInput
 } from '../../shared/conversation'
 import { registerConversationIpc } from '../conversation-ipc'
+import { createTrustedHandlerRegistrar } from '../ipc-guard'
+import {
+  electronMocks,
+  FakeSender,
+  registeredHandler,
+  RENDERER_URL,
+  resetIpcMocks
+} from './helpers/ipc-test-env'
 
-const electronMocks = vi.hoisted(() => ({ handle: vi.fn() }))
+vi.mock('electron', async () => (await import('./helpers/ipc-test-env')).electronTestModule())
 
-vi.mock('electron', () => ({ ipcMain: { handle: electronMocks.handle } }))
+const registerTrustedHandler = createTrustedHandlerRegistrar({ rendererUrl: RENDERER_URL })
 
 const REQUEST_ID = '3f70b8ae-7ad9-4eab-aaf4-1cae54aa2477'
 const SESSION_ID = 'f9364f0f-f3f4-4ea6-a31d-b55754aa2477'
@@ -44,33 +51,8 @@ function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
   return { promise, resolve }
 }
 
-class FakeSender extends EventEmitter {
-  readonly id = 42
-  private destroyed = false
-  readonly send = vi.fn()
-
-  isDestroyed(): boolean {
-    return this.destroyed
-  }
-
-  destroy(): void {
-    this.destroyed = true
-    this.emit('destroyed')
-  }
-}
-
-type IpcHandler = (event: { sender: FakeSender }, input: unknown) => unknown
-
-function registeredHandler(channel: string): IpcHandler {
-  const registration = electronMocks.handle.mock.calls.find(([candidate]) => candidate === channel)
-  if (!registration) throw new Error(`Missing IPC handler: ${channel}`)
-  return registration[1] as IpcHandler
-}
-
 describe('conversation IPC request ownership', () => {
-  beforeEach(() => {
-    electronMocks.handle.mockReset()
-  })
+  beforeEach(resetIpcMocks)
 
   it('retries cancellation after Core accepts a request whose sender was already destroyed', async () => {
     const accepted = deferred<GenerationAccepted>()
@@ -82,7 +64,7 @@ describe('conversation IPC request ownership', () => {
       sendMessage: vi.fn(() => accepted.promise),
       cancelMessage
     } as unknown as ConversationModule
-    registerConversationIpc(module)
+    registerConversationIpc(module, registerTrustedHandler)
 
     const sender = new FakeSender()
     const sendResult = registeredHandler(CONVERSATION_CHANNELS.send)({ sender }, INPUT)
@@ -106,7 +88,7 @@ describe('conversation IPC request ownership', () => {
       }),
       cancelMessage
     } as unknown as ConversationModule
-    registerConversationIpc(module)
+    registerConversationIpc(module, registerTrustedHandler)
 
     const sender = new FakeSender()
     const sendResult = registeredHandler(CONVERSATION_CHANNELS.send)({ sender }, INPUT)
@@ -125,15 +107,93 @@ describe('conversation IPC request ownership', () => {
   it('rejects unknown or malformed skill requests before calling Core', async () => {
     const runSkill = vi.fn()
     const module = { runSkill } as unknown as ConversationModule
-    registerConversationIpc(module)
+    registerConversationIpc(module, registerTrustedHandler)
     const sender = new FakeSender()
 
-    await expect(
+    expect(
       registeredHandler(CONVERSATION_CHANNELS.runSkill)(
         { sender },
         { ...INPUT, skillId: 'unknown', arguments: { text: 'apple', wordLanguage: 'en' } }
       )
-    ).resolves.toEqual({ status: 'error', error: { code: 'INVALID_INPUT' } })
+    ).toEqual({ status: 'error', error: { code: 'INVALID_INPUT' } })
     expect(runSkill).not.toHaveBeenCalled()
+  })
+
+  it('returns INVALID_INPUT for malformed send input without a raw parse exception', () => {
+    const sendMessage = vi.fn()
+    const module = { sendMessage } as unknown as ConversationModule
+    registerConversationIpc(module, registerTrustedHandler)
+
+    expect(
+      registeredHandler(CONVERSATION_CHANNELS.send)(
+        { sender: new FakeSender() },
+        { ...INPUT, text: '' }
+      )
+    ).toEqual({ status: 'error', error: { code: 'INVALID_INPUT' } })
+    expect(sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('rejects untrusted sources on every request channel before calling Core', () => {
+    const module = {
+      createConversation: vi.fn(),
+      listConversations: vi.fn(),
+      loadConversation: vi.fn(),
+      sendMessage: vi.fn(),
+      runSkill: vi.fn(),
+      retryMessage: vi.fn(),
+      cancelMessage: vi.fn()
+    } as unknown as ConversationModule
+    registerConversationIpc(module, registerTrustedHandler)
+
+    const foreign = new FakeSender()
+    foreign.owned = false
+    const navigated = new FakeSender()
+    navigated.mainFrame = { url: 'https://untrusted.invalid/' }
+    const destroyed = new FakeSender()
+    destroyed.destroyed = true
+
+    for (const channel of [
+      CONVERSATION_CHANNELS.create,
+      CONVERSATION_CHANNELS.list,
+      CONVERSATION_CHANNELS.load,
+      CONVERSATION_CHANNELS.send,
+      CONVERSATION_CHANNELS.runSkill,
+      CONVERSATION_CHANNELS.retry,
+      CONVERSATION_CHANNELS.cancel
+    ]) {
+      const handler = registeredHandler(channel)
+      for (const event of [
+        { sender: foreign },
+        { sender: navigated },
+        { sender: destroyed },
+        { sender: new FakeSender(), senderFrame: null },
+        { sender: new FakeSender(), senderFrame: { url: RENDERER_URL } }
+      ]) {
+        expect(handler(event, INPUT)).toEqual({
+          status: 'error',
+          error: { code: 'UNTRUSTED_SOURCE' }
+        })
+      }
+    }
+    expect(module.createConversation).not.toHaveBeenCalled()
+    expect(module.listConversations).not.toHaveBeenCalled()
+    expect(module.loadConversation).not.toHaveBeenCalled()
+    expect(module.sendMessage).not.toHaveBeenCalled()
+    expect(module.runSkill).not.toHaveBeenCalled()
+    expect(module.retryMessage).not.toHaveBeenCalled()
+    expect(module.cancelMessage).not.toHaveBeenCalled()
+  })
+
+  it('unregisters every request channel through the returned cleanup', () => {
+    const module = {} as unknown as ConversationModule
+    const cleanup = registerConversationIpc(module, registerTrustedHandler)
+
+    expect(electronMocks.handle).toHaveBeenCalledTimes(7)
+    cleanup()
+    for (const channel of Object.values(CONVERSATION_CHANNELS).filter(
+      (candidate) => candidate !== CONVERSATION_CHANNELS.event
+    )) {
+      expect(electronMocks.removeHandler).toHaveBeenCalledWith(channel)
+    }
   })
 })

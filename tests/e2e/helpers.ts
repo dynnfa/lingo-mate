@@ -133,6 +133,13 @@ export async function waitForReady(window: Page): Promise<void> {
   await window.waitForSelector('main[data-phase="ready"]')
 }
 
+// 启动后应用打开新的空白草稿而不自动恢复最近会话；
+// 需要断言历史消息时先通过侧栏打开最近的会话。
+export async function openLatestConversation(window: Page): Promise<void> {
+  await window.locator('.session-item').first().click()
+  await window.waitForSelector('main[data-phase="ready"]')
+}
+
 // 通过设置页切换语言：页面内语言名称固定，不依赖当前界面语言；
 // 等待 document.lang 更新后再返回，确保保存已完成。
 export async function switchLanguage(
@@ -147,7 +154,7 @@ export async function switchLanguage(
   await window.waitForFunction((lang) => document.documentElement.lang === lang, expectedLang, {
     timeout: 10_000
   })
-  await window.click('.settings-back-button')
+  await window.click('.page-shell-back-button')
   await expect(settingsPage).toBeHidden()
 }
 

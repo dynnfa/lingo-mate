@@ -7,18 +7,18 @@ import type {
 import { PREFERENCES_CHANNELS } from '../../shared/preferences'
 import { PreferencesReadError, PreferencesService, type PreferenceStore } from '../preferences'
 import { registerPreferencesIpc } from '../preferences-ipc'
+import { createTrustedHandlerRegistrar } from '../ipc-guard'
+import {
+  electronMocks,
+  FakeSender,
+  registeredHandler,
+  RENDERER_URL,
+  resetIpcMocks
+} from './helpers/ipc-test-env'
 
-const electronMocks = vi.hoisted(() => ({ handle: vi.fn() }))
+vi.mock('electron', async () => (await import('./helpers/ipc-test-env')).electronTestModule())
 
-vi.mock('electron', () => ({ ipcMain: { handle: electronMocks.handle } }))
-
-type IpcHandler = (event: unknown, input: unknown) => unknown
-
-function registeredHandler(channel: string): IpcHandler {
-  const registration = electronMocks.handle.mock.calls.find(([candidate]) => candidate === channel)
-  if (!registration) throw new Error(`Missing IPC handler: ${channel}`)
-  return registration[1] as IpcHandler
-}
+const registerTrustedHandler = createTrustedHandlerRegistrar({ rendererUrl: RENDERER_URL })
 
 function serviceWith(store: PreferenceStore): PreferencesService {
   return new PreferencesService(store, () => ['en-US'])
@@ -59,21 +59,53 @@ function memoryStore(
 }
 
 describe('preferences IPC boundary', () => {
-  beforeEach(() => {
-    electronMocks.handle.mockReset()
-  })
+  beforeEach(resetIpcMocks)
 
   it('returns validated language settings for a well-formed store', async () => {
-    registerPreferencesIpc(serviceWith(memoryStore({ uiLanguage: 'en' })))
+    registerPreferencesIpc(serviceWith(memoryStore({ uiLanguage: 'en' })), registerTrustedHandler)
 
     const result = (await registeredHandler(PREFERENCES_CHANNELS.getLanguageSettings)(
-      undefined,
+      { sender: new FakeSender() },
       undefined
     )) as GetLanguageSettingsResult
     expect(result).toEqual({
       status: 'ok',
       settings: { uiLanguage: 'en', resolvedUiLanguage: 'en', targetLanguage: 'en' }
     })
+  })
+
+  it('rejects untrusted sources before touching the service', () => {
+    const store = memoryStore()
+    registerPreferencesIpc(serviceWith(store), registerTrustedHandler)
+
+    const foreign = new FakeSender()
+    foreign.owned = false
+    const navigated = new FakeSender()
+    navigated.mainFrame = { url: 'https://untrusted.invalid/' }
+    const destroyed = new FakeSender()
+    destroyed.destroyed = true
+
+    for (const channel of [
+      PREFERENCES_CHANNELS.getLanguageSettings,
+      PREFERENCES_CHANNELS.setUiLanguage,
+      PREFERENCES_CHANNELS.setTargetLanguage
+    ]) {
+      const handler = registeredHandler(channel)
+      for (const event of [
+        { sender: foreign },
+        { sender: navigated },
+        { sender: destroyed },
+        { sender: new FakeSender(), senderFrame: null },
+        { sender: new FakeSender(), senderFrame: { url: RENDERER_URL } }
+      ]) {
+        expect(handler(event, { uiLanguage: 'en' })).toEqual({
+          status: 'error',
+          error: { code: 'UNTRUSTED_SOURCE' }
+        })
+      }
+    }
+    expect(store.uiLanguage).toBeUndefined()
+    expect(store.targetLanguage).toBeUndefined()
   })
 
   it('maps storage read failures to PREFERENCES_READ_FAILED', async () => {
@@ -83,30 +115,32 @@ describe('preferences IPC boundary', () => {
         throw new Error('corrupt file')
       }
     }
-    registerPreferencesIpc(serviceWith(failing))
+    registerPreferencesIpc(serviceWith(failing), registerTrustedHandler)
 
     const result = (await registeredHandler(PREFERENCES_CHANNELS.getLanguageSettings)(
-      undefined,
+      { sender: new FakeSender() },
       undefined
     )) as GetLanguageSettingsResult
     expect(result).toEqual({ status: 'error', error: { code: 'PREFERENCES_READ_FAILED' } })
   })
 
   it('rejects malformed setUiLanguage input with INVALID_UI_LANGUAGE', async () => {
-    registerPreferencesIpc(serviceWith(memoryStore()))
+    registerPreferencesIpc(serviceWith(memoryStore()), registerTrustedHandler)
 
-    const result = (await registeredHandler(PREFERENCES_CHANNELS.setUiLanguage)(undefined, {
-      uiLanguage: 'klingon'
-    })) as SetUiLanguageResult
+    const result = (await registeredHandler(PREFERENCES_CHANNELS.setUiLanguage)(
+      { sender: new FakeSender() },
+      { uiLanguage: 'klingon' }
+    )) as SetUiLanguageResult
     expect(result).toEqual({ status: 'error', error: { code: 'INVALID_UI_LANGUAGE' } })
   })
 
   it('rejects malformed setTargetLanguage input with INVALID_TARGET_LANGUAGE', async () => {
-    registerPreferencesIpc(serviceWith(memoryStore()))
+    registerPreferencesIpc(serviceWith(memoryStore()), registerTrustedHandler)
 
-    const result = (await registeredHandler(PREFERENCES_CHANNELS.setTargetLanguage)(undefined, {
-      targetLanguage: 'fr'
-    })) as SetTargetLanguageResult
+    const result = (await registeredHandler(PREFERENCES_CHANNELS.setTargetLanguage)(
+      { sender: new FakeSender() },
+      { targetLanguage: 'fr' }
+    )) as SetTargetLanguageResult
     expect(result).toEqual({ status: 'error', error: { code: 'INVALID_TARGET_LANGUAGE' } })
   })
 
@@ -115,22 +149,24 @@ describe('preferences IPC boundary', () => {
     store.writeUiLanguagePreference = () => {
       throw new Error('disk full')
     }
-    registerPreferencesIpc(serviceWith(store))
+    registerPreferencesIpc(serviceWith(store), registerTrustedHandler)
 
-    const result = (await registeredHandler(PREFERENCES_CHANNELS.setUiLanguage)(undefined, {
-      uiLanguage: 'en'
-    })) as SetUiLanguageResult
+    const result = (await registeredHandler(PREFERENCES_CHANNELS.setUiLanguage)(
+      { sender: new FakeSender() },
+      { uiLanguage: 'en' }
+    )) as SetUiLanguageResult
     expect(result).toEqual({ status: 'error', error: { code: 'PREFERENCES_WRITE_FAILED' } })
     expect(store.uiLanguage).toBe('zh-CN')
   })
 
   it('persists a valid ui language and returns the effective settings', async () => {
     const store = memoryStore({ uiLanguage: 'zh-CN', targetLanguage: 'en' })
-    registerPreferencesIpc(serviceWith(store))
+    registerPreferencesIpc(serviceWith(store), registerTrustedHandler)
 
-    const result = (await registeredHandler(PREFERENCES_CHANNELS.setUiLanguage)(undefined, {
-      uiLanguage: 'system'
-    })) as SetUiLanguageResult
+    const result = (await registeredHandler(PREFERENCES_CHANNELS.setUiLanguage)(
+      { sender: new FakeSender() },
+      { uiLanguage: 'system' }
+    )) as SetUiLanguageResult
     expect(result).toEqual({
       status: 'ok',
       settings: { uiLanguage: 'system', resolvedUiLanguage: 'en', targetLanguage: 'en' }
@@ -141,11 +177,12 @@ describe('preferences IPC boundary', () => {
 
   it('persists a valid target language without touching the ui language', async () => {
     const store = memoryStore({ uiLanguage: 'zh-CN' })
-    registerPreferencesIpc(serviceWith(store))
+    registerPreferencesIpc(serviceWith(store), registerTrustedHandler)
 
-    const result = (await registeredHandler(PREFERENCES_CHANNELS.setTargetLanguage)(undefined, {
-      targetLanguage: 'en'
-    })) as SetTargetLanguageResult
+    const result = (await registeredHandler(PREFERENCES_CHANNELS.setTargetLanguage)(
+      { sender: new FakeSender() },
+      { targetLanguage: 'en' }
+    )) as SetTargetLanguageResult
     expect(result).toEqual({
       status: 'ok',
       settings: { uiLanguage: 'zh-CN', resolvedUiLanguage: 'zh-CN', targetLanguage: 'en' }
@@ -160,13 +197,23 @@ describe('preferences IPC boundary', () => {
         throw new PreferencesReadError(new Error('secret path /Users/x'))
       }
     }
-    registerPreferencesIpc(serviceWith(failing))
+    registerPreferencesIpc(serviceWith(failing), registerTrustedHandler)
 
     const result = (await registeredHandler(PREFERENCES_CHANNELS.getLanguageSettings)(
-      undefined,
+      { sender: new FakeSender() },
       undefined
     )) as GetLanguageSettingsResult
     expect(JSON.stringify(result)).not.toContain('secret')
     expect(JSON.stringify(result)).not.toContain('Users')
+  })
+
+  it('unregisters all handlers via the returned cleanup', () => {
+    const cleanup = registerPreferencesIpc(serviceWith(memoryStore()), registerTrustedHandler)
+    expect(electronMocks.handle).toHaveBeenCalledTimes(3)
+    expect(electronMocks.removeHandler).not.toHaveBeenCalled()
+    cleanup()
+    for (const channel of Object.values(PREFERENCES_CHANNELS)) {
+      expect(electronMocks.removeHandler).toHaveBeenCalledWith(channel)
+    }
   })
 })

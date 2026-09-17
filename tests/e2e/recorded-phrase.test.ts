@@ -53,7 +53,7 @@ function writePhraseFixture(userDataPath: string): void {
 
 async function openRecordedPhrases(window: Page): Promise<void> {
   await window.getByRole('button', { name: 'Recorded vocabulary' }).click()
-  const page = window.locator('main.recorded-page')
+  const page = window.getByRole('main', { name: 'Recorded vocabulary' })
   await expect(page).toBeVisible()
   // 默认选中词汇详情；切换到短语菜单读取短语表格。
   await window.getByRole('button', { name: 'Phrases' }).click()
@@ -82,7 +82,7 @@ test('shows recorded phrases in a table and deletes a single entry across restar
 
       // 取消删除：确认对话框关闭，行保留。
       await window.getByRole('button', { name: 'Delete break even' }).click()
-      const dialog = window.locator('.dialog-card')
+      const dialog = window.getByRole('dialog', { name: 'Delete phrase' })
       await expect(dialog).toBeVisible()
       await expect(dialog).toContainText('"break even"')
       await dialog.getByRole('button', { name: 'Cancel' }).click()
@@ -141,13 +141,13 @@ test('keeps the recorded page open when Escape closes the phrase delete dialog',
       await openRecordedPhrases(window)
 
       await window.getByRole('button', { name: 'Delete look forward to' }).click()
-      const dialog = window.locator('.dialog-card')
+      const dialog = window.getByRole('dialog', { name: 'Delete phrase' })
       await expect(dialog).toBeVisible()
       await window.keyboard.press('Escape')
 
       // Escape 只关闭对话框，页面保持挂载。
       await expect(dialog).toBeHidden()
-      const page = window.locator('main.recorded-page')
+      const page = window.getByRole('main', { name: 'Recorded vocabulary' })
       await expect(page).toBeVisible()
       await expect(window.getByRole('button', { name: 'Delete look forward to' })).toBeVisible()
 

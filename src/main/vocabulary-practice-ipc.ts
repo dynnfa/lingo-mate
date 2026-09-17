@@ -1,5 +1,4 @@
-import type { IpcMainInvokeEvent } from 'electron'
-import { BrowserWindow, ipcMain } from 'electron'
+import type { RegisterTrustedHandler, TrustedHandlerConfig } from './ipc-guard'
 import type { SupportedLocale } from '../shared/preferences'
 import {
   vocabularyPracticeCancelInputSchema,
@@ -9,10 +8,7 @@ import {
   vocabularyPracticeStartInputSchema,
   vocabularyPracticeStartResultSchema,
   VOCABULARY_PRACTICE_CHANNELS,
-  type VocabularyPracticeError,
-  type VocabularyPracticeReviewResult,
-  type VocabularyPracticeStartResult,
-  type VocabularyPracticeCancelResult
+  type VocabularyPracticeError
 } from '../shared/vocabulary-practice'
 import { VocabularyError } from '../core/learning/vocabulary/parse-vocabulary-input'
 import { VocabularyPracticeError as CoreVocabularyPracticeError } from '../core/learning/vocabulary-practice/parse-vocabulary-practice-input'
@@ -29,104 +25,75 @@ export function toSafeVocabularyPracticeError(error: unknown): VocabularyPractic
 }
 
 // 注册词汇练习 IPC；审查语言按当前界面语言解析，随请求快照传入。
-// 返回清理函数用于卸载时移除注册。
+// 来源检查、输入与结果校验由公共守卫执行；练习生命周期由服务自身管理。
 export function registerVocabularyPracticeIpc(
   service: VocabularyPracticeService,
   resolveExplanationLanguage: () => SupportedLocale,
-  trustedRendererUrl: string
+  registerTrustedHandler: RegisterTrustedHandler
 ): () => void {
-  const startHandler = (
-    event: IpcMainInvokeEvent,
-    rawInput: unknown
-  ): VocabularyPracticeStartResult => {
-    if (!isTrustedSource(event, trustedRendererUrl)) {
-      return { status: 'error', error: { code: 'UNTRUSTED_SOURCE' } }
-    }
-    const input = vocabularyPracticeStartInputSchema.safeParse(rawInput)
-    if (!input.success) {
-      return { status: 'error', error: { code: 'INVALID_INPUT' } }
-    }
-    try {
-      const outcome = service.start(input.data.count)
-      // 出口同样过 schema：结果不符合协议时按安全错误报告。
-      return vocabularyPracticeStartResultSchema.parse({
+  const removeStart = registerTrustedHandler({
+    channel: VOCABULARY_PRACTICE_CHANNELS.start,
+    inputSchema: vocabularyPracticeStartInputSchema,
+    resultSchema: vocabularyPracticeStartResultSchema,
+    invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+    mapError: toSafeVocabularyPracticeError,
+    fallbackError: { code: 'UNKNOWN_ERROR' },
+    handler: (input) => {
+      const outcome = service.start(input.count)
+      return {
         status: 'ok',
         sessionId: outcome.sessionId,
         requestedCount: outcome.requestedCount,
         actualCount: outcome.entries.length,
         entries: outcome.entries
-      })
-    } catch (error) {
-      return { status: 'error', error: toSafeVocabularyPracticeError(error) }
+      }
     }
-  }
+  } satisfies TrustedHandlerConfig<
+    typeof vocabularyPracticeStartInputSchema,
+    typeof vocabularyPracticeStartResultSchema
+  >)
 
-  const reviewHandler = async (
-    event: IpcMainInvokeEvent,
-    rawInput: unknown
-  ): Promise<VocabularyPracticeReviewResult> => {
-    if (!isTrustedSource(event, trustedRendererUrl)) {
-      return { status: 'error', error: { code: 'UNTRUSTED_SOURCE' } }
-    }
-    const input = vocabularyPracticeReviewInputSchema.safeParse(rawInput)
-    if (!input.success) {
-      return { status: 'error', error: { code: 'INVALID_INPUT' } }
-    }
-    try {
+  const removeReview = registerTrustedHandler({
+    channel: VOCABULARY_PRACTICE_CHANNELS.review,
+    inputSchema: vocabularyPracticeReviewInputSchema,
+    resultSchema: vocabularyPracticeReviewResultSchema,
+    invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+    mapError: toSafeVocabularyPracticeError,
+    fallbackError: { code: 'UNKNOWN_ERROR' },
+    handler: async (input) => {
       const outcome = await service.review(
-        input.data.sessionId,
-        input.data.answers,
+        input.sessionId,
+        input.answers,
         resolveExplanationLanguage()
       )
-      return vocabularyPracticeReviewResultSchema.parse({
+      return {
         status: 'ok',
         verdict: outcome.verdict,
         summary: outcome.summary,
         marks: outcome.marks
-      })
-    } catch (error) {
-      return { status: 'error', error: toSafeVocabularyPracticeError(error) }
+      }
     }
-  }
+  } satisfies TrustedHandlerConfig<
+    typeof vocabularyPracticeReviewInputSchema,
+    typeof vocabularyPracticeReviewResultSchema
+  >)
 
-  const cancelHandler = (
-    event: IpcMainInvokeEvent,
-    rawInput: unknown
-  ): VocabularyPracticeCancelResult => {
-    if (!isTrustedSource(event, trustedRendererUrl)) {
-      return { status: 'error', error: { code: 'UNTRUSTED_SOURCE' } }
-    }
-    const input = vocabularyPracticeCancelInputSchema.safeParse(rawInput)
-    if (!input.success) {
-      return { status: 'error', error: { code: 'INVALID_INPUT' } }
-    }
-    try {
-      return vocabularyPracticeCancelResultSchema.parse({
-        status: 'ok',
-        cancelled: service.cancel(input.data.sessionId)
-      })
-    } catch (error) {
-      return { status: 'error', error: toSafeVocabularyPracticeError(error) }
-    }
-  }
+  const removeCancel = registerTrustedHandler({
+    channel: VOCABULARY_PRACTICE_CHANNELS.cancel,
+    inputSchema: vocabularyPracticeCancelInputSchema,
+    resultSchema: vocabularyPracticeCancelResultSchema,
+    invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+    mapError: toSafeVocabularyPracticeError,
+    fallbackError: { code: 'UNKNOWN_ERROR' },
+    handler: (input) => ({ status: 'ok', cancelled: service.cancel(input.sessionId) })
+  } satisfies TrustedHandlerConfig<
+    typeof vocabularyPracticeCancelInputSchema,
+    typeof vocabularyPracticeCancelResultSchema
+  >)
 
-  ipcMain.handle(VOCABULARY_PRACTICE_CHANNELS.start, startHandler)
-  ipcMain.handle(VOCABULARY_PRACTICE_CHANNELS.review, reviewHandler)
-  ipcMain.handle(VOCABULARY_PRACTICE_CHANNELS.cancel, cancelHandler)
   return () => {
-    ipcMain.removeHandler(VOCABULARY_PRACTICE_CHANNELS.start)
-    ipcMain.removeHandler(VOCABULARY_PRACTICE_CHANNELS.review)
-    ipcMain.removeHandler(VOCABULARY_PRACTICE_CHANNELS.cancel)
+    removeStart()
+    removeReview()
+    removeCancel()
   }
-}
-
-// 只允许本应用窗口当前加载的可信主文档；同源子 frame 也不继承练习权限。
-function isTrustedSource(event: IpcMainInvokeEvent, rendererUrl: string): boolean {
-  return (
-    !event.sender.isDestroyed() &&
-    BrowserWindow.fromWebContents(event.sender)?.webContents === event.sender &&
-    event.senderFrame != null &&
-    event.senderFrame === event.sender.mainFrame &&
-    event.senderFrame.url === rendererUrl
-  )
 }

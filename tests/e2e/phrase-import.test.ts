@@ -4,6 +4,7 @@ import type { Page } from '@playwright/test'
 import {
   expect,
   launchApp,
+  openLatestConversation,
   test,
   waitForReady,
   withTempUserData,
@@ -86,11 +87,12 @@ test('submits typed and picked /phrase commands, persists three-field rows, and 
           expect(row.example).toBe(`We will ${row.phrase} together soon.`)
         }
 
-        // 重启后历史完整恢复
+        // 重启后历史完整恢复：启动打开空白草稿，经侧栏打开原会话
         await app.close()
         app = await launchApp(directory)
         window = await app.firstWindow()
         await waitForReady(window)
+        await openLatestConversation(window)
         await expect(window.locator('.message.user')).toHaveCount(2)
         await expect(window.locator('.message.assistant')).toHaveCount(2)
         await expect(window.locator('.message.assistant').last()).toContainText('1 added')

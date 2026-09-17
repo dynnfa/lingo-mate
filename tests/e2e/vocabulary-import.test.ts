@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test'
 import {
   expect,
   launchApp,
+  openLatestConversation,
   test,
   waitForReady,
   withTempUserData,
@@ -76,6 +77,8 @@ test('runs vocabulary inside the conversation, executes tool-call inserts, repor
         app = await launchApp(directory)
         window = await app.firstWindow()
         await waitForReady(window)
+        // 启动打开空白草稿；经侧栏打开原会话后历史完整恢复
+        await openLatestConversation(window)
         await expect(window.locator('.message.user')).toHaveCount(2)
         await expect(window.locator('.message.assistant')).toHaveCount(2)
         await expect(window.locator('.message.assistant').last()).toContainText('3 already saved')
