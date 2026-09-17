@@ -123,6 +123,15 @@ React Renderer -> Preload API -> Electron Main -> Agent Engine
 - 新增 Agent 能力时，优先扩展 `src/core`，再通过 Main 和 Preload 接入 UI。
 - 完成 `docs/plans/` 下某份 plan 文档中的全部计划工作及相关验证后，必须将该文档的状态更新为“已实施”；若文档尚无状态字段，则补充 `状态：已实施`。
 
+### 测试驱动开发
+
+- 新增或修改核心业务逻辑、状态流转、IPC 校验及安全边界时，默认采用 TDD：每次围绕一个可观察行为，先写测试并确认其因预期原因失败，再实现使其通过，最后在测试保持通过的前提下重构。
+- 修复可自动复现的 Bug 时，先添加失败的回归测试，再修复。
+- 测试应通过公开接口验证行为，避免绑定私有实现细节；涉及 LLM 时使用可控替身验证应用逻辑，不依赖真实模型输出。
+- 不改变行为的重构优先复用现有测试；覆盖不足时先补充行为测试。
+- 纯样式、文案、文档及探索性原型不强制 TDD。其他不适合测试先行的情况，应说明原因和替代验证方式。
+- 完成后运行相关测试；按影响范围运行 `pnpm test`，涉及 Electron 端到端行为时运行 `pnpm test:electron`。
+
 ### 测试文件组织
 
 - 单元测试和组件测试放在被测模块下的 `__tests__/` 目录中，不与生产源码文件平铺在同一目录。
@@ -145,7 +154,14 @@ React Renderer -> Preload API -> Electron Main -> Agent Engine
 ```bash
 pnpm lint
 pnpm typecheck
+pnpm test
 pnpm build
+```
+
+涉及 Electron 端到端行为时运行：
+
+```bash
+pnpm test:electron
 ```
 
 开发调试使用：
