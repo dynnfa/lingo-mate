@@ -3,6 +3,7 @@ import type { LingoMateApi } from '../../src/shared/conversation'
 import {
   expect,
   launchApp,
+  openLatestConversation,
   switchLanguage,
   test,
   waitForReady,
@@ -47,11 +48,12 @@ test('starts in the saved language, keeps user content across a restart and swit
 
     await firstLaunch.close()
 
-    // 重启后仍为英文，历史消息内容与 ID 不变
+    // 重启后仍为英文；启动打开空白草稿，通过侧栏打开历史会话验证消息内容与 ID 不变
     const secondLaunch = await launchApp(userDataPath)
     const secondWindow = await secondLaunch.firstWindow()
     await waitForReady(secondWindow)
     expect(await secondWindow.evaluate(() => document.documentElement.lang)).toBe('en')
+    await openLatestConversation(secondWindow)
     await expect(secondWindow.locator('.message.user')).toContainText('Hello')
     const restored = await readStoredPreference(secondWindow)
     expect(restored).toEqual({ uiLanguage: 'en', resolvedUiLanguage: 'en', targetLanguage: 'en' })
@@ -75,6 +77,7 @@ test('starts in the saved language, keeps user content across a restart and swit
     const thirdWindow = await thirdLaunch.firstWindow()
     await waitForReady(thirdWindow)
     expect(await thirdWindow.evaluate(() => document.documentElement.lang)).toBe('zh-CN')
+    await openLatestConversation(thirdWindow)
     await expect(thirdWindow.locator('.message.user')).toContainText('Hello')
 
     await thirdLaunch.close()
@@ -136,7 +139,7 @@ test('switching language during generation keeps the stream and canonical ids in
     // 对话视图被设置页隐藏但保持挂载，生成仍在进行（Cancel 仍可用）
     const cancel = window.getByRole('button', { name: 'Cancel', includeHidden: true })
     await expect(cancel).toBeAttached()
-    await window.click('.settings-back-button')
+    await window.click('.page-shell-back-button')
 
     await expect(window.locator('.status')).toHaveText('Reply complete', { timeout: 15_000 })
     expect(await window.locator('.message.assistant').getAttribute('data-message-id')).toBe(draftId)

@@ -1,48 +1,19 @@
-import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { LlmUsageStatisticsError } from '../../core/llm/llm-usage-statistics'
 import { USAGE_CHANNELS, type UsageOverview } from '../../shared/usage'
+import { createTrustedHandlerRegistrar } from '../ipc-guard'
 import { registerUsageIpc, toSafeUsageError } from '../usage-ipc'
+import {
+  electronMocks,
+  FakeSender,
+  registeredHandler,
+  RENDERER_URL,
+  resetIpcMocks
+} from './helpers/ipc-test-env'
 
-const electronMocks = vi.hoisted(() => ({
-  handle: vi.fn(),
-  removeHandler: vi.fn(),
-  fromWebContents: vi.fn((sender: { owned: boolean }) =>
-    sender.owned ? { webContents: sender } : null
-  )
-}))
+vi.mock('electron', async () => (await import('./helpers/ipc-test-env')).electronTestModule())
 
-vi.mock('electron', () => ({
-  ipcMain: { handle: electronMocks.handle, removeHandler: electronMocks.removeHandler },
-  BrowserWindow: { fromWebContents: electronMocks.fromWebContents }
-}))
-
-const RENDERER_URL = 'file:///app/renderer/index.html'
-
-class FakeSender extends EventEmitter {
-  readonly id = 7
-  owned = true
-  destroyed = false
-  mainFrame = { url: RENDERER_URL }
-
-  isDestroyed(): boolean {
-    return this.destroyed
-  }
-}
-
-type IpcHandler = (
-  event: { sender: FakeSender; senderFrame?: { url: string } | null },
-  input: unknown
-) => unknown
-
-function registeredHandler(): IpcHandler {
-  const registration = electronMocks.handle.mock.calls.find(
-    ([channel]) => channel === USAGE_CHANNELS.getOverview
-  )
-  if (!registration) throw new Error('Missing IPC handler for usage:getOverview')
-  const handler = registration[1] as IpcHandler
-  return (event, input) => handler({ senderFrame: event.sender.mainFrame, ...event }, input)
-}
+const registerTrustedHandler = createTrustedHandlerRegistrar({ rendererUrl: RENDERER_URL })
 
 function emptyBucket(dayIndex: number): {
   key: string
@@ -105,16 +76,13 @@ function fakeService(overrides: Partial<{ getOverview: () => UsageOverview }> = 
   return { getOverview: vi.fn(overrides.getOverview ?? overviewFixture) }
 }
 
-beforeEach(() => {
-  electronMocks.handle.mockReset()
-  electronMocks.removeHandler.mockReset()
-})
+beforeEach(resetIpcMocks)
 
 describe('usage IPC', () => {
   it('rejects untrusted callers before touching the service', () => {
     const service = fakeService()
-    registerUsageIpc(service as never, RENDERER_URL)
-    const handler = registeredHandler()
+    registerUsageIpc(service as never, registerTrustedHandler)
+    const handler = registeredHandler(USAGE_CHANNELS.getOverview)
 
     const foreign = new FakeSender()
     foreign.owned = false
@@ -141,8 +109,8 @@ describe('usage IPC', () => {
 
   it('rejects inputs outside the predefined window', () => {
     const service = fakeService()
-    registerUsageIpc(service as never, RENDERER_URL)
-    const handler = registeredHandler()
+    registerUsageIpc(service as never, registerTrustedHandler)
+    const handler = registeredHandler(USAGE_CHANNELS.getOverview)
 
     expect(handler({ sender: new FakeSender() }, { days: 7 })).toEqual({
       status: 'error',
@@ -154,12 +122,14 @@ describe('usage IPC', () => {
   it('returns the parsed overview for trusted callers', () => {
     const overview = overviewFixture()
     const service = fakeService({ getOverview: () => overview })
-    registerUsageIpc(service as never, RENDERER_URL)
+    registerUsageIpc(service as never, registerTrustedHandler)
 
-    expect(registeredHandler()({ sender: new FakeSender() }, {})).toEqual({
-      status: 'ok',
-      overview
-    })
+    expect(registeredHandler(USAGE_CHANNELS.getOverview)({ sender: new FakeSender() }, {})).toEqual(
+      {
+        status: 'ok',
+        overview
+      }
+    )
   })
 
   it('maps core errors to safe codes without internals', () => {
@@ -167,24 +137,22 @@ describe('usage IPC', () => {
     service.getOverview.mockImplementation(() => {
       throw new LlmUsageStatisticsError('OVERFLOW')
     })
-    registerUsageIpc(service as never, RENDERER_URL)
-    expect(registeredHandler()({ sender: new FakeSender() }, {})).toEqual({
-      status: 'error',
-      error: { code: 'USAGE_OVERFLOW' }
-    })
+    registerUsageIpc(service as never, registerTrustedHandler)
+    expect(registeredHandler(USAGE_CHANNELS.getOverview)({ sender: new FakeSender() }, {})).toEqual(
+      { status: 'error', error: { code: 'USAGE_OVERFLOW' } }
+    )
 
     service.getOverview.mockImplementation(() => {
       throw new LlmUsageStatisticsError('READ_FAILED')
     })
-    expect(registeredHandler()({ sender: new FakeSender() }, {})).toEqual({
-      status: 'error',
-      error: { code: 'USAGE_READ_FAILED' }
-    })
+    expect(registeredHandler(USAGE_CHANNELS.getOverview)({ sender: new FakeSender() }, {})).toEqual(
+      { status: 'error', error: { code: 'USAGE_READ_FAILED' } }
+    )
 
     service.getOverview.mockImplementation(() => {
       throw new Error('sqlite file locked at /Users/x/secret.sqlite')
     })
-    const unknown = registeredHandler()({ sender: new FakeSender() }, {})
+    const unknown = registeredHandler(USAGE_CHANNELS.getOverview)({ sender: new FakeSender() }, {})
     expect(unknown).toEqual({ status: 'error', error: { code: 'UNKNOWN_ERROR' } })
     expect(JSON.stringify(unknown)).not.toContain('sqlite')
   })
@@ -192,15 +160,14 @@ describe('usage IPC', () => {
   it('reports a safe error when the aggregate violates the protocol', () => {
     const service = fakeService()
     service.getOverview.mockReturnValue({ days: [] } as unknown as UsageOverview)
-    registerUsageIpc(service as never, RENDERER_URL)
-    expect(registeredHandler()({ sender: new FakeSender() }, {})).toEqual({
-      status: 'error',
-      error: { code: 'UNKNOWN_ERROR' }
-    })
+    registerUsageIpc(service as never, registerTrustedHandler)
+    expect(registeredHandler(USAGE_CHANNELS.getOverview)({ sender: new FakeSender() }, {})).toEqual(
+      { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
+    )
   })
 
   it('unregisters the handler via the returned cleanup', () => {
-    const cleanup = registerUsageIpc(fakeService() as never, RENDERER_URL)
+    const cleanup = registerUsageIpc(fakeService() as never, registerTrustedHandler)
     expect(electronMocks.handle).toHaveBeenCalledTimes(1)
     expect(electronMocks.removeHandler).not.toHaveBeenCalled()
     cleanup()

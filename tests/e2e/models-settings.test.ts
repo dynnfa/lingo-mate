@@ -85,7 +85,7 @@ test('manages multiple saved models from the Settings > Models table end to end'
 
       // 删除非当前模型：确认后仅该行消失
       await rowB.getByRole('button', { name: '删除' }).click()
-      const deleteDialog = window.locator('.settings-confirm')
+      const deleteDialog = window.getByRole('dialog', { name: '删除模型配置？' })
       await expect(deleteDialog).toContainText('model-b')
       await deleteDialog.getByRole('button', { name: '删除' }).click()
       await expect(window.getByRole('row', { name: /model-b/ })).toBeHidden()
@@ -104,7 +104,7 @@ test('manages multiple saved models from the Settings > Models table end to end'
       await window.getByRole('button', { name: '保存' }).click()
       await expect(window.getByRole('row', { name: /model-final/ })).toBeVisible()
 
-      await window.click('.settings-back-button')
+      await window.click('.page-shell-back-button')
       await expect(window.locator('main.settings-page')).toBeHidden()
 
       await window.fill('#message', '开始练习')

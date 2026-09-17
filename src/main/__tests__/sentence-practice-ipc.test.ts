@@ -1,5 +1,4 @@
 import { SentencePracticeService } from '../../core/learning/sentence-practice/sentence-practice-service'
-import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { VocabularyError } from '../../core/learning/vocabulary/parse-vocabulary-input'
 import { SentencePracticeError } from '../../core/learning/sentence-practice/parse-sentence-practice-input'
@@ -10,45 +9,19 @@ import {
   type SentencePracticeReviewResult,
   type SentencePracticeStartResult
 } from '../../shared/sentence-practice'
+import { createTrustedHandlerRegistrar } from '../ipc-guard'
 import { registerSentencePracticeIpc, toSafeSentencePracticeError } from '../sentence-practice-ipc'
+import {
+  electronMocks,
+  FakeSender,
+  registeredHandler,
+  RENDERER_URL,
+  resetIpcMocks
+} from './helpers/ipc-test-env'
 
-const electronMocks = vi.hoisted(() => ({
-  handle: vi.fn(),
-  removeHandler: vi.fn(),
-  fromWebContents: vi.fn((sender: { owned: boolean }) =>
-    sender.owned ? { webContents: sender } : null
-  )
-}))
+vi.mock('electron', async () => (await import('./helpers/ipc-test-env')).electronTestModule())
 
-vi.mock('electron', () => ({
-  ipcMain: { handle: electronMocks.handle, removeHandler: electronMocks.removeHandler },
-  BrowserWindow: { fromWebContents: electronMocks.fromWebContents }
-}))
-
-const RENDERER_URL = 'file:///app/renderer/index.html'
-
-class FakeSender extends EventEmitter {
-  readonly id = 7
-  owned = true
-  destroyed = false
-  mainFrame = { url: RENDERER_URL }
-
-  isDestroyed(): boolean {
-    return this.destroyed
-  }
-}
-
-type IpcHandler = (
-  event: { sender: FakeSender; senderFrame?: { url: string } | null },
-  input: unknown
-) => unknown
-
-function registeredHandler(channel: string): IpcHandler {
-  const registration = electronMocks.handle.mock.calls.find(([name]) => name === channel)
-  if (!registration) throw new Error(`Missing IPC handler for ${channel}`)
-  const handler = registration[1] as IpcHandler
-  return (event, input) => handler({ senderFrame: event.sender.mainFrame, ...event }, input)
-}
+const registerTrustedHandler = createTrustedHandlerRegistrar({ rendererUrl: RENDERER_URL })
 
 const REQUEST_ID = '11111111-1111-4111-8111-111111111111'
 const SESSION_ID = '22222222-2222-4222-8222-222222222222'
@@ -123,15 +96,12 @@ function register(
     service as never,
     () => 'zh-CN',
     () => 'en',
-    RENDERER_URL
+    registerTrustedHandler
   )
   return service
 }
 
-beforeEach(() => {
-  electronMocks.handle.mockReset()
-  electronMocks.removeHandler.mockReset()
-})
+beforeEach(resetIpcMocks)
 
 describe('sentence practice IPC', () => {
   it('rejects untrusted callers before touching the service', async () => {
@@ -405,7 +375,7 @@ describe('sentence practice IPC', () => {
         service,
         () => 'zh-CN',
         () => 'en',
-        RENDERER_URL
+        registerTrustedHandler
       )
       const sender = new FakeSender()
       const round = (await registeredHandler(SENTENCE_PRACTICE_CHANNELS.start)(
@@ -487,7 +457,7 @@ describe('sentence practice IPC', () => {
       fakeService() as never,
       () => 'zh-CN',
       () => 'en',
-      RENDERER_URL
+      registerTrustedHandler
     )
     expect(electronMocks.handle).toHaveBeenCalledTimes(5)
     expect(electronMocks.removeHandler).not.toHaveBeenCalled()

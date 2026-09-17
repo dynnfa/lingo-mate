@@ -65,7 +65,7 @@ function writeVocabularyFixture(userDataPath: string): void {
 
 async function openRecordedVocabulary(window: Page): Promise<void> {
   await window.getByRole('button', { name: 'Recorded vocabulary' }).click()
-  const page = window.locator('main.recorded-page')
+  const page = window.getByRole('main', { name: 'Recorded vocabulary' })
   await expect(page).toBeVisible()
   await expect(window.locator('.vocabulary-table')).toBeVisible()
 }
@@ -81,7 +81,7 @@ test('shows recorded vocabulary in a table and deletes a single entry across res
       await waitForReady(window)
       await openRecordedVocabulary(window)
 
-      // 表格按创建时间倒序展示全部词条，操作列在最右侧。
+      // 表格展示全部词条，操作列在最右侧。
       const headers = window.locator('.vocabulary-table thead th')
       await expect(headers).toHaveText([
         'Word',
@@ -89,7 +89,6 @@ test('shows recorded vocabulary in a table and deletes a single entry across res
         'Meaning',
         'Concept',
         'Examples',
-        'Recorded at',
         'Actions'
       ])
       const row = window.locator('.vocabulary-table tbody tr')
@@ -99,7 +98,7 @@ test('shows recorded vocabulary in a table and deletes a single entry across res
 
       // 取消删除：确认对话框关闭，行保留。
       await window.getByRole('button', { name: 'Delete apple' }).click()
-      const dialog = window.locator('.dialog-card')
+      const dialog = window.getByRole('dialog', { name: 'Delete word' })
       await expect(dialog).toBeVisible()
       await expect(dialog).toContainText('"apple"')
       await dialog.getByRole('button', { name: 'Cancel' }).click()
@@ -150,13 +149,13 @@ test('keeps the recorded page open when Escape closes the delete dialog', async 
       await openRecordedVocabulary(window)
 
       await window.getByRole('button', { name: 'Delete apple' }).click()
-      const dialog = window.locator('.dialog-card')
+      const dialog = window.getByRole('dialog', { name: 'Delete word' })
       await expect(dialog).toBeVisible()
       await window.keyboard.press('Escape')
 
       // Escape 只关闭对话框，页面保持挂载。
       await expect(dialog).toBeHidden()
-      const page = window.locator('main.recorded-page')
+      const page = window.getByRole('main', { name: 'Recorded vocabulary' })
       await expect(page).toBeVisible()
       await expect(window.getByRole('button', { name: 'Delete apple' })).toBeVisible()
 
@@ -181,7 +180,7 @@ test('reports an empty vocabulary state when nothing is recorded', async () => {
       const window = await app.firstWindow()
       await waitForReady(window)
       await window.getByRole('button', { name: 'Recorded vocabulary' }).click()
-      await expect(window.locator('main.recorded-page')).toBeVisible()
+      await expect(window.getByRole('main', { name: 'Recorded vocabulary' })).toBeVisible()
 
       await expect(window.getByText('No saved vocabulary yet')).toBeVisible()
       await expect(window.locator('.vocabulary-table')).toHaveCount(0)

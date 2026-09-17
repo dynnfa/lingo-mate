@@ -28,5 +28,34 @@ export default defineConfig(
       ...eslintPluginReactRefresh.configs.vite.rules
     }
   },
+  {
+    // IPC 信任边界：Main 生产代码只能经 ipc-guard 的 registerTrustedHandler
+    // 注册 Renderer 请求入口；ipc-guard 本身与使用 mock 的 IPC 测试除外。
+    files: ['src/main/**/*.ts'],
+    ignores: ['src/main/ipc-guard.ts', 'src/main/__tests__/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'electron',
+              importNames: ['ipcMain'],
+              message:
+                'Main 生产代码禁止直接导入 ipcMain；请使用 src/main/ipc-guard.ts 的 registerTrustedHandler 注册 Renderer 请求入口。'
+            }
+          ]
+        }
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "Identifier[name='ipcMain']",
+          message:
+            'Main 生产代码禁止访问原始 ipcMain（含 handle/handleOnce/on/once 等别名或命名空间形式）；请使用 registerTrustedHandler。'
+        }
+      ]
+    }
+  },
   eslintConfigPrettier
 )

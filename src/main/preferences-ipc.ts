@@ -1,66 +1,66 @@
-import { ipcMain } from 'electron'
+import { noInputSchema, type RegisterTrustedHandler, type TrustedHandlerConfig } from './ipc-guard'
 import {
-  languageSettingsSchema,
   PREFERENCES_CHANNELS,
+  getLanguageSettingsResultSchema,
   setTargetLanguageInputSchema,
+  setTargetLanguageResultSchema,
   setUiLanguageInputSchema,
-  type GetLanguageSettingsResult,
-  type SetTargetLanguageResult,
-  type SetUiLanguageResult
+  setUiLanguageResultSchema
 } from '../shared/preferences'
 import type { PreferencesService } from './preferences'
 
-// 偏好 IPC 的窄接口：输入与返回值都经过校验，失败只暴露安全错误码，
-// 存储读写异常等内部原因不跨越进程边界。非法更新明确拒绝，不静默接受。
-export function registerPreferencesIpc(service: PreferencesService): void {
-  ipcMain.handle(PREFERENCES_CHANNELS.getLanguageSettings, (): GetLanguageSettingsResult => {
-    try {
-      return {
-        status: 'ok',
-        settings: languageSettingsSchema.parse(service.getLanguageSettings())
-      }
-    } catch {
-      return { status: 'error', error: { code: 'PREFERENCES_READ_FAILED' } }
-    }
-  })
+// 偏好 IPC 的窄接口：来源检查、输入与返回值校验统一由公共守卫执行，
+// 失败只暴露安全错误码，存储读写异常等内部原因不跨越进程边界。
+// 非法更新明确拒绝，不静默接受。
+export function registerPreferencesIpc(
+  service: PreferencesService,
+  registerTrustedHandler: RegisterTrustedHandler
+): () => void {
+  const removeGet = registerTrustedHandler({
+    channel: PREFERENCES_CHANNELS.getLanguageSettings,
+    inputSchema: noInputSchema,
+    resultSchema: getLanguageSettingsResultSchema,
+    invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+    mapError: () => ({ code: 'PREFERENCES_READ_FAILED' }),
+    fallbackError: { code: 'PREFERENCES_READ_FAILED' },
+    handler: () => ({ status: 'ok', settings: service.getLanguageSettings() })
+  } satisfies TrustedHandlerConfig<typeof noInputSchema, typeof getLanguageSettingsResultSchema>)
 
-  ipcMain.handle(
-    PREFERENCES_CHANNELS.setUiLanguage,
-    (_event, rawInput: unknown): SetUiLanguageResult => {
-      const input = setUiLanguageInputSchema.safeParse(rawInput)
-      if (!input.success) {
-        return { status: 'error', error: { code: 'INVALID_UI_LANGUAGE' } }
-      }
+  const removeSetUi = registerTrustedHandler({
+    channel: PREFERENCES_CHANNELS.setUiLanguage,
+    inputSchema: setUiLanguageInputSchema,
+    resultSchema: setUiLanguageResultSchema,
+    invalidInputError: () => ({ code: 'INVALID_UI_LANGUAGE' }),
+    mapError: () => ({ code: 'PREFERENCES_WRITE_FAILED' }),
+    fallbackError: { code: 'PREFERENCES_WRITE_FAILED' },
+    handler: (input) => ({
+      status: 'ok',
+      settings: service.setUiLanguage(input.uiLanguage)
+    })
+  } satisfies TrustedHandlerConfig<
+    typeof setUiLanguageInputSchema,
+    typeof setUiLanguageResultSchema
+  >)
 
-      try {
-        return {
-          status: 'ok',
-          settings: languageSettingsSchema.parse(service.setUiLanguage(input.data.uiLanguage))
-        }
-      } catch {
-        return { status: 'error', error: { code: 'PREFERENCES_WRITE_FAILED' } }
-      }
-    }
-  )
+  const removeSetTarget = registerTrustedHandler({
+    channel: PREFERENCES_CHANNELS.setTargetLanguage,
+    inputSchema: setTargetLanguageInputSchema,
+    resultSchema: setTargetLanguageResultSchema,
+    invalidInputError: () => ({ code: 'INVALID_TARGET_LANGUAGE' }),
+    mapError: () => ({ code: 'PREFERENCES_WRITE_FAILED' }),
+    fallbackError: { code: 'PREFERENCES_WRITE_FAILED' },
+    handler: (input) => ({
+      status: 'ok',
+      settings: service.setTargetLanguage(input.targetLanguage)
+    })
+  } satisfies TrustedHandlerConfig<
+    typeof setTargetLanguageInputSchema,
+    typeof setTargetLanguageResultSchema
+  >)
 
-  ipcMain.handle(
-    PREFERENCES_CHANNELS.setTargetLanguage,
-    (_event, rawInput: unknown): SetTargetLanguageResult => {
-      const input = setTargetLanguageInputSchema.safeParse(rawInput)
-      if (!input.success) {
-        return { status: 'error', error: { code: 'INVALID_TARGET_LANGUAGE' } }
-      }
-
-      try {
-        return {
-          status: 'ok',
-          settings: languageSettingsSchema.parse(
-            service.setTargetLanguage(input.data.targetLanguage)
-          )
-        }
-      } catch {
-        return { status: 'error', error: { code: 'PREFERENCES_WRITE_FAILED' } }
-      }
-    }
-  )
+  return () => {
+    removeGet()
+    removeSetUi()
+    removeSetTarget()
+  }
 }

@@ -90,7 +90,7 @@ function writeSynonymFixture(userDataPath: string): void {
 
 async function openRecordedSynonyms(window: Page): Promise<void> {
   await window.getByRole('button', { name: 'Recorded vocabulary' }).click()
-  const page = window.locator('main.recorded-page')
+  const page = window.getByRole('main', { name: 'Recorded vocabulary' })
   await expect(page).toBeVisible()
   // 默认选中词汇详情；切换到近义词菜单读取分组表格。
   await window.getByRole('button', { name: 'Synonyms' }).click()
@@ -157,7 +157,7 @@ test('shows recorded synonym groups with merged centered cells and group paging'
 
       // Escape 退出已记录页。
       await window.keyboard.press('Escape')
-      await expect(window.locator('main.recorded-page')).toBeHidden()
+      await expect(window.getByRole('main', { name: 'Recorded vocabulary' })).toBeHidden()
     } finally {
       await app.close()
     }

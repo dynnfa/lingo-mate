@@ -1,121 +1,154 @@
 import type { WebContents } from 'electron'
-import { BrowserWindow, ipcMain } from 'electron'
 import type {
   ConversationEventListener,
   ConversationModule
 } from '../core/conversation/conversation-module'
 import {
   cancelMessageInputSchema,
+  cancelMessageResultSchema,
   CONVERSATION_CHANNELS,
   conversationEventSchema,
+  createConversationResultSchema,
+  listConversationsResultSchema,
   loadConversationInputSchema,
+  loadConversationResultSchema,
   retryMessageInputSchema,
+  retryMessageResultSchema,
   runConversationSkillInputSchema,
+  runConversationSkillResultSchema,
   sendMessageInputSchema,
-  type CancelMessageResult,
+  sendMessageResultSchema,
   type ConversationEvent,
-  type CreateConversationResult,
   type GenerationAccepted,
-  type ListConversationsResult,
-  type LoadConversationResult,
-  type RetryMessageInput,
   type RetryMessageResult,
   type RunConversationSkillResult,
   type SendMessageResult
 } from '../shared/conversation'
 import { toSafeRequestError } from './conversation-errors'
+import { noInputSchema, type RegisterTrustedHandler, type TrustedHandlerConfig } from './ipc-guard'
 
 interface RequestOwnership {
   senderId: number
   senderDestroyed: boolean
 }
 
-export function registerConversationIpc(module: ConversationModule, rendererUrl?: string): void {
+// 注册会话请求入口；来源检查、输入与结果校验由公共守卫统一执行。
+// sender 所有权、取消与流式终态处理保留在本模块。
+export function registerConversationIpc(
+  module: ConversationModule,
+  registerTrustedHandler: RegisterTrustedHandler
+): () => void {
   // sender 所有权：只有创建请求的 WebContents 能取消它；sender 销毁时取消其全部请求。
   const requestOwners = new Map<string, RequestOwnership>()
 
-  ipcMain.handle(CONVERSATION_CHANNELS.create, async (): Promise<CreateConversationResult> => {
-    try {
-      return { status: 'ok', conversation: await module.createConversation() }
-    } catch (error) {
-      return { status: 'error', error: toSafeRequestError(error) }
-    }
-  })
+  const cleanups = [
+    registerTrustedHandler({
+      channel: CONVERSATION_CHANNELS.create,
+      inputSchema: noInputSchema,
+      resultSchema: createConversationResultSchema,
+      invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+      mapError: toSafeRequestError,
+      fallbackError: { code: 'UNKNOWN_ERROR' },
+      handler: async () => ({ status: 'ok', conversation: await module.createConversation() })
+    } satisfies TrustedHandlerConfig<typeof noInputSchema, typeof createConversationResultSchema>),
 
-  ipcMain.handle(CONVERSATION_CHANNELS.list, async (): Promise<ListConversationsResult> => {
-    try {
-      return { status: 'ok', conversations: await module.listConversations() }
-    } catch (error) {
-      return { status: 'error', error: toSafeRequestError(error) }
-    }
-  })
+    registerTrustedHandler({
+      channel: CONVERSATION_CHANNELS.list,
+      inputSchema: noInputSchema,
+      resultSchema: listConversationsResultSchema,
+      invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+      mapError: toSafeRequestError,
+      fallbackError: { code: 'UNKNOWN_ERROR' },
+      handler: async () => ({ status: 'ok', conversations: await module.listConversations() })
+    } satisfies TrustedHandlerConfig<typeof noInputSchema, typeof listConversationsResultSchema>),
 
-  ipcMain.handle(
-    CONVERSATION_CHANNELS.load,
-    async (_event, rawInput: unknown): Promise<LoadConversationResult> => {
-      const input = loadConversationInputSchema.parse(rawInput)
-      try {
-        return { status: 'ok', ...(await module.loadConversation(input.sessionId)) }
-      } catch (error) {
-        return { status: 'error', error: toSafeRequestError(error) }
+    registerTrustedHandler({
+      channel: CONVERSATION_CHANNELS.load,
+      inputSchema: loadConversationInputSchema,
+      resultSchema: loadConversationResultSchema,
+      invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+      mapError: toSafeRequestError,
+      fallbackError: { code: 'UNKNOWN_ERROR' },
+      handler: async (input) => ({
+        status: 'ok',
+        ...(await module.loadConversation(input.sessionId))
+      })
+    } satisfies TrustedHandlerConfig<
+      typeof loadConversationInputSchema,
+      typeof loadConversationResultSchema
+    >),
+
+    registerTrustedHandler({
+      channel: CONVERSATION_CHANNELS.runSkill,
+      inputSchema: runConversationSkillInputSchema,
+      resultSchema: runConversationSkillResultSchema,
+      invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+      mapError: toSafeRequestError,
+      fallbackError: { code: 'UNKNOWN_ERROR' },
+      handler: (input, { sender }) =>
+        runGeneration(module, requestOwners, sender, input.requestId, (emit) =>
+          module.runSkill(input, emit)
+        )
+    } satisfies TrustedHandlerConfig<
+      typeof runConversationSkillInputSchema,
+      typeof runConversationSkillResultSchema
+    >),
+
+    registerTrustedHandler({
+      channel: CONVERSATION_CHANNELS.send,
+      inputSchema: sendMessageInputSchema,
+      resultSchema: sendMessageResultSchema,
+      invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+      mapError: toSafeRequestError,
+      fallbackError: { code: 'UNKNOWN_ERROR' },
+      handler: (input, { sender }) =>
+        runGeneration(module, requestOwners, sender, input.requestId, (emit) =>
+          module.sendMessage(input, emit)
+        )
+    } satisfies TrustedHandlerConfig<
+      typeof sendMessageInputSchema,
+      typeof sendMessageResultSchema
+    >),
+
+    registerTrustedHandler({
+      channel: CONVERSATION_CHANNELS.retry,
+      inputSchema: retryMessageInputSchema,
+      resultSchema: retryMessageResultSchema,
+      invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+      mapError: toSafeRequestError,
+      fallbackError: { code: 'UNKNOWN_ERROR' },
+      handler: (input, { sender }) =>
+        runGeneration(module, requestOwners, sender, input.requestId, (emit) =>
+          module.retryMessage(input, emit)
+        )
+    } satisfies TrustedHandlerConfig<
+      typeof retryMessageInputSchema,
+      typeof retryMessageResultSchema
+    >),
+
+    registerTrustedHandler({
+      channel: CONVERSATION_CHANNELS.cancel,
+      inputSchema: cancelMessageInputSchema,
+      resultSchema: cancelMessageResultSchema,
+      invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+      mapError: toSafeRequestError,
+      fallbackError: { code: 'UNKNOWN_ERROR' },
+      handler: (input, { sender }) => {
+        if (requestOwners.get(input.requestId)?.senderId !== sender.id) {
+          return { status: 'error', error: { code: 'REQUEST_NOT_FOUND' } }
+        }
+        module.cancelMessage(input.requestId)
+        return { status: 'ok' }
       }
-    }
-  )
+    } satisfies TrustedHandlerConfig<
+      typeof cancelMessageInputSchema,
+      typeof cancelMessageResultSchema
+    >)
+  ]
 
-  ipcMain.handle(
-    CONVERSATION_CHANNELS.runSkill,
-    async (event, rawInput: unknown): Promise<RunConversationSkillResult> => {
-      if (
-        rendererUrl &&
-        (event.sender.isDestroyed() ||
-          BrowserWindow.fromWebContents(event.sender)?.webContents !== event.sender ||
-          event.senderFrame == null ||
-          event.senderFrame !== event.sender.mainFrame ||
-          event.senderFrame.url !== rendererUrl)
-      ) {
-        return { status: 'error', error: { code: 'UNTRUSTED_SOURCE' } }
-      }
-      const parsed = runConversationSkillInputSchema.safeParse(rawInput)
-      if (!parsed.success) return { status: 'error', error: { code: 'INVALID_INPUT' } }
-      return runGeneration(module, requestOwners, event.sender, parsed.data.requestId, (emit) =>
-        module.runSkill(parsed.data, emit)
-      )
-    }
-  )
-
-  ipcMain.handle(
-    CONVERSATION_CHANNELS.send,
-    async (event, rawInput: unknown): Promise<SendMessageResult> => {
-      const input = sendMessageInputSchema.parse(rawInput)
-      return runGeneration(module, requestOwners, event.sender, input.requestId, (emit) =>
-        module.sendMessage(input, emit)
-      )
-    }
-  )
-
-  ipcMain.handle(
-    CONVERSATION_CHANNELS.retry,
-    async (event, rawInput: unknown): Promise<RetryMessageResult> => {
-      const input: RetryMessageInput = retryMessageInputSchema.parse(rawInput)
-      return runGeneration(module, requestOwners, event.sender, input.requestId, (emit) =>
-        module.retryMessage(input, emit)
-      )
-    }
-  )
-
-  ipcMain.handle(CONVERSATION_CHANNELS.cancel, (event, rawInput: unknown): CancelMessageResult => {
-    const input = cancelMessageInputSchema.parse(rawInput)
-    if (requestOwners.get(input.requestId)?.senderId !== event.sender.id) {
-      return { status: 'error', error: { code: 'REQUEST_NOT_FOUND' } }
-    }
-
-    try {
-      module.cancelMessage(input.requestId)
-      return { status: 'ok' }
-    } catch (error) {
-      return { status: 'error', error: toSafeRequestError(error) }
-    }
-  })
+  return () => {
+    for (const cleanup of cleanups) cleanup()
+  }
 }
 
 async function runGeneration(
@@ -180,6 +213,7 @@ async function runGeneration(
   }
 }
 
+// Main → Renderer 的推送事件不属于请求注册器：继续使用现有事件 schema。
 function sendEvent(sender: WebContents, event: unknown): void {
   if (!sender.isDestroyed()) {
     sender.send(CONVERSATION_CHANNELS.event, event)

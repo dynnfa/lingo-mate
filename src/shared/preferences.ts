@@ -39,6 +39,8 @@ export type SetTargetLanguageInput = z.infer<typeof setTargetLanguageInputSchema
 
 export const preferencesErrorSchema = z.object({
   code: z.enum([
+    'UNTRUSTED_SOURCE',
+    'INVALID_INPUT',
     'PREFERENCES_READ_FAILED',
     'PREFERENCES_WRITE_FAILED',
     'INVALID_UI_LANGUAGE',

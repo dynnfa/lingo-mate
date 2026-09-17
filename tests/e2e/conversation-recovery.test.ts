@@ -1,6 +1,13 @@
 import type { ElectronApplication } from '@playwright/test'
 import type { LingoMateApi } from '../../src/shared/conversation'
-import { expect, launchApp, test, withTempUserData, writeLocalePreference } from './helpers'
+import {
+  expect,
+  launchApp,
+  openLatestConversation,
+  test,
+  withTempUserData,
+  writeLocalePreference
+} from './helpers'
 
 test('restores the same conversation and history after relaunch', async () => {
   await withTempUserData(async (userDataPath) => {
@@ -60,7 +67,8 @@ test('restores the same conversation and history after relaunch', async () => {
       expect(restored.loaded.messages[1]).toMatchObject({ role: 'assistant' })
     }
 
-    // Renderer 自身的恢复投影也应显示历史
+    // 启动打开空白草稿；通过侧栏打开历史会话后，Renderer 投影也应显示历史
+    await openLatestConversation(secondWindow)
     await expect(secondWindow.locator('.message.user')).toContainText('Hello')
 
     await secondLaunch.close()

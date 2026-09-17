@@ -1,5 +1,5 @@
-import type { IpcMainInvokeEvent, WebContents } from 'electron'
-import { BrowserWindow, ipcMain } from 'electron'
+import type { WebContents } from 'electron'
+import type { RegisterTrustedHandler, TrustedHandlerConfig } from './ipc-guard'
 import type { SupportedLocale, TargetLanguage } from '../shared/preferences'
 import {
   SENTENCE_PRACTICE_CHANNELS,
@@ -13,12 +13,7 @@ import {
   sentencePracticeReviewResultSchema,
   sentencePracticeStartInputSchema,
   sentencePracticeStartResultSchema,
-  type SentencePracticeCancelResult,
-  type SentencePracticeCloseResult,
-  type SentencePracticeError,
-  type SentencePracticeHintsResult,
-  type SentencePracticeReviewResult,
-  type SentencePracticeStartResult
+  type SentencePracticeError
 } from '../shared/sentence-practice'
 import { VocabularyError } from '../core/learning/vocabulary/parse-vocabulary-input'
 import { SentencePracticeError as CoreSentencePracticeError } from '../core/learning/sentence-practice/parse-sentence-practice-input'
@@ -34,13 +29,13 @@ export function toSafeSentencePracticeError(error: unknown): SentencePracticeErr
   return { code: 'UNKNOWN_ERROR' }
 }
 
-// 注册造句练习 IPC；解释语言与练习语言按请求快照传入。返回清理函数
-// 用于卸载时移除注册。
+// 注册造句练习 IPC；解释语言与练习语言按请求快照传入。来源检查、输入与
+// 结果校验由公共守卫执行；单实例会话所有权与销毁清理由本模块管理。
 export function registerSentencePracticeIpc(
   service: SentencePracticeService,
   resolveExplanationLanguage: () => SupportedLocale,
   resolvePracticeLanguage: () => TargetLanguage,
-  trustedRendererUrl: string
+  registerTrustedHandler: RegisterTrustedHandler
 ): () => void {
   let owner: { sender: WebContents; sessionId: string; onDestroyed: () => void } | undefined
 
@@ -52,22 +47,18 @@ export function registerSentencePracticeIpc(
     return service.close(previous.sessionId)
   }
 
-  const ownsSession = (event: IpcMainInvokeEvent, sessionId: string): boolean =>
-    owner?.sender === event.sender && owner.sessionId === sessionId
+  const ownsSession = (sender: WebContents, sessionId: string): boolean =>
+    owner?.sender === sender && owner.sessionId === sessionId
 
-  const startHandler = (
-    event: IpcMainInvokeEvent,
-    rawInput: unknown
-  ): SentencePracticeStartResult => {
-    if (!isTrustedSource(event, trustedRendererUrl)) {
-      return { status: 'error', error: { code: 'UNTRUSTED_SOURCE' } }
-    }
-    const input = sentencePracticeStartInputSchema.safeParse(rawInput)
-    if (!input.success) {
-      return { status: 'error', error: { code: 'INVALID_INPUT' } }
-    }
-    try {
-      if (owner && owner.sender !== event.sender) {
+  const removeStart = registerTrustedHandler({
+    channel: SENTENCE_PRACTICE_CHANNELS.start,
+    inputSchema: sentencePracticeStartInputSchema,
+    resultSchema: sentencePracticeStartResultSchema,
+    invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+    mapError: toSafeSentencePracticeError,
+    fallbackError: { code: 'UNKNOWN_ERROR' },
+    handler: (_input, { sender }) => {
+      if (owner && owner.sender !== sender) {
         return { status: 'error', error: { code: 'BUSY' } }
       }
       releaseOwner()
@@ -75,143 +66,111 @@ export function registerSentencePracticeIpc(
       const onDestroyed = (): void => {
         releaseOwner()
       }
-      owner = { sender: event.sender, sessionId: outcome.sessionId, onDestroyed }
-      event.sender.once('destroyed', onDestroyed)
-      // 出口同样过 schema：结果不符合协议时按安全错误报告。
-      return sentencePracticeStartResultSchema.parse({
+      owner = { sender, sessionId: outcome.sessionId, onDestroyed }
+      sender.once('destroyed', onDestroyed)
+      return {
         status: 'ok',
         sessionId: outcome.sessionId,
         actualCount: outcome.entries.length,
         entries: outcome.entries
-      })
-    } catch (error) {
-      return { status: 'error', error: toSafeSentencePracticeError(error) }
+      }
     }
-  }
+  } satisfies TrustedHandlerConfig<
+    typeof sentencePracticeStartInputSchema,
+    typeof sentencePracticeStartResultSchema
+  >)
 
-  const hintsHandler = async (
-    event: IpcMainInvokeEvent,
-    rawInput: unknown
-  ): Promise<SentencePracticeHintsResult> => {
-    if (!isTrustedSource(event, trustedRendererUrl)) {
-      return { status: 'error', error: { code: 'UNTRUSTED_SOURCE' } }
-    }
-    const input = sentencePracticeHintsInputSchema.safeParse(rawInput)
-    if (!input.success) {
-      return { status: 'error', error: { code: 'INVALID_INPUT' } }
-    }
-    try {
-      if (!ownsSession(event, input.data.sessionId)) {
+  const removeHints = registerTrustedHandler({
+    channel: SENTENCE_PRACTICE_CHANNELS.hints,
+    inputSchema: sentencePracticeHintsInputSchema,
+    resultSchema: sentencePracticeHintsResultSchema,
+    invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+    mapError: toSafeSentencePracticeError,
+    fallbackError: { code: 'UNKNOWN_ERROR' },
+    handler: async (input, { sender }) => {
+      if (!ownsSession(sender, input.sessionId)) {
         return { status: 'error', error: { code: 'SESSION_NOT_FOUND' } }
       }
       const hints = await service.generateHints(
-        input.data.sessionId,
-        input.data.requestId,
+        input.sessionId,
+        input.requestId,
         resolveExplanationLanguage(),
         resolvePracticeLanguage()
       )
-      return sentencePracticeHintsResultSchema.parse({ status: 'ok', hints })
-    } catch (error) {
-      return { status: 'error', error: toSafeSentencePracticeError(error) }
+      return { status: 'ok', hints }
     }
-  }
+  } satisfies TrustedHandlerConfig<
+    typeof sentencePracticeHintsInputSchema,
+    typeof sentencePracticeHintsResultSchema
+  >)
 
-  const reviewHandler = async (
-    event: IpcMainInvokeEvent,
-    rawInput: unknown
-  ): Promise<SentencePracticeReviewResult> => {
-    if (!isTrustedSource(event, trustedRendererUrl)) {
-      return { status: 'error', error: { code: 'UNTRUSTED_SOURCE' } }
-    }
-    const input = sentencePracticeReviewInputSchema.safeParse(rawInput)
-    if (!input.success) {
-      return { status: 'error', error: { code: 'INVALID_INPUT' } }
-    }
-    try {
-      if (!ownsSession(event, input.data.sessionId)) {
+  const removeReview = registerTrustedHandler({
+    channel: SENTENCE_PRACTICE_CHANNELS.review,
+    inputSchema: sentencePracticeReviewInputSchema,
+    resultSchema: sentencePracticeReviewResultSchema,
+    invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+    mapError: toSafeSentencePracticeError,
+    fallbackError: { code: 'UNKNOWN_ERROR' },
+    handler: async (input, { sender }) => {
+      if (!ownsSession(sender, input.sessionId)) {
         return { status: 'error', error: { code: 'SESSION_NOT_FOUND' } }
       }
       const review = await service.review(
-        input.data.sessionId,
-        input.data.requestId,
-        input.data.answer,
+        input.sessionId,
+        input.requestId,
+        input.answer,
         resolveExplanationLanguage(),
         resolvePracticeLanguage()
       )
-      return sentencePracticeReviewResultSchema.parse({ status: 'ok', review })
-    } catch (error) {
-      return { status: 'error', error: toSafeSentencePracticeError(error) }
+      return { status: 'ok', review }
     }
-  }
+  } satisfies TrustedHandlerConfig<
+    typeof sentencePracticeReviewInputSchema,
+    typeof sentencePracticeReviewResultSchema
+  >)
 
-  const cancelHandler = (
-    event: IpcMainInvokeEvent,
-    rawInput: unknown
-  ): SentencePracticeCancelResult => {
-    if (!isTrustedSource(event, trustedRendererUrl)) {
-      return { status: 'error', error: { code: 'UNTRUSTED_SOURCE' } }
-    }
-    const input = sentencePracticeCancelInputSchema.safeParse(rawInput)
-    if (!input.success) {
-      return { status: 'error', error: { code: 'INVALID_INPUT' } }
-    }
-    try {
-      if (!ownsSession(event, input.data.sessionId)) {
+  const removeCancel = registerTrustedHandler({
+    channel: SENTENCE_PRACTICE_CHANNELS.cancel,
+    inputSchema: sentencePracticeCancelInputSchema,
+    resultSchema: sentencePracticeCancelResultSchema,
+    invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+    mapError: toSafeSentencePracticeError,
+    fallbackError: { code: 'UNKNOWN_ERROR' },
+    handler: (input, { sender }) => {
+      if (!ownsSession(sender, input.sessionId)) {
         return { status: 'ok', cancelled: false }
       }
-      return sentencePracticeCancelResultSchema.parse({
-        status: 'ok',
-        cancelled: service.cancel(input.data.sessionId, input.data.requestId)
-      })
-    } catch (error) {
-      return { status: 'error', error: toSafeSentencePracticeError(error) }
+      return { status: 'ok', cancelled: service.cancel(input.sessionId, input.requestId) }
     }
-  }
+  } satisfies TrustedHandlerConfig<
+    typeof sentencePracticeCancelInputSchema,
+    typeof sentencePracticeCancelResultSchema
+  >)
 
-  const closeHandler = (
-    event: IpcMainInvokeEvent,
-    rawInput: unknown
-  ): SentencePracticeCloseResult => {
-    if (!isTrustedSource(event, trustedRendererUrl)) {
-      return { status: 'error', error: { code: 'UNTRUSTED_SOURCE' } }
-    }
-    const input = sentencePracticeCloseInputSchema.safeParse(rawInput)
-    if (!input.success) {
-      return { status: 'error', error: { code: 'INVALID_INPUT' } }
-    }
-    try {
-      if (!ownsSession(event, input.data.sessionId)) {
+  const removeClose = registerTrustedHandler({
+    channel: SENTENCE_PRACTICE_CHANNELS.close,
+    inputSchema: sentencePracticeCloseInputSchema,
+    resultSchema: sentencePracticeCloseResultSchema,
+    invalidInputError: () => ({ code: 'INVALID_INPUT' }),
+    mapError: toSafeSentencePracticeError,
+    fallbackError: { code: 'UNKNOWN_ERROR' },
+    handler: (input, { sender }) => {
+      if (!ownsSession(sender, input.sessionId)) {
         return { status: 'ok', closed: false }
       }
-      const closed = releaseOwner()
-      return sentencePracticeCloseResultSchema.parse({ status: 'ok', closed })
-    } catch (error) {
-      return { status: 'error', error: toSafeSentencePracticeError(error) }
+      return { status: 'ok', closed: releaseOwner() }
     }
-  }
+  } satisfies TrustedHandlerConfig<
+    typeof sentencePracticeCloseInputSchema,
+    typeof sentencePracticeCloseResultSchema
+  >)
 
-  ipcMain.handle(SENTENCE_PRACTICE_CHANNELS.start, startHandler)
-  ipcMain.handle(SENTENCE_PRACTICE_CHANNELS.hints, hintsHandler)
-  ipcMain.handle(SENTENCE_PRACTICE_CHANNELS.review, reviewHandler)
-  ipcMain.handle(SENTENCE_PRACTICE_CHANNELS.cancel, cancelHandler)
-  ipcMain.handle(SENTENCE_PRACTICE_CHANNELS.close, closeHandler)
   return () => {
     releaseOwner()
-    ipcMain.removeHandler(SENTENCE_PRACTICE_CHANNELS.start)
-    ipcMain.removeHandler(SENTENCE_PRACTICE_CHANNELS.hints)
-    ipcMain.removeHandler(SENTENCE_PRACTICE_CHANNELS.review)
-    ipcMain.removeHandler(SENTENCE_PRACTICE_CHANNELS.cancel)
-    ipcMain.removeHandler(SENTENCE_PRACTICE_CHANNELS.close)
+    removeStart()
+    removeHints()
+    removeReview()
+    removeCancel()
+    removeClose()
   }
-}
-
-// 只允许本应用窗口当前加载的可信主文档；同源子 frame 也不继承练习权限。
-function isTrustedSource(event: IpcMainInvokeEvent, rendererUrl: string): boolean {
-  return (
-    !event.sender.isDestroyed() &&
-    BrowserWindow.fromWebContents(event.sender)?.webContents === event.sender &&
-    event.senderFrame != null &&
-    event.senderFrame === event.sender.mainFrame &&
-    event.senderFrame.url === rendererUrl
-  )
 }

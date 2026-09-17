@@ -51,7 +51,7 @@ function writeVocabularyFixture(userDataPath: string): void {
 
 async function openPractice(window: Page): Promise<void> {
   await window.getByRole('button', { name: 'Start practicing' }).click()
-  const page = window.locator('main.practice-page')
+  const page = window.getByRole('main', { name: 'Start practicing' })
   await expect(page).toBeVisible()
   await expect(page.getByRole('button', { name: 'Vocabulary practice' })).toHaveAttribute(
     'aria-current',

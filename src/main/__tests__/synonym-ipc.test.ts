@@ -1,46 +1,19 @@
-import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SynonymError } from '../../core/learning/synonym/parse-synonym-input'
 import { SYNONYM_CHANNELS, type SynonymListResult } from '../../shared/synonym'
+import { createTrustedHandlerRegistrar } from '../ipc-guard'
 import { registerSynonymIpc, toSafeSynonymManagementError } from '../synonym-ipc'
+import {
+  electronMocks,
+  FakeSender,
+  registeredHandler,
+  RENDERER_URL,
+  resetIpcMocks
+} from './helpers/ipc-test-env'
 
-const electronMocks = vi.hoisted(() => ({
-  handle: vi.fn(),
-  removeHandler: vi.fn(),
-  fromWebContents: vi.fn((sender: { owned: boolean }) =>
-    sender.owned ? { webContents: sender } : null
-  )
-}))
+vi.mock('electron', async () => (await import('./helpers/ipc-test-env')).electronTestModule())
 
-vi.mock('electron', () => ({
-  ipcMain: { handle: electronMocks.handle, removeHandler: electronMocks.removeHandler },
-  BrowserWindow: { fromWebContents: electronMocks.fromWebContents }
-}))
-
-const RENDERER_URL = 'file:///app/renderer/index.html'
-
-class FakeSender extends EventEmitter {
-  readonly id = 7
-  owned = true
-  destroyed = false
-  mainFrame = { url: RENDERER_URL }
-
-  isDestroyed(): boolean {
-    return this.destroyed
-  }
-}
-
-type IpcHandler = (
-  event: { sender: FakeSender; senderFrame?: { url: string } | null },
-  input: unknown
-) => unknown
-
-function registeredHandler(channel: string): IpcHandler {
-  const registration = electronMocks.handle.mock.calls.find(([name]) => name === channel)
-  if (!registration) throw new Error(`Missing IPC handler for ${channel}`)
-  const handler = registration[1] as IpcHandler
-  return (event, input) => handler({ senderFrame: event.sender.mainFrame, ...event }, input)
-}
+const registerTrustedHandler = createTrustedHandlerRegistrar({ rendererUrl: RENDERER_URL })
 
 const ENTRY = {
   id: '22222222-2222-4222-8222-222222222222',
@@ -64,15 +37,12 @@ function fakeService(overrides: Partial<{ list: (input: unknown) => unknown }> =
   }
 }
 
-beforeEach(() => {
-  electronMocks.handle.mockReset()
-  electronMocks.removeHandler.mockReset()
-})
+beforeEach(resetIpcMocks)
 
 describe('synonym IPC', () => {
   it('rejects untrusted callers before touching the service', () => {
     const service = fakeService()
-    registerSynonymIpc(service as never, RENDERER_URL)
+    registerSynonymIpc(service as never, registerTrustedHandler)
     const list = registeredHandler(SYNONYM_CHANNELS.list)
 
     const foreign = new FakeSender()
@@ -98,7 +68,7 @@ describe('synonym IPC', () => {
 
   it('rejects inputs outside the predefined window', () => {
     const service = fakeService()
-    registerSynonymIpc(service as never, RENDERER_URL)
+    registerSynonymIpc(service as never, registerTrustedHandler)
 
     expect(
       registeredHandler(SYNONYM_CHANNELS.list)({ sender: new FakeSender() }, { cursor: 'x' })
@@ -114,7 +84,7 @@ describe('synonym IPC', () => {
 
   it('returns the parsed page with a cursor for trusted callers', () => {
     const service = fakeService({ list: () => ({ groups: [GROUP], nextCursor: CURSOR }) })
-    registerSynonymIpc(service as never, RENDERER_URL)
+    registerSynonymIpc(service as never, registerTrustedHandler)
 
     expect(service.list).not.toHaveBeenCalled()
     const result = registeredHandler(SYNONYM_CHANNELS.list)(
@@ -137,7 +107,7 @@ describe('synonym IPC', () => {
     service.list.mockImplementation(() => {
       throw new SynonymError('STORAGE_FAILED', { cause: new Error('sqlite locked') })
     })
-    registerSynonymIpc(service as never, RENDERER_URL)
+    registerSynonymIpc(service as never, registerTrustedHandler)
     const stored = registeredHandler(SYNONYM_CHANNELS.list)({ sender: new FakeSender() }, {})
     expect(stored).toEqual({ status: 'error', error: { code: 'STORAGE_FAILED' } })
     expect(JSON.stringify(stored)).not.toContain('sqlite')
@@ -153,7 +123,7 @@ describe('synonym IPC', () => {
   it('reports a safe error when the result violates the protocol', () => {
     const service = fakeService()
     service.list.mockReturnValue({ groups: [{ ...GROUP, words: [] }] } as never)
-    registerSynonymIpc(service as never, RENDERER_URL)
+    registerSynonymIpc(service as never, registerTrustedHandler)
     expect(registeredHandler(SYNONYM_CHANNELS.list)({ sender: new FakeSender() }, {})).toEqual({
       status: 'error',
       error: { code: 'UNKNOWN_ERROR' }
@@ -161,7 +131,7 @@ describe('synonym IPC', () => {
   })
 
   it('unregisters the handler via the returned cleanup', () => {
-    const cleanup = registerSynonymIpc(fakeService() as never, RENDERER_URL)
+    const cleanup = registerSynonymIpc(fakeService() as never, registerTrustedHandler)
     expect(electronMocks.handle).toHaveBeenCalledTimes(1)
     expect(electronMocks.handle).toHaveBeenCalledWith(SYNONYM_CHANNELS.list, expect.any(Function))
     expect(electronMocks.removeHandler).not.toHaveBeenCalled()

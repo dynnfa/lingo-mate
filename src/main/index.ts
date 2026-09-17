@@ -42,6 +42,7 @@ import {
 } from '../core/llm/model-config'
 import type { LanguageModel } from '../core/llm/language-model'
 import { SqliteConversationRepository } from '../database/sqlite-conversation-repository'
+import { createTrustedHandlerRegistrar } from './ipc-guard'
 import { registerConversationIpc } from './conversation-ipc'
 import { registerModelsIpc } from './models-ipc'
 import { createFileModelsConfigStore, createSafeStorageCredentialVault } from './models-store'
@@ -124,6 +125,10 @@ app.whenReady().then(() => {
   database = openDatabase(join(app.getPath('userData'), 'lingo-mate.sqlite'))
   const conversationRepository = new SqliteConversationRepository(database)
 
+  // 全部 Renderer → Main 请求入口的唯一注册器：强制来源检查、输入校验、
+  // 异常转换与结果校验；可信页面配置缺失或非法时应用直接启动失败。
+  const registerTrustedHandler = createTrustedHandlerRegistrar({ rendererUrl })
+
   // LLM 用量账本：统一客户端自动记账；重启时把上次进程遗留的 started
   // 调用标记为 interrupted（真实结束时间未知），不重发请求。
   const llmUsageRepository = new SqliteLlmUsageRepository(database)
@@ -138,7 +143,7 @@ app.whenReady().then(() => {
       now: () => Date.now(),
       getTimeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone
     }),
-    rendererUrl
+    registerTrustedHandler
   )
 
   // 模型配置服务：持久化集合 + 系统安全存储加密密钥；IPC 与对话模型入口共用。
@@ -151,7 +156,7 @@ app.whenReady().then(() => {
   registerModelsIpc(
     modelsService,
     new ModelConnectionTester(CONNECTION_TEST_TIMEOUT_MS, createLlmClient),
-    rendererUrl
+    registerTrustedHandler
   )
 
   // 生产对话按请求解析已保存配置快照；LocalLanguageModel 仅作为显式开发/测试
@@ -168,7 +173,7 @@ app.whenReady().then(() => {
     preferencesService = new PreferencesService(createElectronPreferenceStore(), () =>
       app.getPreferredSystemLanguages()
     )
-    registerPreferencesIpc(preferencesService)
+    registerPreferencesIpc(preferencesService, registerTrustedHandler)
   } catch (error) {
     console.error('Failed to initialize language preferences', error)
   }
@@ -192,7 +197,10 @@ app.whenReady().then(() => {
   const vocabularyRepository = new SqliteVocabularyRepository(database)
   // 已记录页的词汇列表与删除：复用同一仓储，经管理服务暴露窄接口；
   // 删除只作用于 vocabulary 记录，不改写历史会话与收藏批次报告。
-  registerVocabularyIpc(new VocabularyManagementService(vocabularyRepository), rendererUrl)
+  registerVocabularyIpc(
+    new VocabularyManagementService(vocabularyRepository),
+    registerTrustedHandler
+  )
   // 词汇练习：同一词库仓储随机抽词，审查按请求解析模型快照；练习与审查
   // 状态只保存在内存会话中，不落库。解释语言跟随当前界面语言。
   vocabularyPracticeService = new VocabularyPracticeService(vocabularyRepository, () => {
@@ -217,7 +225,7 @@ app.whenReady().then(() => {
   registerVocabularyPracticeIpc(
     vocabularyPracticeService,
     () => resolveLanguages().outputLanguage,
-    rendererUrl
+    registerTrustedHandler
   )
   // 造句练习：同一词库仓储随机抽 3 词，独立内存会话，不与词汇练习
   // 共用实例；解释语言跟随界面语言，练习语言读取学习目标配置。
@@ -259,7 +267,7 @@ app.whenReady().then(() => {
     sentencePracticeService,
     () => resolveLanguages().outputLanguage,
     () => resolveLanguages().targetLanguage,
-    rendererUrl
+    registerTrustedHandler
   )
   const vocabularySkill = new VocabularyConversationSkill(
     vocabularyRepository,
@@ -273,7 +281,7 @@ app.whenReady().then(() => {
   const phraseRepository = new SqlitePhraseRepository(database)
   // 已记录页的短语列表与删除：复用短语收录仓储，经管理服务暴露窄接口；
   // 删除只作用于 phrase 记录，不改写历史会话与收录批次报告。
-  registerPhraseIpc(new PhraseManagementService(phraseRepository), rendererUrl)
+  registerPhraseIpc(new PhraseManagementService(phraseRepository), registerTrustedHandler)
   const phraseSkill = new PhraseConversationSkill(
     phraseRepository,
     (timeoutMs) =>
@@ -283,7 +291,7 @@ app.whenReady().then(() => {
   const synonymRepository = new SqliteSynonymRepository(database)
   // 已记录页的近义词分组列表：复用近义词收藏仓储，经管理服务暴露窄接口；
   // 读取不影响收藏流程，也不改写历史会话与收藏批次报告。
-  registerSynonymIpc(new SynonymManagementService(synonymRepository), rendererUrl)
+  registerSynonymIpc(new SynonymManagementService(synonymRepository), registerTrustedHandler)
   const synonymSkill = new SynonymConversationSkill(
     new SynonymModule(synonymRepository, (timeoutMs) => {
       try {
@@ -314,7 +322,7 @@ app.whenReady().then(() => {
     conversationSkills,
     conversationRepository
   )
-  registerConversationIpc(conversationModule, rendererUrl)
+  registerConversationIpc(conversationModule, registerTrustedHandler)
 
   createWindow()
 
