@@ -16,7 +16,7 @@ import {
 import {
   assertValidInsertCommand,
   phoneticSchema,
-  insertToolArgumentsSchema,
+  phoneticListSchema,
   exampleSentenceListSchema,
   type VocabularyInsertCommand
 } from '../core/learning/vocabulary/vocabulary-insert'
@@ -51,10 +51,20 @@ function fromRow(raw: unknown): VocabularyEntry {
   })
 }
 // 旧行仍保存单个 IPA（包括方括号格式），新行保存 JSON 数组；读取不改写数据。
+// 两种格式的区分依赖单个音标内不含引号（见 phoneticSchema）。
 function parsePhonetics(value: string | null): string[] | null {
   if (value === null) return null
   if (phoneticSchema.safeParse(value).success) return [value]
-  return insertToolArgumentsSchema.shape.phonetic.parse(JSON.parse(value))
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch {
+    throw new Error('Invalid phonetic encoding')
+  }
+  if (!phoneticListSchema.safeParse(parsed).success) {
+    throw new Error('Invalid phonetic encoding')
+  }
+  return parsed as string[]
 }
 
 // NULL 表示历史未回填内容；非空但不符编码的值属于单条记录的数据错误，
