@@ -49,7 +49,7 @@ function writeVocabularyFixture(userDataPath: string): void {
       insert.run(
         fixture.id,
         fixture.term,
-        '/ˈæpəl/',
+        fixture.term === 'banana' ? JSON.stringify(['/bəˈnɑːnə/', '/bəˈnænə/']) : '/ˈæpəl/',
         `The meaning of ${fixture.term}.`,
         `The concept of ${fixture.term}.`,
         JSON.stringify([`A sentence about ${fixture.term}.`]),
@@ -93,6 +93,8 @@ test('shows recorded vocabulary in a table and deletes a single entry across res
       ])
       const row = window.locator('.vocabulary-table tbody tr')
       await expect(row).toHaveCount(3)
+      await expect(window.getByText('/bəˈnɑːnə/', { exact: true })).toBeVisible()
+      await expect(window.getByText('/bəˈnænə/', { exact: true })).toBeVisible()
       await expect(window.getByRole('button', { name: 'Delete apple' })).toBeVisible()
       await expect(window.getByText('The meaning of apple.')).toBeVisible()
 
@@ -128,6 +130,8 @@ test('shows recorded vocabulary in a table and deletes a single entry across res
 
       const row = window.locator('.vocabulary-table tbody tr')
       await expect(row).toHaveCount(2)
+      await expect(window.getByText('/bəˈnɑːnə/', { exact: true })).toBeVisible()
+      await expect(window.getByText('/bəˈnænə/', { exact: true })).toBeVisible()
       await expect(window.getByRole('button', { name: 'Delete apple' })).toHaveCount(0)
       await expect(window.getByText('The meaning of banana.')).toBeVisible()
       await expect(window.getByText('The meaning of cherry.')).toBeVisible()

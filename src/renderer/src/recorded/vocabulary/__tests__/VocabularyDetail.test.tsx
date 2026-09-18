@@ -22,7 +22,7 @@ function entry(overrides: Partial<VocabularyEntry> = {}): VocabularyEntry {
   return {
     id: `10000000-0000-4000-8000-${String(entrySerial).padStart(12, '0')}`,
     term: `word-${entrySerial}`,
-    phonetic: `/wɜːd ${entrySerial}/`,
+    phonetic: [`/wɜːd ${entrySerial}/`],
     meaning: `第 ${entrySerial} 个词的释义。`,
     concept: `第 ${entrySerial} 个词的概念说明。`,
     exampleSentences: [`Sentence one about ${entrySerial}.`, `Sentence two about ${entrySerial}.`],
@@ -90,7 +90,11 @@ afterEach(() => {
 
 describe('VocabularyDetail table', () => {
   it('shows the loading state first, then rows with columns in order', async () => {
-    const apple = entry({ term: 'apple', phonetic: '/ˈæpəl/', meaning: '苹果，一种水果。' })
+    const apple = entry({
+      term: 'apple',
+      phonetic: ['/ˈæpəl/', '[ˈæpəl]'],
+      meaning: '苹果，一种水果。'
+    })
     const stub = vocabularyApiStub({ status: 'ok', entries: [apple] })
     installApi(stub.api)
     renderDetail()
@@ -112,6 +116,7 @@ describe('VocabularyDetail table', () => {
     const row = within(within(table).getAllByRole('row')[1])
     expect(row.getByText('apple')).toBeInTheDocument()
     expect(row.getByText('/ˈæpəl/')).toBeInTheDocument()
+    expect(row.getByText('[ˈæpəl]')).toBeInTheDocument()
     expect(row.getByText('苹果，一种水果。')).toBeInTheDocument()
     for (const sentence of apple.exampleSentences ?? []) {
       expect(row.getByText(sentence)).toBeInTheDocument()

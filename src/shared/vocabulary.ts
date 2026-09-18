@@ -38,7 +38,7 @@ export const listVocabularyInputSchema = z.strictObject({
 export const vocabularyEntrySchema = z.strictObject({
   id: z.uuid(),
   term: text(4000),
-  phonetic: z.string().min(1).max(200).nullable(),
+  phonetic: z.array(z.string().min(1).max(200)).min(1).max(10).nullable(),
   meaning: z.string().min(1).max(2000).nullable(),
   concept: z.string().min(1).max(2000).nullable(),
   exampleSentences: z.array(z.string().min(1).max(500)).min(1).max(3).nullable(),

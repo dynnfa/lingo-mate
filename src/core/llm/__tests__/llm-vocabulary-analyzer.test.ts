@@ -29,7 +29,7 @@ const input = (
 })
 const insertArguments = (term = 'apple'): Record<string, unknown> => ({
   term,
-  phonetic: '/ˈæpəl/',
+  phonetic: ['/ˈæpəl/'],
   meaning: '苹果，一种水果。',
   concept: '通常指作为食物的苹果果实。',
   example_sentences: ['I ate an apple after lunch.']
@@ -79,7 +79,7 @@ describe('LlmVocabularyAnalyzer', () => {
       expect(result).toMatchObject({
         status: 'insert',
         modelId: 'fixture',
-        promptVersion: 'vocabulary-tools-v3'
+        promptVersion: 'vocabulary-tools-v4'
       })
       if (result.status !== 'insert') throw new Error('expected insert')
       expect(result.content.term).toBe(request.term)
@@ -361,4 +361,20 @@ describe('AI import failure diagnostics', () => {
       }).analyze(input())
     ).rejects.toMatchObject({ code: 'INVALID_ANALYSIS' })
   })
+})
+
+it('accepts multiple model IPA variants and advertises an array in the tool schema', async () => {
+  const phonetic = ['/riːd/', '/rɛd/']
+  create.mockResolvedValue(
+    completionWith([functionCall('insert_vocabulary', { ...insertArguments('read'), phonetic })])
+  )
+  const result = await makeAnalyzer().analyze({ ...input(), term: 'read' })
+  expect(result).toMatchObject({ status: 'insert', content: { phonetic } })
+  expect(create.mock.calls[0][0].tools[0].function.parameters.properties.phonetic).toMatchObject({
+    type: 'array',
+    items: { type: 'string' },
+    minItems: 1,
+    maxItems: 10
+  })
+  expect(create.mock.calls[0][0].messages[0].content).toContain('common pronunciation variants')
 })
