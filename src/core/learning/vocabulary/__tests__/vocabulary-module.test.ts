@@ -51,7 +51,7 @@ describe('VocabularyModule', () => {
       term: 'apple',
       phonetic: '/ˈæpəl/',
       model_id: 'configured-model',
-      prompt_version: 'vocabulary-tools-v2'
+      prompt_version: 'vocabulary-tools-v3'
     })
     expect(command.parameters.id).toBe(
       batch.items[0].status === 'saved' ? batch.items[0].entryId : undefined

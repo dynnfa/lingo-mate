@@ -130,6 +130,13 @@ export class SqliteVocabularyRepository implements VocabularyRepository {
     )
   }
 
+  // One SELECT materializes a consistent SQLite read snapshot before file I/O.
+  exportAll(): VocabularyEntry[] {
+    return this.withStorage(() =>
+      this.database.prepare(`${SELECT_ROWS} ORDER BY created_at DESC, id DESC`).all().map(fromRow)
+    )
+  }
+
   list(raw: ListVocabularyInput): VocabularyPage {
     return this.withStorage(() => {
       const { limit, cursor } = listVocabularyInputSchema.parse(raw)

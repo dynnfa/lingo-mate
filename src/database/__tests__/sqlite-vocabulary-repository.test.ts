@@ -511,3 +511,15 @@ describe('vocabulary practice sampling', () => {
     expect(() => repository.sampleRandom(1)).toThrow('STORAGE_FAILED')
   })
 })
+
+it('exports a full sorted snapshot beyond page size, including manual-import content', () => {
+  const repository = new SqliteVocabularyRepository(open())
+  repository.saveBatch(
+    Array.from({ length: 115 }, (_, i) =>
+      insertCommand(`word-${i}`, { modelId: 'manual-import', promptVersion: 'vocabulary-excel-v1' })
+    )
+  )
+  const entries = repository.exportAll()
+  expect(entries).toHaveLength(115)
+  expect(entries.slice(0, 50)).toEqual(repository.list({}).entries)
+})

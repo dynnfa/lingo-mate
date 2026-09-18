@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { transferApiStub } from '../recorded/vocabulary/__tests__/helpers/transfer-api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
@@ -104,6 +105,7 @@ function usageApiStub(): UsageApi {
 // App 测试不进入已记录词汇详情；提供稳定空结果桩，避免页面挂起。
 function vocabularyApiStub(): VocabularyApi {
   return {
+    ...transferApiStub(),
     async list() {
       return { status: 'ok', entries: [] }
     },

@@ -116,12 +116,22 @@ React Renderer -> Preload API -> Electron Main -> Agent Engine
 - 使用 TypeScript，避免无必要的 `any` 和 `@ts-ignore`。
 - 保持模块职责单一；组件、IPC handler 和 Agent 工具不应承担多个领域职责。
 - IPC channel 使用稳定、可读的领域命名，并集中定义，避免散落的字符串常量。
-- LLM API Key、用户数据和学习记忆不得发送到 Renderer 或写入日志。
+- LLM API Key 不得发送到 Renderer 或写入日志；错误诊断日志在写入前必须对可能出现的密钥脱敏。
+- 用户数据和学习记忆不得发送到 Renderer。仅限错误诊断场景，可将失败请求的用户数据与模型原始响应写入由 Main 维护的本地日志；该日志不得转发到 Renderer 或控制台。
 - 如果涉及数据库迁移或持久化数据变更，必须先询问用户，再根据用户意见决定是否执行迁移或变更操作。
 - 流式对话需要支持完成、失败和取消状态，避免 UI 永久停留在生成中。
 - 错误应在产生处保留原因，在进程边界转换为对用户安全、可理解的错误结构。
 - 新增 Agent 能力时，优先扩展 `src/core`，再通过 Main 和 Preload 接入 UI。
 - 完成 `docs/plans/` 下某份 plan 文档中的全部计划工作及相关验证后，必须将该文档的状态更新为“已实施”；若文档尚无状态字段，则补充 `状态：已实施`。
+
+### 测试驱动开发
+
+- 新增或修改核心业务逻辑、状态流转、IPC 校验及安全边界时，默认采用 TDD：每次围绕一个可观察行为，先写测试并确认其因预期原因失败，再实现使其通过，最后在测试保持通过的前提下重构。
+- 修复可自动复现的 Bug 时，先添加失败的回归测试，再修复。
+- 测试应通过公开接口验证行为，避免绑定私有实现细节；涉及 LLM 时使用可控替身验证应用逻辑，不依赖真实模型输出。
+- 不改变行为的重构优先复用现有测试；覆盖不足时先补充行为测试。
+- 纯样式、文案、文档及探索性原型不强制 TDD。其他不适合测试先行的情况，应说明原因和替代验证方式。
+- 完成后运行相关测试；按影响范围运行 `pnpm test`，涉及 Electron 端到端行为时运行 `pnpm test:electron`。
 
 ### 测试文件组织
 
@@ -145,7 +155,14 @@ React Renderer -> Preload API -> Electron Main -> Agent Engine
 ```bash
 pnpm lint
 pnpm typecheck
+pnpm test
 pnpm build
+```
+
+涉及 Electron 端到端行为时运行：
+
+```bash
+pnpm test:electron
 ```
 
 开发调试使用：
