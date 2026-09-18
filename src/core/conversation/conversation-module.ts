@@ -1,3 +1,4 @@
+import { noopCoreDiagnostics, type CoreDiagnostics } from '../error-diagnostics'
 import { SynonymError, parseSynonymInput } from '../learning/synonym/parse-synonym-input'
 import { randomUUID } from 'node:crypto'
 import { classifyModelRequestError, ModelRequestError } from '../llm/llm-client'
@@ -93,7 +94,8 @@ export class ConversationModule {
     }),
     // 会话技能按 skillId 注册与分派；新增技能时扩展 ConversationSkill 实现。
     private readonly skills: ReadonlyMap<ConversationSkillId, ConversationSkill> = new Map(),
-    private readonly skillRepository?: ConversationSkillRepository
+    private readonly skillRepository?: ConversationSkillRepository,
+    private readonly diagnostics: CoreDiagnostics = noopCoreDiagnostics
   ) {}
 
   async createConversation(): Promise<ConversationSummary> {
@@ -386,7 +388,8 @@ export class ConversationModule {
       const title = await this.generateTitle(message, active)
       await this.withPersistence(() => this.repository.updateTitle(message.sessionId, title))
       emit({ type: 'titleUpdated', requestId, sessionId: message.sessionId })
-    } catch {
+    } catch (error) {
+      if (!active.controller.signal.aborted) this.reportFailure('update-title', requestId, error)
       // 摘要或持久化失败时，已保存的原文标题仍可使用。
     } finally {
       this.titleControllers.delete(active.controller)
@@ -541,6 +544,7 @@ export class ConversationModule {
       if (execution.controller.signal.aborted) {
         emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
       } else {
+        this.reportFailure('generate-reply', requestId, error)
         emit({
           ...eventBase,
           type: 'failed',
@@ -595,6 +599,7 @@ export class ConversationModule {
           await this.skillRepository!.setExecutionPhase(skillExecution.id, 'cancelled')
           emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
         } catch (persistenceError) {
+          this.reportFailure('set-cancelled-phase', requestId, persistenceError)
           emit({
             ...eventBase,
             type: 'failed',
@@ -603,10 +608,12 @@ export class ConversationModule {
           })
         }
       } else {
+        this.reportFailure('run-skill', requestId, error)
         try {
           await this.skillRepository!.setExecutionPhase(skillExecution.id, 'failed')
-        } catch {
-          // The original safe error is more useful than a secondary phase update failure.
+        } catch (persistenceError) {
+          this.reportFailure('set-failed-phase', requestId, persistenceError)
+          // 对外仍返回原始业务错误；二次持久化失败仅进入内部日志。
         }
         emit({
           ...eventBase,
@@ -642,6 +649,7 @@ export class ConversationModule {
       emit({ ...eventBase, type: 'skillPhase', phase: 'summarizing' })
       await this.persistSkillReply(generation, skillExecution, report, skill, emit)
     } catch (error) {
+      this.reportFailure('retry-skill-reply', requestId, error)
       emit({
         ...eventBase,
         type: 'failed',
@@ -678,6 +686,20 @@ export class ConversationModule {
       message: toMessage(assistantMessage),
       skillCompletion: 'complete'
     })
+  }
+
+  private reportFailure(operation: string, requestId: string, error: unknown): void {
+    try {
+      this.diagnostics.report({
+        module: 'conversation',
+        operation,
+        requestId,
+        message: `conversation ${operation} failed`,
+        error
+      })
+    } catch {
+      // 诊断故障不能阻断失败终态或请求清理。
+    }
   }
 
   private releaseExecution(requestId: string): void {

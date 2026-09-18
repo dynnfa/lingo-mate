@@ -1,13 +1,17 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
-import { createAiImportFailureLogger } from '../ai-import-failure-log'
+import { createErrorLogger } from '../error-logger'
+import { createAiImportFailureDiagnostic } from '../ai-import-failure-log'
 
-it('writes failure details and response to disk while redacting credentials', () => {
+it('routes ai import failures into the shared daily log with credentials redacted', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'ai-import-log-'))
   try {
-    const log = createAiImportFailureLogger(directory)
+    const logger = createErrorLogger(directory, {
+      now: () => new Date('2026-09-18T10:00:00')
+    })
+    const log = createAiImportFailureDiagnostic(logger)
     log(
       {
         term: 'protest',
@@ -15,7 +19,8 @@ it('writes failure details and response to disk while redacting credentials', ()
         promptVersion: 'v3',
         code: 'INVALID_ANALYSIS',
         stage: 'protocol',
-        issues: [],
+        reason: 'Expected one function tool call',
+        issues: [{ path: ['choices', 0], code: 'invalid_type', message: 'expected tool call' }],
         response: {
           choices: [{ message: { content: 'returned text secret-key' } }],
           headers: { Authorization: 'Bearer secret-key' }
@@ -23,13 +28,28 @@ it('writes failure details and response to disk while redacting credentials', ()
       },
       'secret-key'
     )
-    const text = readFileSync(join(directory, 'ai-import-errors.log'), 'utf8')
-    const entry = JSON.parse(text)
-    expect(entry.term).toBe('protest')
-    expect(entry.response.choices[0].message.content).toBe('returned text [REDACTED]')
-    expect(entry.timestamp).toEqual(expect.any(String))
+    await logger.flush()
+
+    // 只写公共按天文件，不再产生独立的 ai-import-errors.log。
+    expect(readdirSync(directory)).toEqual(['2026-09-18.log'])
+    expect(existsSync(join(directory, 'ai-import-errors.log'))).toBe(false)
+
+    const text = readFileSync(join(directory, '2026-09-18.log'), 'utf8')
+    const entry = JSON.parse(text) as Record<string, unknown>
+    expect(entry).toMatchObject({
+      source: 'core',
+      module: 'ai-import',
+      operation: 'analyze',
+      code: 'INVALID_ANALYSIS'
+    })
+    const context = entry['context'] as Record<string, unknown>
+    expect(context['term']).toBe('protest')
+    expect(context['promptVersion']).toBe('v3')
+    expect(context['response']).toMatchObject({
+      choices: [{ message: { content: 'returned text [REDACTED]' } }],
+      headers: '[REDACTED]'
+    })
     expect(text).not.toContain('secret-key')
-    expect(entry.response.headers).toBe('[REDACTED]')
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

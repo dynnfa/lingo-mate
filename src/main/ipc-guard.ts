@@ -38,6 +38,12 @@ export interface TrustedHandlerConfig<
   invalidInputError: (issues: readonly ZodIssue[]) => TrustedResultError<z.output<TResultSchema>>
   mapError: (error: unknown) => TrustedResultError<z.output<TResultSchema>>
   fallbackError: TrustedResultError<z.output<TResultSchema>>
+  rateLimit?: {
+    maxRequests: number
+    windowMs: number
+    now?: () => number
+    error: TrustedResultError<z.output<TResultSchema>>
+  }
   handler: (
     input: z.output<TInputSchema>,
     context: TrustedHandlerContext
@@ -51,10 +57,49 @@ export type RegisterTrustedHandler = <
   config: TrustedHandlerConfig<TInputSchema, TResultSchema>
 ) => () => void
 
+// 守卫诊断：来源拒绝、输入校验失败、handler 异常、错误映射异常与结果
+// 校验失败在转换为安全返回之前上报原始原因，由公共错误日志落盘。
+export type IpcGuardOperation =
+  | 'untrusted-source'
+  | 'invalid-input'
+  | 'handler'
+  | 'map-error'
+  | 'result-validation'
+  | 'rate-limit'
+
+export interface IpcGuardDiagnostic {
+  level: 'error' | 'warn'
+  operation: IpcGuardOperation
+  code?: string
+  message: string
+  error?: unknown
+  context?: {
+    channel: string
+    issues?: Array<{ path: PropertyKey[]; code: string }>
+  }
+}
+
+export interface IpcGuardDiagnostics {
+  report(diagnostic: IpcGuardDiagnostic): void
+}
+
+// 只保留 issue 的 path 与 code：message 可能回显用户输入值。
+const safeIssues = (issues: readonly ZodIssue[]): Array<{ path: PropertyKey[]; code: string }> =>
+  issues.map((issue) => ({ path: issue.path, code: issue.code }))
+
 export function createTrustedHandlerRegistrar(
-  trusted: TrustedRendererConfig
+  trusted: TrustedRendererConfig,
+  diagnostics?: IpcGuardDiagnostics
 ): RegisterTrustedHandler {
   const rendererUrl = parseTrustedRendererUrl(trusted.rendererUrl)
+  // 诊断通道自身故障不能影响请求结果；也不递归进入错误日志。
+  const report = (diagnostic: IpcGuardDiagnostic): void => {
+    try {
+      diagnostics?.report(diagnostic)
+    } catch {
+      // 诊断失败即丢弃。
+    }
+  }
 
   return (config) => {
     const { channel, inputSchema, resultSchema, invalidInputError, mapError, fallbackError } =
@@ -71,13 +116,57 @@ export function createTrustedHandlerRegistrar(
       error: fallbackError
     })
 
+    // 上报入口的预算覆盖所有尝试，包括不可信来源和非法载荷。
+    // WeakMap 随 WebContents 销毁释放状态；不保留页面提交的任何数据。
+    const limits = new WeakMap<WebContents, { timestamps: number[]; warnedAt?: number }>()
+    const rateLimit = config.rateLimit
+    const limitedResult = rateLimit
+      ? registerFixedResult(channel, resultSchema, { status: 'error', error: rateLimit.error })
+      : undefined
+    const isRateLimited = (sender: WebContents): boolean => {
+      if (!rateLimit) return false
+      const at = (rateLimit.now ?? Date.now)()
+      const state = limits.get(sender) ?? { timestamps: [] }
+      state.timestamps = state.timestamps.filter((stamp) => at - stamp < rateLimit.windowMs)
+      limits.set(sender, state)
+      if (state.timestamps.length < rateLimit.maxRequests) {
+        state.timestamps.push(at)
+        return false
+      }
+      if (state.warnedAt === undefined || at - state.warnedAt >= rateLimit.windowMs) {
+        state.warnedAt = at
+        report({
+          level: 'warn',
+          operation: 'rate-limit',
+          code: 'RATE_LIMITED',
+          message: `request rate limit exceeded on ${channel}`,
+          context: { channel }
+        })
+      }
+      return true
+    }
+
     // 动态错误映射的返回值仍按协议校验；映射自身抛错或返回非法结构时
     // 使用已验证的兜底结果，不再递归调用错误映射。
     const errorResultFrom = (produceError: () => unknown): z.output<typeof resultSchema> => {
       try {
         const candidate = resultSchema.safeParse({ status: 'error', error: produceError() })
-        return candidate.success ? candidate.data : fallbackResult
-      } catch {
+        if (candidate.success) return candidate.data
+        report({
+          level: 'error',
+          operation: 'map-error',
+          message: `error mapping produced a result outside the ${channel} protocol`,
+          context: { channel }
+        })
+        return fallbackResult
+      } catch (error) {
+        report({
+          level: 'error',
+          operation: 'map-error',
+          message: `error mapping threw while converting a handler error on ${channel}`,
+          error,
+          context: { channel }
+        })
         return fallbackResult
       }
     }
@@ -86,28 +175,63 @@ export function createTrustedHandlerRegistrar(
       // 成功与失败结果都经完整校验；不符合协议时返回固定兜底，不把
       // 结果校验失败误映射为用户输入错误，也不暴露原始结果。
       const candidate = resultSchema.safeParse(rawResult)
-      return candidate.success ? candidate.data : fallbackResult
+      if (candidate.success) return candidate.data
+      report({
+        level: 'error',
+        operation: 'result-validation',
+        message: `handler result on ${channel} failed schema validation; fixed fallback returned`,
+        context: { channel, issues: safeIssues(candidate.error.issues) }
+      })
+      return fallbackResult
     }
 
     const wrappedHandler = (
       event: IpcMainInvokeEvent,
       rawInput: unknown
     ): z.output<typeof resultSchema> | Promise<z.output<typeof resultSchema>> => {
-      // 执行顺序：来源检查 → 输入 safeParse → 调用 handler → 结果校验。
+      // 执行顺序：来源检查 → 可选请求限流 → 输入 safeParse → handler → 结果校验。
       // 来源检查必须先于输入解析和服务调用。
-      if (!isTrustedSource(event, rendererUrl)) return untrustedResult
+      const trustedSource = isTrustedSource(event, rendererUrl)
+      if (isRateLimited(event.sender)) return trustedSource ? limitedResult! : untrustedResult
+      if (!trustedSource) {
+        // 拒绝请求只记录安全元信息（channel），不含载荷内容。
+        report({
+          level: 'warn',
+          operation: 'untrusted-source',
+          message: `request on ${channel} rejected from an untrusted source`,
+          context: { channel }
+        })
+        return untrustedResult
+      }
       const parsedInput = inputSchema.safeParse(rawInput)
       if (!parsedInput.success) {
+        report({
+          level: 'warn',
+          operation: 'invalid-input',
+          message: `request on ${channel} rejected by input validation`,
+          context: { channel, issues: safeIssues(parsedInput.error.issues) }
+        })
         return errorResultFrom(() => invalidInputError(parsedInput.error.issues))
+      }
+      const handleFailure = (error: unknown): z.output<typeof resultSchema> => {
+        // 在错误映射折叠信息之前记录原始异常。
+        report({
+          level: 'error',
+          operation: 'handler',
+          message: `handler on ${channel} threw`,
+          error,
+          context: { channel }
+        })
+        return errorResultFrom(() => mapError(error))
       }
       try {
         const outcome = config.handler(parsedInput.data, { sender: event.sender })
         // 同步结果保持同步返回；同时捕获同步 throw 与 Promise rejection。
         return outcome instanceof Promise
-          ? outcome.then(finalize, (error: unknown) => errorResultFrom(() => mapError(error)))
+          ? outcome.then(finalize, handleFailure)
           : finalize(outcome)
       } catch (error) {
-        return errorResultFrom(() => mapError(error))
+        return handleFailure(error)
       }
     }
 

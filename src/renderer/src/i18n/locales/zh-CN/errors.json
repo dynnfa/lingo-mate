@@ -84,5 +84,10 @@
     "invalidAnalysis": "模型返回的结果无效，请重试。",
     "timeout": "请求超时，请重试。",
     "cancelled": "请求已取消。"
+  },
+  "boundary": {
+    "title": "页面出现异常",
+    "description": "界面遇到未处理的错误，已记录到本地日志。",
+    "reload": "重新加载"
   }
 }

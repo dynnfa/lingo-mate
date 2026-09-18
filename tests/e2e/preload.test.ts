@@ -38,6 +38,8 @@ test('exposes the conversation skill and preferences interfaces from the sandbox
         'models',
         'phrase',
         'preferences',
+        // 受限错误上报：唯一新增的顶层入口，仍不暴露通用 invoke 或日志读取
+        'reportError',
         'sentencePractice',
         'synonym',
         'usage',

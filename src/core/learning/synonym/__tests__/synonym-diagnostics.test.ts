@@ -1,10 +1,9 @@
-import { expect, it, vi } from 'vitest'
-import { reportSynonymFailure } from '../synonym-diagnostics'
+import { describe, expect, it } from 'vitest'
+import { summarizeSynonymFailure } from '../synonym-diagnostics'
 import { SynonymError } from '../parse-synonym-input'
 
-it('keeps HTTP status while excluding arbitrary provider fields and handles cyclic causes', () => {
-  const log = vi.spyOn(console, 'error').mockImplementation(() => {})
-  try {
+describe('summarizeSynonymFailure', () => {
+  it('keeps HTTP status while excluding arbitrary provider fields and handles cyclic causes', () => {
     const provider = Object.assign(new Error('secret response'), {
       name: 'secret name',
       code: 'secret code',
@@ -13,13 +12,20 @@ it('keeps HTTP status while excluding arbitrary provider fields and handles cycl
     })
     const error = new SynonymError('MODEL_ERROR', { cause: provider })
     provider.cause = error
-    reportSynonymFailure(error)
-    expect(log).toHaveBeenCalledWith('[synonym] WORD_FAILED', [
+    const chain = summarizeSynonymFailure(error)
+    expect(chain).toEqual([
       { type: 'SynonymError', code: 'MODEL_ERROR' },
       { type: 'Error', status: 401 }
     ])
-    expect(JSON.stringify(log.mock.calls)).not.toContain('secret')
-  } finally {
-    log.mockRestore()
-  }
+    expect(JSON.stringify(chain)).not.toContain('secret')
+  })
+
+  it('keeps whitelisted storage and network codes on the chain', () => {
+    const underlying = Object.assign(new Error('disk said no'), { code: 'SQLITE_FULL' })
+    const chain = summarizeSynonymFailure(new SynonymError('STORAGE_FAILED', { cause: underlying }))
+    expect(chain).toEqual([
+      { type: 'SynonymError', code: 'STORAGE_FAILED' },
+      { type: 'Error', code: 'SQLITE_FULL' }
+    ])
+  })
 })
