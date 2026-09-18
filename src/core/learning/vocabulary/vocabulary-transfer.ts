@@ -234,7 +234,7 @@ export class VocabularyTransferService {
           .filter(Boolean)
         const parsed = insertToolArgumentsSchema.safeParse({
           term: values.term,
-          phonetic: values.phonetic,
+          phonetic: (values.phonetic as string).split(/\r\n|\r|\n/),
           meaning: values.meaning,
           concept: values.concept,
           example_sentences: examples

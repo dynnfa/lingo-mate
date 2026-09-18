@@ -12,7 +12,7 @@ export function content(
 ): VocabularyInsertContent {
   return {
     term,
-    phonetic: '/ˈæpəl/',
+    phonetic: ['/ˈæpəl/'],
     meaning: '苹果，一种水果。',
     concept: '通常指作为食物的苹果果实，可用于日常饮食和购物场景。',
     exampleSentences: ['I ate an apple after lunch.'],
@@ -40,7 +40,7 @@ function toEntry(parameters: VocabularyInsertCommand['parameters']): VocabularyE
   return {
     id: parameters.id,
     term: parameters.term,
-    phonetic: parameters.phonetic,
+    phonetic: JSON.parse(parameters.phonetic) as string[],
     meaning: parameters.meaning,
     concept: parameters.concept,
     exampleSentences: JSON.parse(parameters.example_sentences) as string[],

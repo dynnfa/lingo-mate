@@ -15,6 +15,8 @@ import {
 } from '../core/learning/vocabulary/parse-vocabulary-input'
 import {
   assertValidInsertCommand,
+  phoneticSchema,
+  insertToolArgumentsSchema,
   exampleSentenceListSchema,
   type VocabularyInsertCommand
 } from '../core/learning/vocabulary/vocabulary-insert'
@@ -41,13 +43,20 @@ function fromRow(raw: unknown): VocabularyEntry {
   return vocabularyEntrySchema.parse({
     id: row.id,
     term: row.term,
-    phonetic: row.phonetic,
+    phonetic: parsePhonetics(row.phonetic),
     meaning: row.meaning,
     concept: row.concept,
     exampleSentences: parseExampleSentences(row.example_sentences),
     createdAt: row.created_at
   })
 }
+// 旧行仍保存单个 IPA（包括方括号格式），新行保存 JSON 数组；读取不改写数据。
+function parsePhonetics(value: string | null): string[] | null {
+  if (value === null) return null
+  if (phoneticSchema.safeParse(value).success) return [value]
+  return insertToolArgumentsSchema.shape.phonetic.parse(JSON.parse(value))
+}
+
 // NULL 表示历史未回填内容；非空但不符编码的值属于单条记录的数据错误，
 // 以 STORAGE_FAILED 暴露，不静默丢弃记录或整页。
 function parseExampleSentences(value: string | null): string[] | null {
