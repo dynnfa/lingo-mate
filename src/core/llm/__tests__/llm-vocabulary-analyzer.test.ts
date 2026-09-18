@@ -79,7 +79,7 @@ describe('LlmVocabularyAnalyzer', () => {
       expect(result).toMatchObject({
         status: 'insert',
         modelId: 'fixture',
-        promptVersion: 'vocabulary-tools-v2'
+        promptVersion: 'vocabulary-tools-v3'
       })
       if (result.status !== 'insert') throw new Error('expected insert')
       expect(result.content.term).toBe(request.term)
@@ -321,5 +321,44 @@ describe('LlmVocabularyAnalyzer', () => {
     active.abort()
     await expect(promise).rejects.toThrow('CANCELLED')
     expect(create.mock.calls[0][1].signal.aborted).toBe(true)
+  })
+})
+
+describe('AI import failure diagnostics', () => {
+  it('records the raw response and invalid field without changing the error', async () => {
+    const response = completionWith([
+      functionCall('insert_vocabulary', {
+        ...insertArguments(),
+        phonetic: 'noun /a/ verb /b/'
+      })
+    ])
+    create.mockResolvedValue(response)
+    const logFailure = vi.fn()
+    const analyzer = new LlmVocabularyAnalyzer(config, 30_000, createClient, logFailure)
+    await expect(analyzer.analyze(input())).rejects.toMatchObject({ code: 'INVALID_ANALYSIS' })
+    expect(logFailure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        term: 'apple',
+        modelId: 'fixture',
+        code: 'INVALID_ANALYSIS',
+        stage: 'arguments',
+        response,
+        issues: expect.arrayContaining([expect.objectContaining({ path: ['phonetic'] })])
+      })
+    )
+  })
+  it('does not log successful responses', async () => {
+    create.mockResolvedValue(insertCompletion())
+    const logFailure = vi.fn()
+    await new LlmVocabularyAnalyzer(config, 30_000, createClient, logFailure).analyze(input())
+    expect(logFailure).not.toHaveBeenCalled()
+  })
+  it('preserves the analysis error when logging fails', async () => {
+    create.mockResolvedValue(completionWith(null, { content: 'refused', finishReason: 'stop' }))
+    await expect(
+      new LlmVocabularyAnalyzer(config, 30_000, createClient, () => {
+        throw new Error('disk full')
+      }).analyze(input())
+    ).rejects.toMatchObject({ code: 'INVALID_ANALYSIS' })
   })
 })

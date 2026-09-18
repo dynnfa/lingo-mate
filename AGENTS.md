@@ -116,7 +116,8 @@ React Renderer -> Preload API -> Electron Main -> Agent Engine
 - 使用 TypeScript，避免无必要的 `any` 和 `@ts-ignore`。
 - 保持模块职责单一；组件、IPC handler 和 Agent 工具不应承担多个领域职责。
 - IPC channel 使用稳定、可读的领域命名，并集中定义，避免散落的字符串常量。
-- LLM API Key、用户数据和学习记忆不得发送到 Renderer 或写入日志。
+- LLM API Key 不得发送到 Renderer 或写入日志；错误诊断日志在写入前必须对可能出现的密钥脱敏。
+- 用户数据和学习记忆不得发送到 Renderer。仅限错误诊断场景，可将失败请求的用户数据与模型原始响应写入由 Main 维护的本地日志；该日志不得转发到 Renderer 或控制台。
 - 如果涉及数据库迁移或持久化数据变更，必须先询问用户，再根据用户意见决定是否执行迁移或变更操作。
 - 流式对话需要支持完成、失败和取消状态，避免 UI 永久停留在生成中。
 - 错误应在产生处保留原因，在进程边界转换为对用户安全、可理解的错误结构。
