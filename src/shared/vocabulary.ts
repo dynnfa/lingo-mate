@@ -1,3 +1,4 @@
+import type { VocabularyTransferApi } from './vocabulary-transfer'
 import { z } from 'zod'
 
 const text = (max: number): z.ZodString => z.string().trim().min(1).max(max)
@@ -147,7 +148,7 @@ export const deleteVocabularyResultSchema = z.discriminatedUnion('status', [
 ])
 export type DeleteVocabularyResult = z.infer<typeof deleteVocabularyResultSchema>
 
-export interface VocabularyApi {
+export interface VocabularyApi extends VocabularyTransferApi {
   list(input: ListVocabularyInput): Promise<ListVocabularyResult>
   delete(input: DeleteVocabularyInput): Promise<DeleteVocabularyResult>
 }

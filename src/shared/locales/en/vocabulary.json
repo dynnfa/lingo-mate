@@ -7,5 +7,82 @@
     "failed": "{{count}} failed ({{terms}})",
     "separator": "; ",
     "duplicateSourceFailed": "Repeated items whose source word failed were not saved."
+  },
+  "transfer": {
+    "instructions": [
+      "Use the vocabulary sheet. Keep all seven headers; column order may change. All cells must be text; formulas are rejected.",
+      "Required: term (English, 4000 characters), phonetic (IPA, 200), meaning and concept (2000 each), example_sentence_1 (500). Optional: example_sentence_2 and example_sentence_3 (500 each).",
+      "Example: apple | /ˈæpəl/ | a round fruit | a common edible fruit | I ate an apple. | |",
+      "Import limit: 5 MiB and 1000 data rows. Existing terms are skipped without changes."
+    ],
+    "selectFile": "Select Excel file",
+    "excelFile": "Excel workbook",
+    "template": "Download Excel template",
+    "export": "Export Excel",
+    "import": "Import",
+    "title": "Import vocabulary",
+    "close": "Close",
+    "excel": "Excel direct import",
+    "ai": "AI assisted import",
+    "excelLimits": "Up to {{rows}} data rows, {{mib}} MiB. All rows must pass validation before import.",
+    "aiLimits": "Up to {{rows}} non-empty lines and {{characters}} characters. Analysis uses your active model.",
+    "inputLabel": "One English word per line",
+    "placeholder": "apple\nbanana",
+    "inputCount_one": "{{count}} word entered",
+    "inputCount_other": "{{count}} words entered",
+    "preview": "{{total}} rows · {{valid}} valid · {{existing}} existing · {{duplicate}} duplicates",
+    "issue": "Row {{row}} · {{field}}: {{reason}}",
+    "confirm": "Confirm import",
+    "start": "Start import",
+    "cancel": "Cancel import",
+    "retry": "Retry failed rows",
+    "fileSaved": "File saved.",
+    "results": "Import results",
+    "progress": "{{processed}} / {{total}} processed",
+    "summary": "{{saved}} added · {{existing}} existing · {{duplicate}} duplicates · {{failed}} failed",
+    "row": "Row {{row}} · {{term}}",
+    "phases": {
+      "analyzing": "Analyzing",
+      "committing": "Saving — please wait",
+      "completed": "Completed",
+      "partial": "Partially completed",
+      "failed": "Import failed",
+      "cancelled": "Cancelled; uncommitted content discarded"
+    },
+    "rowStates": {
+      "pending": "Pending",
+      "analyzed": "Analyzed, awaiting save",
+      "saved": "Added",
+      "existing": "Already exists",
+      "duplicate": "Repeated in input",
+      "failed": "Failed"
+    },
+    "validation": {
+      "REQUIRED": "Required field",
+      "INVALID_VALUE": "Invalid format or too long",
+      "INVALID_CELL": "Text only; formulas, numbers and errors are not allowed",
+      "INVALID_HEADER": "All seven distinct protocol headers are required; no extra columns"
+    },
+    "errors": {
+      "INVALID_INPUT": "Invalid input.",
+      "BUSY": "An import or file operation is already running.",
+      "UNTRUSTED_SOURCE": "This page cannot access imports.",
+      "REQUEST_NOT_FOUND": "Import task not found.",
+      "MODEL_NOT_CONFIGURED": "Configure and activate a model first.",
+      "CREDENTIAL_DECRYPT_FAILED": "Unable to read model credentials.",
+      "MODEL_ERROR": "Model request failed.",
+      "INVALID_ANALYSIS": "Model returned invalid learning content.",
+      "TOOL_CALL_NOT_SUPPORTED": "The model does not support tool calls.",
+      "UNRECOGNIZED": "Word not recognized.",
+      "TIMEOUT": "Analysis timed out.",
+      "CANCELLED": "Cancelled.",
+      "STORAGE_FAILED": "Unable to save; this batch was rolled back.",
+      "UNKNOWN_ERROR": "Operation failed. Please try again.",
+      "INVALID_FILE": "Invalid Excel workbook.",
+      "LIMIT_EXCEEDED": "Import exceeds the size or row limit.",
+      "PREVIEW_EXPIRED": "Preview expired. Please select the file again.",
+      "FILE_ERROR": "Unable to read or save the file."
+    },
+    "inputCount": "{{count}} words entered"
   }
 }
