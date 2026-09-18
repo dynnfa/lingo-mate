@@ -61,8 +61,15 @@ export function validateInsertArguments(
   expectedTerm: string
 ): VocabularyInsertContent {
   const parsed = insertToolArgumentsSchema.safeParse(raw)
-  if (!parsed.success || parsed.data.term !== expectedTerm) {
-    throw new VocabularyError('INVALID_ANALYSIS')
+  if (!parsed.success) {
+    throw new VocabularyError('INVALID_ANALYSIS', { cause: parsed.error })
+  }
+  if (parsed.data.term !== expectedTerm) {
+    throw new VocabularyError('INVALID_ANALYSIS', {
+      cause: new z.ZodError([
+        { code: 'custom', path: ['term'], message: 'Term does not match requested word' }
+      ])
+    })
   }
   const parameters = parsed.data
   return {

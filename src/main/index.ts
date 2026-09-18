@@ -27,6 +27,7 @@ import type { ConversationSkill } from '../core/conversation/conversation-skill'
 import type { ConversationSkillId } from '../shared/conversation'
 import { app, shell, BrowserWindow } from 'electron'
 import log from 'electron-log/main'
+import { createAiImportFailureLogger } from './ai-import-failure-log'
 import { join } from 'path'
 import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -209,12 +210,16 @@ app.whenReady().then(() => {
     new VocabularyManagementService(vocabularyRepository),
     registerTrustedHandler
   )
+  const logAiImportFailure = createAiImportFailureLogger(app.getPath('logs'))
   disposeVocabularyTransfer = registerVocabularyTransferIpc(
     new VocabularyTransferService(
       vocabularyRepository,
       () => {
         try {
-          return new LlmVocabularyAnalyzer(modelsService.resolveSnapshot(), 30_000, createLlmClient)
+          const snapshot = modelsService.resolveSnapshot()
+          return new LlmVocabularyAnalyzer(snapshot, 30_000, createLlmClient, (failure) =>
+            logAiImportFailure(failure, snapshot.configured ? snapshot.apiKey : undefined)
+          )
         } catch (cause) {
           throw new TransferError(
             cause instanceof ModelNotConfiguredError
