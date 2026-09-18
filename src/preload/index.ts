@@ -98,8 +98,30 @@ import {
   sentencePracticeStartResultSchema,
   SENTENCE_PRACTICE_CHANNELS
 } from '../shared/sentence-practice'
+import {
+  ERROR_LOG_CHANNELS,
+  errorReportResultSchema,
+  rendererErrorReportSchema,
+  type RendererErrorReport
+} from '../shared/error-report'
+import type { ZodIssue } from 'zod'
+
+// preload 捕获的桥接错误：尽力上报到 Main 的公共错误日志，失败静默放弃，
+// 不再触发新的上报（避免循环）。
+const reportBridgeError = (report: RendererErrorReport): void => {
+  void ipcRenderer.invoke(ERROR_LOG_CHANNELS.report, report).catch(() => {})
+}
+
+// 只上报 issue 的 path 与 code：message 可能回显事件载荷内容。
+const issueSummary = (issues: ZodIssue[]): Array<{ path: PropertyKey[]; code: string }> =>
+  issues.map(({ path, code }) => ({ path, code }))
 
 const api: LingoMateApi = {
+  reportError: async (rawInput) => {
+    const input = rendererErrorReportSchema.parse(rawInput)
+    const result: unknown = await ipcRenderer.invoke(ERROR_LOG_CHANNELS.report, input)
+    return errorReportResultSchema.parse(result)
+  },
   preferences: {
     async getLanguageSettings() {
       const result: unknown = await ipcRenderer.invoke(PREFERENCES_CHANNELS.getLanguageSettings)
@@ -199,6 +221,16 @@ const api: LingoMateApi = {
       const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
         const parsed = importTaskSchema.safeParse(raw)
         if (parsed.success) listener(parsed.data)
+        else {
+          // 推送任务形状不符合协议：丢弃事件并上报安全元信息。
+          reportBridgeError({
+            source: 'preload',
+            module: 'vocabulary-transfer',
+            operation: 'progress-parse',
+            message: 'received an import progress event that failed schema validation',
+            context: { issues: issueSummary(parsed.error.issues) }
+          })
+        }
       }
       ipcRenderer.on(VT.event, handler)
       return () => {
@@ -319,7 +351,14 @@ const api: LingoMateApi = {
         if (event.success) {
           listener(event.data)
         } else {
-          console.error('收到无法解析的会话事件', event.error)
+          // 事件不符合协议：丢弃并上报安全元信息（不含事件载荷）。
+          reportBridgeError({
+            source: 'preload',
+            module: 'conversation',
+            operation: 'event-parse',
+            message: 'received a conversation event that failed schema validation',
+            context: { issues: issueSummary(event.error.issues) }
+          })
         }
       }
 

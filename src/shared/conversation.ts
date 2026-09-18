@@ -7,6 +7,7 @@ import type { VocabularyApi, VocabularyBatch } from './vocabulary'
 import type { PhraseApi, PhraseBatch } from './phrase'
 import type { VocabularyPracticeApi } from './vocabulary-practice'
 import type { SentencePracticeApi } from './sentence-practice'
+import type { ErrorReportApi } from './error-report'
 
 export const CONVERSATION_CHANNELS = {
   create: 'conversation:create',
@@ -249,4 +250,6 @@ export interface LingoMateApi {
   synonym: SynonymApi
   vocabularyPractice: VocabularyPracticeApi
   sentencePractice: SentencePracticeApi
+  // 受限错误上报：preload/renderer 捕获的异常经此进入 Main 的公共日志。
+  reportError: ErrorReportApi['reportError']
 }

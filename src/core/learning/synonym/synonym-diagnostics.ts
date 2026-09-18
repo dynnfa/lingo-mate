@@ -20,10 +20,16 @@ const safeCodes = new Set([
   'ABORT_ERR'
 ])
 
-// Preserve the cause chain for internal diagnosis without logging messages, stacks,
+export interface SynonymFailureChainItem {
+  type: string
+  code?: string
+  status?: number
+}
+
+// Build the cause chain for internal diagnosis without exposing messages, stacks,
 // request/response bodies or arbitrary provider codes, which can contain user data.
-export function reportSynonymFailure(cause: unknown): void {
-  const chain: Array<{ type: string; code?: string; status?: number }> = []
+export function summarizeSynonymFailure(cause: unknown): SynonymFailureChainItem[] {
+  const chain: SynonymFailureChainItem[] = []
   const seen = new Set<unknown>()
   while (cause instanceof Error && !seen.has(cause) && chain.length < 8) {
     seen.add(cause)
@@ -42,5 +48,5 @@ export function reportSynonymFailure(cause: unknown): void {
     })
     cause = cause.cause
   }
-  console.error('[synonym] WORD_FAILED', chain)
+  return chain
 }

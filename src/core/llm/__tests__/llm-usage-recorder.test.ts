@@ -1,6 +1,17 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { LlmUsageRepository, LlmUsageStart, LlmUsageTerminal } from '../llm-usage'
 import { LlmUsageRecorder } from '../llm-usage-recorder'
+import type { CoreDiagnostics } from '../../error-diagnostics'
+
+function diagnostics(): CoreDiagnostics & { entries: Array<Record<string, unknown>> } {
+  const entries: Array<Record<string, unknown>> = []
+  return {
+    entries,
+    report: (entry) => {
+      entries.push(entry as unknown as Record<string, unknown>)
+    }
+  }
+}
 
 function repository(): LlmUsageRepository & {
   started: LlmUsageStart[]
@@ -29,8 +40,6 @@ const TERMINAL = {
   usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7, usageStatus: 'reported' as const },
   errorCode: null
 }
-
-afterEach(() => vi.restoreAllMocks())
 
 describe('LlmUsageRecorder', () => {
   it('inserts a started row on begin and one terminal row on finish', () => {
@@ -69,40 +78,41 @@ describe('LlmUsageRecorder', () => {
   })
 
   it('keeps recording the request even when persistence fails', () => {
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const sink = diagnostics()
     const repo = repository()
     repo.insertStarted = () => {
       throw new Error('disk unavailable')
     }
-    const recording = new LlmUsageRecorder(repo).begin('vocabulary_analysis', 'test-model')
+    const recording = new LlmUsageRecorder(repo, sink).begin('vocabulary_analysis', 'test-model')
     // 开始写入失败：通过固定诊断码报告，请求继续。
-    expect(consoleError).toHaveBeenCalledWith('[llm-usage] LLM_USAGE_INSERT_FAILED')
+    expect(sink.entries).toEqual([expect.objectContaining({ code: 'LLM_USAGE_INSERT_FAILED' })])
     expect(recording).toBeDefined()
 
     recording.finish(TERMINAL)
     expect(repo.finished).toHaveLength(1)
-    expect(consoleError).toHaveBeenCalledTimes(1)
+    expect(sink.entries).toHaveLength(1)
   })
 
   it('reports finish failures with a diagnostic code instead of throwing', () => {
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const sink = diagnostics()
     const repo = repository()
     repo.finish = () => {
       throw new Error('database closed')
     }
-    const recording = new LlmUsageRecorder(repo).begin('conversation', 'test-model')
+    const recording = new LlmUsageRecorder(repo, sink).begin('conversation', 'test-model')
     expect(() => recording.finish(TERMINAL)).not.toThrow()
-    expect(consoleError).toHaveBeenCalledWith('[llm-usage] LLM_USAGE_FINISH_FAILED')
+    expect(sink.entries).toEqual([expect.objectContaining({ code: 'LLM_USAGE_FINISH_FAILED' })])
   })
 
   it('does not log request or response payloads in diagnostics', () => {
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const sink = diagnostics()
     const repo = repository()
     repo.insertStarted = () => {
       throw new Error('boom https://provider.example/v1 sk-secret')
     }
-    new LlmUsageRecorder(repo).begin('conversation', 'secret-model')
-    const logged = String(consoleError.mock.calls[0][0])
-    expect(logged).toBe('[llm-usage] LLM_USAGE_INSERT_FAILED')
+    new LlmUsageRecorder(repo, sink).begin('conversation', 'secret-model')
+    expect(sink.entries).toHaveLength(1)
+    expect(sink.entries[0]['code']).toBe('LLM_USAGE_INSERT_FAILED')
+    expect(JSON.stringify(sink.entries)).not.toContain('sk-secret')
   })
 })

@@ -1,7 +1,8 @@
 # 按天归档公共错误日志计划
 
 - 日期：2026-09-18
-- 状态：待实施
+- 状态：已实施
+- 实施分支：`feat/unified-error-logs`
 
 ## 目标
 
@@ -91,33 +92,62 @@
 
 ### 1. 梳理接入点
 
-- [ ] 建立源码错误入口清单，注明原始原因在哪里仍然可用、谁负责记录、是否已有诊断回调。
-- [ ] 确定公共诊断接口和数据 schema，确认目录、日期及记录字段契约。
+- [x] 建立源码错误入口清单，注明原始原因在哪里仍然可用、谁负责记录、是否已有诊断回调。
+- [x] 确定公共诊断接口和数据 schema，确认目录、日期及记录字段契约。
 
 ### 2. 实现公共写入服务
 
-- [ ] 按 TDD 添加目录创建、同日追加、跨天切换、重启追加和并发写入测试，再实现服务。
-- [ ] 测试错误序列化、循环引用、体积限制、脱敏、写入失败隔离和退出刷新。
-- [ ] 在启动早期初始化服务，接入进程级和窗口错误事件，避免重复注册监听器。
+- [x] 按 TDD 添加目录创建、同日追加、跨天切换、重启追加和并发写入测试，再实现服务。
+- [x] 测试错误序列化、循环引用、体积限制、脱敏、写入失败隔离和退出刷新。
+- [x] 在启动早期初始化服务，接入进程级和窗口错误事件，避免重复注册监听器。
 
 ### 3. 汇总 Main/Core 错误
 
-- [ ] 接入 IPC 守卫，并覆盖业务直接返回失败及异步流式失败路径。
-- [ ] 将 AI 导入失败日志改为公共服务适配器，取消新错误的独立文件写入；保留既有原始响应诊断能力。
-- [ ] 替换现有 console/electron-log 错误输出，Core 通过依赖注入提交诊断。
-- [ ] 核对数据库、配置、模型、学习、用量、导入导出模块，补齐原因丢失点并消除重复记录。
+- [x] 接入 IPC 守卫，并覆盖业务直接返回失败及异步流式失败路径。
+- [x] 将 AI 导入失败日志改为公共服务适配器，取消新错误的独立文件写入；保留既有原始响应诊断能力。
+- [x] 替换现有 console/electron-log 错误输出，Core 通过依赖注入提交诊断。
+- [x] 核对数据库、配置、模型、学习、用量、导入导出模块，补齐原因丢失点并消除重复记录。
 
 ### 4. 接入 Preload/Renderer
 
-- [ ] 先补 IPC 来源校验、schema 校验、限流及防递归测试，再实现窄上报接口。
-- [ ] 接入桥接解析错误、浏览器全局异常与 React 错误边界，保留现有安全提示行为。
-- [ ] 验证日志内容和日志读取能力均不暴露给 Renderer。
+- [x] 先补 IPC 来源校验、schema 校验、限流及防递归测试，再实现窄上报接口。
+- [x] 接入桥接解析错误、浏览器全局异常与 React 错误边界，保留现有安全提示行为。
+- [x] 验证日志内容和日志读取能力均不暴露给 Renderer。
 
 ### 5. 回归与交付
 
-- [ ] 逐项勾核错误入口清单，补充代表性跨模块与 Electron 端到端测试。
-- [ ] 更新架构文档中的日志位置、格式、诊断边界和排查方式。
-- [ ] 全部实施与相关验证完成后，将本文状态更新为“已实施”并记录验证结果。
+- [x] 逐项勾核错误入口清单，补充代表性跨模块与 Electron 端到端测试。
+- [x] 更新架构文档中的日志位置、格式、诊断边界和排查方式（见 `docs/error-logging.md`）。
+- [x] 全部实施与相关验证完成后，将本文状态更新为“已实施”并记录验证结果。
+
+## 接入清单（实施核对）
+
+| 错误入口 | 原始原因可用性 | 记录责任 | 状态 |
+| --- | --- | --- | --- |
+| `src/main/index.ts` 偏好初始化 catch | 可用（原 console.error） | Main：`preferences/init` | 已接入 |
+| `src/main/index.ts` 语言读取静默回退 catch | 可用（原空 catch） | Main：`preferences/resolve-languages`（warn） | 已接入 |
+| `src/main/index.ts` 导入提交 electron-log 回调 | 可用 | Main 适配 Core：`vocabulary-transfer/commit` | 已接入（electron-log 依赖移除） |
+| `src/main/ai-import-failure-log.ts` 独立文件 | 可用 | `ai-import` 适配器 → 公共日志 | 已切换；旧文件不再写入 |
+| `src/core/llm/llm-usage-recorder.ts` 记账失败 | 固定诊断码 | Core 诊断接口注入 | 已接入 |
+| `src/core/learning/synonym/synonym-diagnostics.ts` | 脱敏 cause 链 | `SynonymModule` 注入诊断 | 已接入（保留 safeCodes 白名单） |
+| `src/main/ipc-guard.ts` 守卫各失败分支 | 可用（映射前） | `IpcGuardDiagnostics` 回调 | 已接入（来源拒绝/输入失败为 warn） |
+| `src/preload/index.ts` 会话事件解析失败 | Zod issues | `window.api.reportError`（preload） | 已接入（移除 console.error） |
+| `src/preload/index.ts` 导入进度解析失败（原静默丢弃） | Zod issues | `window.api.reportError`（preload） | 已接入 |
+| Renderer 全局 error/unhandledrejection（原缺失） | 可用 | `installGlobalErrorReporting` | 已接入 |
+| React 渲染异常（原无边界） | 可用 | `ErrorBoundary` + i18n 回退 UI | 已接入 |
+| Main uncaughtException/unhandledRejection（原缺失） | 可用 | `installProcessErrorHandlers` | 已接入（前者同步写入后非零退出） |
+| 窗口 loadURL/render-process-gone、child-process-gone（原缺失） | 可用 | Main：`window/*`、`process/child-process-gone` | 已接入 |
+| LLM 客户端/流式失败、各分析器 | 领域错误透传或折叠为安全码 | 由 IPC 守卫在 handler 抛出时记录；业务返回的失败结果已在 UI 呈现且带错误码，不重复记录 | 明确不另接入 |
+| 主动取消（CANCELLED/abort） | — | — | 明确不记录（符合约定） |
+
+无法采集的情况：进程被强杀、系统崩溃、磁盘不可写时无法保证落盘（写入失败仅输出限频诊断码）。
+
+## 验证结果
+
+- `pnpm lint`、`pnpm typecheck`、`pnpm test`（114 个文件 / 1322 项，含新增 error-logger、error-log-ipc、ipc-guard 诊断、shared 协议、Core 诊断注入、适配器、renderer 上报与错误边界用例）、`pnpm build` 全部通过。
+- `pnpm test:electron` 42 项全部通过，含新增 `tests/e2e/error-logging.test.ts`（启动建目录、Renderer 全局异常上报落盘为可解析 JSONL、无日志读取接口）与更新后的 `tests/e2e/preload.test.ts` 键清单。
+- 跨模块集成 `tests/integration/error-log.test.ts`：守卫/Core 诊断/AI 导入三类来源写入同一按天文件，守卫条目保留映射前原始 message/stack。
+- 实施中发现并修复：will-quit 内二次 `app.quit()` 不会重启退出序列导致进程悬挂，改为 flush 有界等待后 `app.exit(0)`（e2e 验证 65ms 内干净退出）。
 
 ## 验收标准
 

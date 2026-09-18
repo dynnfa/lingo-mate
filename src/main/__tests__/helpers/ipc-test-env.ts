@@ -42,7 +42,8 @@ export type IpcHandler = (
 // 置 owned=false、把 mainFrame 指向其他 URL 或 destroyed=true 即不再可信；
 // send 与 destroy 用于模拟事件推送和窗口销毁。
 export class FakeSender extends EventEmitter {
-  readonly id = 7
+  // 显式 number：子类可覆盖为不同 sender id（限流按 sender 区分）。
+  readonly id: number = 7
   owned = true
   destroyed = false
   mainFrame = { url: RENDERER_URL }
