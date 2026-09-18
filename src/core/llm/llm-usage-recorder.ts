@@ -7,6 +7,7 @@ import type {
   LlmUsageTerminal,
   ParsedLlmUsage
 } from './llm-usage'
+import { noopCoreDiagnostics, type CoreDiagnostics } from '../error-diagnostics'
 
 // 一次模型调用的记录上下文：每次实际请求独立持有，不维护共享的
 // “当前请求”状态。finish 幂等——迟到回调不会重复写或改写终态。
@@ -23,16 +24,15 @@ export interface LlmUsageTerminalInput {
   errorCode: string | null
 }
 
-// 记账是旁路能力：写入失败通过不含用户数据的固定诊断码报告，
-// 不影响模型请求本身，也不静默宣称记账成功。
-function reportDiagnostic(code: 'LLM_USAGE_INSERT_FAILED' | 'LLM_USAGE_FINISH_FAILED'): void {
-  console.error(`[llm-usage] ${code}`)
-}
-
 // 仅供 LlmClient 使用：统一创建调用 ID、写入 started 记录并幂等收尾。
 // 业务适配器不注入 recorder、不手动 begin/finish。
 export class LlmUsageRecorder {
-  constructor(private readonly repository: LlmUsageRepository) {}
+  constructor(
+    private readonly repository: LlmUsageRepository,
+    // 记账是旁路能力：写入失败经诊断接口上报固定诊断码（不含请求数据），
+    // 不影响模型请求本身，也不静默宣称记账成功。
+    private readonly diagnostics: CoreDiagnostics = noopCoreDiagnostics
+  ) {}
 
   begin(
     operation: LlmRequestOperation,
@@ -43,7 +43,12 @@ export class LlmUsageRecorder {
     try {
       this.repository.insertStarted(start)
     } catch {
-      reportDiagnostic('LLM_USAGE_INSERT_FAILED')
+      this.diagnostics.report({
+        module: 'llm-usage',
+        operation: 'insert-started',
+        code: 'LLM_USAGE_INSERT_FAILED',
+        message: 'failed to persist the started usage row'
+      })
     }
 
     let settled = false
@@ -67,7 +72,12 @@ export class LlmUsageRecorder {
           // 若开始记录未写入，这里按同一 ID 幂等补写完整记录。
           this.repository.finish(record)
         } catch {
-          reportDiagnostic('LLM_USAGE_FINISH_FAILED')
+          this.diagnostics.report({
+            module: 'llm-usage',
+            operation: 'finish',
+            code: 'LLM_USAGE_FINISH_FAILED',
+            message: 'failed to persist the terminal usage row'
+          })
         }
       }
     }

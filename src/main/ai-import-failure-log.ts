@@ -1,29 +1,23 @@
-import { appendFileSync, existsSync, mkdirSync, renameSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import type { ErrorLogger } from './error-logger'
 import type { VocabularyAnalysisFailure } from '../core/llm/llm-vocabulary-analyzer'
 
-// 用户明确授权保存 AI 导入失败的模型响应；不记录请求、配置或 SDK 错误对象。
-// 独立文件仅由 Main 写入，不转发到 Renderer 或控制台。
-export function createAiImportFailureLogger(
-  directory: string
+// AI 导入失败诊断适配器：把分析失败映射为公共按天错误日志的一条记录。
+// 用户明确授权保存失败的模型响应；不记录请求、配置或 SDK 错误对象。
+// 脱敏（敏感字段与已知密钥）由公共日志服务统一完成，Main 是唯一写入方，
+// 日志不转发到 Renderer 或控制台，也不再写独立的 ai-import-errors.log。
+export function createAiImportFailureDiagnostic(
+  logger: ErrorLogger
 ): (failure: VocabularyAnalysisFailure, apiKey?: string) => void {
-  const path = join(directory, 'ai-import-errors.log')
   return (failure, apiKey) => {
-    const line =
-      JSON.stringify({ timestamp: new Date().toISOString(), ...failure }, (key, value: unknown) => {
-        if (
-          /^(?:headers|authorization|api[_-]?key|access[_-]?token|cookie|set-cookie)$/i.test(key)
-        ) {
-          return '[REDACTED]'
-        }
-        if (typeof value === 'string' && apiKey) return value.split(apiKey).join('[REDACTED]')
-        return value
-      }) + '\n'
-    mkdirSync(directory, { recursive: true })
-    // 保留一份轮转备份，避免反复失败导致日志无限增长。
-    if (existsSync(path) && statSync(path).size >= 5 * 1024 * 1024) {
-      renameSync(path, `${path}.1`)
-    }
-    appendFileSync(path, line, { encoding: 'utf8', mode: 0o600 })
+    // 在途请求可能仍在使用已下线的密钥；登记后只增不减，保证脱敏覆盖。
+    if (apiKey) logger.registerSecret(apiKey)
+    logger.log({
+      source: 'core',
+      module: 'ai-import',
+      operation: 'analyze',
+      code: failure.code,
+      message: `vocabulary analysis failed at stage ${failure.stage}`,
+      context: { ...failure }
+    })
   }
 }

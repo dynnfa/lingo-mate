@@ -259,6 +259,8 @@ function installApiMock(
 
   const api: LingoMateApi = {
     preferences,
+    // App 测试不触发错误上报；提供静默桩满足接口形状。
+    reportError: async () => ({ status: 'ok' }),
     // App 测试不关注模型设置；提供未配置的稳定桩供 Settings 页读取。
     models: modelsApiStub(),
     usage: usageApiStub(),

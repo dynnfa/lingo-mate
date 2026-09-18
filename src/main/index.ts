@@ -19,15 +19,21 @@ import { VocabularyConversationSkill } from '../core/learning/vocabulary/vocabul
 import { PhraseConversationSkill } from '../core/learning/phrase/phrase-conversation-skill'
 import { LlmVocabularyAnalyzer } from '../core/llm/llm-vocabulary-analyzer'
 import { LlmPhraseAnalyzer } from '../core/llm/llm-phrase-analyzer'
-import { LlmClient, type CreateLlmClient } from '../core/llm/llm-client'
+import { createLlmClientFactory } from './llm-client-factory'
 import { LlmUsageRecorder } from '../core/llm/llm-usage-recorder'
 import { createVocabularyFeedbackFormatter } from './vocabulary-feedback'
 import { createPhraseFeedbackFormatter } from './phrase-feedback'
 import type { ConversationSkill } from '../core/conversation/conversation-skill'
 import type { ConversationSkillId } from '../shared/conversation'
 import { app, shell, BrowserWindow } from 'electron'
-import log from 'electron-log/main'
-import { createAiImportFailureLogger } from './ai-import-failure-log'
+import { createAiImportFailureDiagnostic } from './ai-import-failure-log'
+import {
+  createCoreDiagnostics,
+  createErrorLogger,
+  createIpcGuardDiagnostics,
+  installProcessErrorHandlers
+} from './error-logger'
+import { registerErrorReportIpc } from './error-log-ipc'
 import { join } from 'path'
 import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -87,6 +93,21 @@ const rendererUrl =
     ? new URL(process.env['ELECTRON_RENDERER_URL']).href
     : pathToFileURL(join(__dirname, '../renderer/index.html')).href
 
+// 公共按天错误日志：在一切业务初始化之前就绪，进程级未捕获异常与启动
+// 早期的失败都能落盘；Main 是唯一写入方。
+const errorLogger = createErrorLogger(join(app.getPath('userData'), 'logs'))
+installProcessErrorHandlers(errorLogger)
+
+function reportWindowFailure(operation: string, error: unknown): void {
+  errorLogger.log({
+    source: 'main',
+    module: 'window',
+    operation,
+    message: `window ${operation} failed`,
+    error
+  })
+}
+
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
@@ -107,6 +128,10 @@ function createWindow(): void {
     mainWindow.show()
   })
 
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    reportWindowFailure('render-process-gone', new Error(details.reason))
+  })
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
     if (isAllowedExternalUrl(details.url)) {
       void shell.openExternal(details.url)
@@ -114,7 +139,9 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
-  void mainWindow.loadURL(rendererUrl)
+  mainWindow.loadURL(rendererUrl).catch((error: unknown) => {
+    reportWindowFailure('load-url', error)
+  })
 }
 
 // This method will be called when Electron has finished
@@ -131,19 +158,37 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  // GPU/网络等子进程异常退出：保留 Electron 默认处理，仅采集原因。
+  app.on('child-process-gone', (_event, details) => {
+    errorLogger.log({
+      source: 'main',
+      module: 'process',
+      operation: 'child-process-gone',
+      message: `child process ${details.type} exited unexpectedly`,
+      code: details.reason
+    })
+  })
+
   database = openDatabase(join(app.getPath('userData'), 'lingo-mate.sqlite'))
   const conversationRepository = new SqliteConversationRepository(database)
 
   // 全部 Renderer → Main 请求入口的唯一注册器：强制来源检查、输入校验、
   // 异常转换与结果校验；可信页面配置缺失或非法时应用直接启动失败。
-  const registerTrustedHandler = createTrustedHandlerRegistrar({ rendererUrl })
+  // 守卫观察到的拒绝与异常先记录原始原因，再转换为安全返回。
+  const registerTrustedHandler = createTrustedHandlerRegistrar(
+    { rendererUrl },
+    createIpcGuardDiagnostics(errorLogger)
+  )
+  // Renderer/Preload 的受限错误上报入口：复用守卫的来源校验与限流。
+  registerErrorReportIpc(errorLogger, registerTrustedHandler)
 
   // LLM 用量账本：统一客户端自动记账；重启时把上次进程遗留的 started
   // 调用标记为 interrupted（真实结束时间未知），不重发请求。
   const llmUsageRepository = new SqliteLlmUsageRepository(database)
   llmUsageRepository.markInterruptedStarted()
-  const llmUsageRecorder = new LlmUsageRecorder(llmUsageRepository)
-  const createLlmClient: CreateLlmClient = (config) => new LlmClient(config, llmUsageRecorder)
+  const coreDiagnostics = createCoreDiagnostics(errorLogger)
+  const llmUsageRecorder = new LlmUsageRecorder(llmUsageRepository, coreDiagnostics)
+  const createLlmClient = createLlmClientFactory(errorLogger, llmUsageRecorder)
 
   // 用量统计按系统本地时区归属自然日/周；时区每次查询读取，
   // 系统时区改变后下次查询按新时区重新归属历史记录。
@@ -184,7 +229,14 @@ app.whenReady().then(() => {
     )
     registerPreferencesIpc(preferencesService, registerTrustedHandler)
   } catch (error) {
-    console.error('Failed to initialize language preferences', error)
+    // 偏好存储初始化失败只损失语言记忆（Renderer 回退默认语言），不阻断应用启动。
+    errorLogger.log({
+      source: 'main',
+      module: 'preferences',
+      operation: 'init',
+      message: 'failed to initialize language preferences',
+      error
+    })
   }
 
   // 解释语言跟随界面语言，目标语言来自独立配置；Core 不读取 electron-store，
@@ -198,8 +250,16 @@ app.whenReady().then(() => {
           targetLanguage: settings.targetLanguage
         }
       }
-    } catch {
-      // 读取失败沿用默认语言，不阻断对话。
+    } catch (error) {
+      // 读取失败沿用默认语言，不阻断对话；原始原因进公共日志定位。
+      errorLogger.log({
+        level: 'warn',
+        source: 'main',
+        module: 'preferences',
+        operation: 'resolve-languages',
+        message: 'failed to read language settings; using defaults',
+        error
+      })
     }
     return { outputLanguage: 'zh-CN', targetLanguage: 'en' }
   }
@@ -210,7 +270,7 @@ app.whenReady().then(() => {
     new VocabularyManagementService(vocabularyRepository),
     registerTrustedHandler
   )
-  const logAiImportFailure = createAiImportFailureLogger(app.getPath('logs'))
+  const logAiImportFailure = createAiImportFailureDiagnostic(errorLogger)
   disposeVocabularyTransfer = registerVocabularyTransferIpc(
     new VocabularyTransferService(
       vocabularyRepository,
@@ -232,7 +292,15 @@ app.whenReady().then(() => {
         }
       },
       Date.now,
-      (error) => log.error('Vocabulary import commit failed:', error)
+      // 跨进程只回传安全错误码；原始原因交由公共错误日志定位。
+      (error) =>
+        errorLogger.log({
+          source: 'core',
+          module: 'vocabulary-transfer',
+          operation: 'commit',
+          message: 'vocabulary import commit failed',
+          error
+        })
     ),
     createVocabularyTransferFiles(() => vocabularyRepository.exportAll()),
     () => resolveLanguages().outputLanguage,
@@ -330,21 +398,26 @@ app.whenReady().then(() => {
   // 读取不影响收藏流程，也不改写历史会话与收藏批次报告。
   registerSynonymIpc(new SynonymManagementService(synonymRepository), registerTrustedHandler)
   const synonymSkill = new SynonymConversationSkill(
-    new SynonymModule(synonymRepository, (timeoutMs) => {
-      try {
-        return new LlmSynonymAnalyzer(modelsService.resolveSnapshot(), timeoutMs, createLlmClient)
-      } catch (cause) {
-        throw new SynonymError(
-          cause instanceof ModelNotConfiguredError
-            ? 'MODEL_NOT_CONFIGURED'
-            : cause instanceof ModelConfigValidationError &&
-                cause.code === 'CREDENTIAL_DECRYPT_FAILED'
-              ? 'CREDENTIAL_DECRYPT_FAILED'
-              : 'MODEL_ERROR',
-          { cause }
-        )
-      }
-    }),
+    new SynonymModule(
+      synonymRepository,
+      (timeoutMs) => {
+        try {
+          return new LlmSynonymAnalyzer(modelsService.resolveSnapshot(), timeoutMs, createLlmClient)
+        } catch (cause) {
+          throw new SynonymError(
+            cause instanceof ModelNotConfiguredError
+              ? 'MODEL_NOT_CONFIGURED'
+              : cause instanceof ModelConfigValidationError &&
+                  cause.code === 'CREDENTIAL_DECRYPT_FAILED'
+                ? 'CREDENTIAL_DECRYPT_FAILED'
+                : 'MODEL_ERROR',
+            { cause }
+          )
+        }
+      },
+      60000,
+      coreDiagnostics
+    ),
     createSynonymFeedbackFormatter()
   )
   const conversationSkills = new Map<ConversationSkillId, ConversationSkill>([
@@ -357,7 +430,8 @@ app.whenReady().then(() => {
     conversationRepository,
     resolveLanguages,
     conversationSkills,
-    conversationRepository
+    conversationRepository,
+    coreDiagnostics
   )
   registerConversationIpc(conversationModule, registerTrustedHandler)
 
@@ -386,6 +460,18 @@ app.on('before-quit', () => {
   sentencePracticeService?.dispose()
   database?.close()
   database = undefined
+})
+
+// 正常退出前有界等待日志队列写完。will-quit 内再次 app.quit() 不会重启
+// 退出序列，因此 flush（有界等待）完成后用 app.exit 收尾，保证进程退出。
+let flushedErrorLogsOnQuit = false
+app.on('will-quit', (event) => {
+  if (flushedErrorLogsOnQuit) return
+  flushedErrorLogsOnQuit = true
+  event.preventDefault()
+  void errorLogger.flush().finally(() => {
+    app.exit(0)
+  })
 })
 
 function isAllowedExternalUrl(rawUrl: string): boolean {

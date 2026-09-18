@@ -84,5 +84,10 @@
     "invalidAnalysis": "The model returned an invalid review. Try again.",
     "timeout": "The request timed out. Try again.",
     "cancelled": "The request was cancelled."
+  },
+  "boundary": {
+    "title": "Something went wrong",
+    "description": "The interface hit an unexpected error, which has been saved to the local log.",
+    "reload": "Reload"
   }
 }

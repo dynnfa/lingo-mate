@@ -115,12 +115,14 @@ describe('vocabulary conversation integration', () => {
     const vocabularyRepository = new SqliteVocabularyRepository(database)
     const analyze = vi.fn(async () => insertResult())
     const skill = makeSkill(vocabularyRepository, analyze)
+    const report = vi.fn()
     const module = new ConversationModule(
       unusedConversationModel,
       conversationRepository,
       () => ({ outputLanguage: 'en' as const, targetLanguage: 'en' as const }),
       new Map([[skill.skillId, skill]]),
-      conversationRepository
+      conversationRepository,
+      { report }
     )
     const { sessionId } = await module.createConversation()
 
@@ -142,6 +144,26 @@ describe('vocabulary conversation integration', () => {
     expect(vocabularyRepository.list({}).entries).toHaveLength(1)
     expect(analyze).toHaveBeenCalledTimes(1)
 
+    const retryFailure = new Error('retry storage unavailable')
+    vi.spyOn(conversationRepository, 'finishExecution').mockRejectedValueOnce(retryFailure)
+    const failedRetry = await waitForTerminal((emit) =>
+      module.retryMessage(
+        {
+          requestId: randomUUID(),
+          sessionId,
+          userMessageId: history.messages[0].messageId
+        },
+        emit
+      )
+    )
+    expect(failedRetry.at(-1)).toMatchObject({ type: 'failed' })
+    expect(report).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'retry-skill-reply',
+        error: expect.objectContaining({ cause: retryFailure })
+      })
+    )
+
     const retry = await waitForTerminal((emit) =>
       module.retryMessage(
         {
@@ -162,53 +184,133 @@ describe('vocabulary conversation integration', () => {
     expect(afterRetry.messages).toHaveLength(2)
   })
 
-  it('emits a retryable capability error without persisting a failed batch or assistant reply', async () => {
-    const database = openDatabase(':memory:')
-    databases.push(database)
-    const conversationRepository = new SqliteConversationRepository(database)
-    const vocabularyRepository = new SqliteVocabularyRepository(database)
-    const skill = makeSkill(vocabularyRepository, async () => {
-      throw new VocabularyError('TOOL_CALL_NOT_SUPPORTED')
-    })
-    const module = new ConversationModule(
-      unusedConversationModel,
-      conversationRepository,
-      () => ({ outputLanguage: 'en' as const, targetLanguage: 'en' as const }),
-      new Map([[skill.skillId, skill]]),
-      conversationRepository
-    )
-    const { sessionId } = await module.createConversation()
-
-    const events = await waitForTerminal((emit) =>
-      module.runSkill(
-        {
-          requestId: randomUUID(),
-          sessionId,
-          skillId: 'vocabulary',
-          arguments: { text: 'apple', wordLanguage: 'en' }
-        },
-        emit
+  it.each([false, true])(
+    'emits a retryable capability error (phase write failure: %s)',
+    async (failPhase) => {
+      const database = openDatabase(':memory:')
+      databases.push(database)
+      const conversationRepository = new SqliteConversationRepository(database)
+      const vocabularyRepository = new SqliteVocabularyRepository(database)
+      const skill = makeSkill(vocabularyRepository, async () => {
+        throw new VocabularyError('TOOL_CALL_NOT_SUPPORTED')
+      })
+      const report = vi.fn()
+      const module = new ConversationModule(
+        unusedConversationModel,
+        conversationRepository,
+        () => ({ outputLanguage: 'en' as const, targetLanguage: 'en' as const }),
+        new Map([[skill.skillId, skill]]),
+        conversationRepository,
+        { report }
       )
-    )
+      const { sessionId } = await module.createConversation()
 
-    expect(
-      events.filter((event) => event.type !== 'titleUpdated').map((event) => event.type)
-    ).toEqual(['started', 'skillPhase', 'failed'])
-    expect(events.at(-1)).toMatchObject({
-      type: 'failed',
-      error: { code: 'TOOL_CALL_NOT_SUPPORTED' }
-    })
-    expect(vocabularyRepository.list({}).entries).toHaveLength(0)
-    const history = await module.loadConversation(sessionId)
-    expect(history.messages).toHaveLength(1)
-    expect(history.messages[0]).toMatchObject({ role: 'user', retryable: true })
-    const execution = await conversationRepository.findExecutionByUserMessage(
-      sessionId,
-      history.messages[0].messageId
-    )
-    expect(execution).toMatchObject({ phase: 'failed' })
-    expect(execution?.batch).toBeUndefined()
-  })
+      const phaseFailure = new Error('phase update failed')
+      const originalSetPhase = conversationRepository.setExecutionPhase.bind(conversationRepository)
+      vi.spyOn(conversationRepository, 'setExecutionPhase').mockImplementation((id, phase) => {
+        if (failPhase && phase === 'failed') return Promise.reject(phaseFailure)
+        return originalSetPhase(id, phase)
+      })
+
+      const events = await waitForTerminal((emit) =>
+        module.runSkill(
+          {
+            requestId: randomUUID(),
+            sessionId,
+            skillId: 'vocabulary',
+            arguments: { text: 'apple', wordLanguage: 'en' }
+          },
+          emit
+        )
+      )
+
+      expect(
+        events.filter((event) => event.type !== 'titleUpdated').map((event) => event.type)
+      ).toEqual(['started', 'skillPhase', 'failed'])
+      expect(events.at(-1)).toMatchObject({
+        type: 'failed',
+        error: { code: 'TOOL_CALL_NOT_SUPPORTED' }
+      })
+      expect(vocabularyRepository.list({}).entries).toHaveLength(0)
+      const history = await module.loadConversation(sessionId)
+      expect(history.messages).toHaveLength(1)
+      expect(history.messages[0]).toMatchObject({ role: 'user', retryable: true })
+      const execution = await conversationRepository.findExecutionByUserMessage(
+        sessionId,
+        history.messages[0].messageId
+      )
+      if (failPhase) {
+        expect(report).toHaveBeenCalledWith(
+          expect.objectContaining({
+            operation: 'set-failed-phase',
+            error: phaseFailure
+          })
+        )
+      } else {
+        expect(execution).toMatchObject({ phase: 'failed' })
+      }
+      expect(execution?.batch).toBeUndefined()
+      expect(report).toHaveBeenCalledWith(
+        expect.objectContaining({
+          module: 'conversation',
+          operation: 'run-skill',
+          error: expect.objectContaining({ code: 'TOOL_CALL_NOT_SUPPORTED' })
+        })
+      )
+    }
+  )
+
+  it.each([false, true])(
+    'only logs persistence failures during cancellation (failure: %s)',
+    async (failPhase) => {
+      const database = openDatabase(':memory:')
+      databases.push(database)
+      const repository = new SqliteConversationRepository(database)
+      const skill = makeSkill(new SqliteVocabularyRepository(database), async () => insertResult())
+      const report = vi.fn()
+      const module = new ConversationModule(
+        unusedConversationModel,
+        repository,
+        undefined,
+        new Map([[skill.skillId, skill]]),
+        repository,
+        { report }
+      )
+      const { sessionId } = await module.createConversation()
+      const cause = new Error('cancel phase storage failed')
+      const setPhase = repository.setExecutionPhase.bind(repository)
+      vi.spyOn(repository, 'setExecutionPhase').mockImplementation((id, phase) => {
+        if (failPhase && phase === 'cancelled') return Promise.reject(cause)
+        return setPhase(id, phase)
+      })
+      vi.spyOn(skill, 'run').mockImplementation(async (input) => {
+        module.cancelMessage(input.requestId)
+        return { outcome: 'cancelled' }
+      })
+      const events = await waitForTerminal((emit) =>
+        module.runSkill(
+          {
+            requestId: randomUUID(),
+            sessionId,
+            skillId: 'vocabulary',
+            arguments: { text: 'apple', wordLanguage: 'en' }
+          },
+          emit
+        )
+      )
+      expect(events.at(-1)?.type).toBe(failPhase ? 'failed' : 'cancelled')
+      if (failPhase) {
+        expect(report).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            operation: 'set-cancelled-phase',
+            error: cause
+          })
+        )
+      } else {
+        expect(report).not.toHaveBeenCalled()
+      }
+    }
+  )
 
   it('rejects a skill invocation whose word language mismatches the configured target language', async () => {
     const database = openDatabase(':memory:')
