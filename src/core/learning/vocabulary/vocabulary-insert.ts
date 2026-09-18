@@ -10,7 +10,14 @@ export const VOCABULARY_UNRECOGNIZED_TOOL_NAME = 'vocabulary_unrecognized'
 export const VOCABULARY_UNRECOGNIZED_REASON = 'UNRECOGNIZED'
 
 // 例句在词表中以 JSON 编码的字符串数组存储；应用层约定 1–3 条非空例句。
-export const exampleSentenceListSchema = z.array(z.string().min(1).max(500)).min(1).max(3)
+const MAX_SERIALIZED_EXAMPLES_LENGTH = 2000
+export const exampleSentenceListSchema = z
+  .array(z.string().min(1).max(500))
+  .min(1)
+  .max(3)
+  .refine((examples) => JSON.stringify(examples).length <= MAX_SERIALIZED_EXAMPLES_LENGTH, {
+    message: 'Serialized examples exceed the storage limit'
+  })
 export type ExampleSentenceList = z.infer<typeof exampleSentenceListSchema>
 
 // 音标保留旧分析协议的真实性检查：斜杠或方括号包裹、内部含字母、无占位内容。
@@ -75,7 +82,7 @@ export const vocabularyInsertBindingSchema = z
     phonetic: z.string().min(1).max(200),
     meaning: z.string().min(1).max(2000),
     concept: z.string().min(1).max(2000),
-    example_sentences: z.string().min(2).max(2000),
+    example_sentences: z.string().min(2).max(MAX_SERIALIZED_EXAMPLES_LENGTH),
     model_id: z.string().min(1).max(200),
     prompt_version: z.string().min(1).max(100),
     created_at: z.iso.datetime()

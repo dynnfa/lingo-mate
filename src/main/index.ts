@@ -1,3 +1,9 @@
+import {
+  VocabularyTransferService,
+  TransferError
+} from '../core/learning/vocabulary/vocabulary-transfer'
+import { registerVocabularyTransferIpc } from './vocabulary-transfer-ipc'
+import { createVocabularyTransferFiles } from './vocabulary-transfer-files'
 import { SqliteSynonymRepository } from '../database/sqlite-synonym-repository'
 import { SynonymModule } from '../core/learning/synonym/synonym-module'
 import { SynonymConversationSkill } from '../core/learning/synonym/synonym-conversation-skill'
@@ -69,6 +75,7 @@ import { SynonymManagementService } from '../core/learning/synonym/synonym-manag
 
 let database: Database.Database | undefined
 let conversationModule: ConversationModule | undefined
+let disposeVocabularyTransfer: (() => void) | undefined
 let vocabularyPracticeService: VocabularyPracticeService | undefined
 let sentencePracticeService: SentencePracticeService | undefined
 
@@ -199,6 +206,25 @@ app.whenReady().then(() => {
   // 删除只作用于 vocabulary 记录，不改写历史会话与收藏批次报告。
   registerVocabularyIpc(
     new VocabularyManagementService(vocabularyRepository),
+    registerTrustedHandler
+  )
+  disposeVocabularyTransfer = registerVocabularyTransferIpc(
+    new VocabularyTransferService(vocabularyRepository, () => {
+      try {
+        return new LlmVocabularyAnalyzer(modelsService.resolveSnapshot(), 30_000, createLlmClient)
+      } catch (cause) {
+        throw new TransferError(
+          cause instanceof ModelNotConfiguredError
+            ? 'MODEL_NOT_CONFIGURED'
+            : cause instanceof ModelConfigValidationError &&
+                cause.code === 'CREDENTIAL_DECRYPT_FAILED'
+              ? 'CREDENTIAL_DECRYPT_FAILED'
+              : 'MODEL_ERROR'
+        )
+      }
+    }),
+    createVocabularyTransferFiles(() => vocabularyRepository.exportAll()),
+    () => resolveLanguages().outputLanguage,
     registerTrustedHandler
   )
   // 词汇练习：同一词库仓储随机抽词，审查按请求解析模型快照；练习与审查
@@ -344,6 +370,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   conversationModule?.dispose()
+  disposeVocabularyTransfer?.()
   vocabularyPracticeService?.dispose()
   sentencePracticeService?.dispose()
   database?.close()

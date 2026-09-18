@@ -7,5 +7,82 @@
     "failed": "失败 {{count}} 个（{{terms}}）",
     "separator": "；",
     "duplicateSourceFailed": "重复项因其源词失败，未保存。"
+  },
+  "transfer": {
+    "instructions": [
+      "请填写 vocabulary 工作表，保留全部七列表头，可调整列顺序。单元格必须为文本，不接受公式。",
+      "必填：term（英文词项，4000 字符）、phonetic（IPA 音标，200 字符）、meaning 和 concept（各 2000 字符）、example_sentence_1（500 字符）。选填：example_sentence_2 和 example_sentence_3（各 500 字符）。",
+      "示例：apple | /ˈæpəl/ | 苹果 | 一种常见的可食用水果 | I ate an apple. | |",
+      "导入限制：5 MiB、1000 条数据行；已存在词项跳过，不覆盖。"
+    ],
+    "selectFile": "选择 Excel 文件",
+    "excelFile": "Excel 工作簿",
+    "template": "下载 Excel 模板",
+    "export": "导出 Excel",
+    "import": "导入",
+    "title": "导入词汇",
+    "close": "关闭",
+    "excel": "Excel 直接导入",
+    "ai": "AI 辅助导入",
+    "excelLimits": "最多 {{rows}} 条数据行、{{mib}} MiB。全部校验通过后才能导入。",
+    "aiLimits": "最多 {{rows}} 个非空行、{{characters}} 字符。分析使用当前启用的模型。",
+    "inputLabel": "每行输入一个英文单词",
+    "placeholder": "apple\nbanana",
+    "inputCount_one": "已输入 {{count}} 个词项",
+    "inputCount_other": "已输入 {{count}} 个词项",
+    "preview": "共 {{total}} 行 · 有效 {{valid}} 行 · 已存在 {{existing}} 行 · 重复 {{duplicate}} 行",
+    "issue": "第 {{row}} 行 · {{field}}：{{reason}}",
+    "confirm": "确认导入",
+    "start": "开始导入",
+    "cancel": "取消导入",
+    "retry": "仅重试失败行",
+    "fileSaved": "文件已保存。",
+    "results": "导入结果",
+    "progress": "已处理 {{processed}} / {{total}}",
+    "summary": "新增 {{saved}} · 已存在 {{existing}} · 重复 {{duplicate}} · 失败 {{failed}}",
+    "row": "第 {{row}} 行 · {{term}}",
+    "phases": {
+      "analyzing": "正在分析",
+      "committing": "正在保存，请稍候",
+      "completed": "已完成",
+      "partial": "部分完成",
+      "failed": "导入失败",
+      "cancelled": "已取消，未提交内容已丢弃"
+    },
+    "rowStates": {
+      "pending": "等待处理",
+      "analyzed": "已分析，等待保存",
+      "saved": "已新增",
+      "existing": "已存在",
+      "duplicate": "输入内重复",
+      "failed": "失败"
+    },
+    "validation": {
+      "REQUIRED": "必填字段",
+      "INVALID_VALUE": "格式无效或超出长度限制",
+      "INVALID_CELL": "仅接受文本，不接受公式、数值或错误值",
+      "INVALID_HEADER": "必须包含全部七个不同的协议表头，不允许额外列"
+    },
+    "errors": {
+      "INVALID_INPUT": "输入无效。",
+      "BUSY": "已有导入或文件操作正在进行。",
+      "UNTRUSTED_SOURCE": "当前页面无权访问导入。",
+      "REQUEST_NOT_FOUND": "未找到导入任务。",
+      "MODEL_NOT_CONFIGURED": "请先配置并启用模型。",
+      "CREDENTIAL_DECRYPT_FAILED": "无法读取模型凭据。",
+      "MODEL_ERROR": "模型请求失败。",
+      "INVALID_ANALYSIS": "模型返回的学习内容无效。",
+      "TOOL_CALL_NOT_SUPPORTED": "模型不支持工具调用。",
+      "UNRECOGNIZED": "无法识别该词项。",
+      "TIMEOUT": "分析超时。",
+      "CANCELLED": "已取消。",
+      "STORAGE_FAILED": "保存失败，本批次已回滚。",
+      "UNKNOWN_ERROR": "操作失败，请重试。",
+      "INVALID_FILE": "Excel 工作簿无效。",
+      "LIMIT_EXCEEDED": "超出文件大小或行数限制。",
+      "PREVIEW_EXPIRED": "预检已过期，请重新选择文件。",
+      "FILE_ERROR": "无法读取或保存文件。"
+    },
+    "inputCount": "已输入 {{count}} 个词项"
   }
 }

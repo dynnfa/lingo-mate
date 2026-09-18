@@ -1,3 +1,4 @@
+import { VocabularyTransfer } from './VocabularyTransfer'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
@@ -116,6 +117,7 @@ export function VocabularyDetail(): React.JSX.Element {
         <h2 id="vocabulary-detail-title" ref={headingRef} tabIndex={-1}>
           {t('recorded.vocabulary.detailTitle')}
         </h2>
+        <VocabularyTransfer onSaved={list.reload} />
       </header>
 
       {list.phase === 'loading' ? (

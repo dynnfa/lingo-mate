@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { transferApiStub } from '../vocabulary/__tests__/helpers/transfer-api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
@@ -14,6 +15,7 @@ const i18n = createI18n('zh-CN')
 
 // 已记录页右侧按菜单渲染详情；提供稳定空结果桩避免列表读取挂起。
 const emptyVocabularyApi: VocabularyApi = {
+  ...transferApiStub(),
   async list() {
     return { status: 'ok', entries: [] }
   },
