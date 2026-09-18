@@ -49,9 +49,9 @@ describe('VocabularyModule', () => {
     expect(command.sql).toBe(VOCABULARY_INSERT_SQL)
     expect(command.parameters).toMatchObject({
       term: 'apple',
-      phonetic: '/ˈæpəl/',
+      phonetic: JSON.stringify(['/ˈæpəl/']),
       model_id: 'configured-model',
-      prompt_version: 'vocabulary-tools-v3'
+      prompt_version: 'vocabulary-tools-v4'
     })
     expect(command.parameters.id).toBe(
       batch.items[0].status === 'saved' ? batch.items[0].entryId : undefined

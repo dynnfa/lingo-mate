@@ -53,7 +53,7 @@ describe('real HTTP adapter → batch → SQLite integration', () => {
       expect(entries).toHaveLength(2)
       expect(entries.map((entry) => entry.term).sort()).toEqual(['apple', 'banana'])
       expect(entries[0]).toMatchObject({
-        phonetic: expect.stringMatching(/^\/.+\/$/),
+        phonetic: [expect.stringMatching(/^\/.+\/$/)],
         meaning: expect.stringContaining('水果'),
         exampleSentences: [expect.stringContaining('after lunch')]
       })

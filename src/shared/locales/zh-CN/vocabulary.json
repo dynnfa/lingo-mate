@@ -11,7 +11,7 @@
   "transfer": {
     "instructions": [
       "请填写 vocabulary 工作表，保留全部七列表头，可调整列顺序。单元格必须为文本，不接受公式。",
-      "必填：term（英文词项，4000 字符）、phonetic（IPA 音标，200 字符）、meaning 和 concept（各 2000 字符）、example_sentence_1（500 字符）。选填：example_sentence_2 和 example_sentence_3（各 500 字符）。",
+      "必填：term（英文词项，4000 字符）、phonetic（1–10 个 IPA 音标，每行一个，每个最多 200 字符）、meaning 和 concept（各 2000 字符）、example_sentence_1（500 字符）。选填：example_sentence_2 和 example_sentence_3（各 500 字符）。",
       "示例：apple | /ˈæpəl/ | 苹果 | 一种常见的可食用水果 | I ate an apple. | |",
       "导入限制：5 MiB、1000 条数据行；已存在词项跳过，不覆盖。"
     ],

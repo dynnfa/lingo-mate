@@ -30,7 +30,7 @@ export async function encodeVocabularyExcel(
   for (const entry of entries)
     sheet.addRow([
       entry.term,
-      entry.phonetic ?? '',
+      entry.phonetic?.join('\n') ?? '',
       entry.meaning ?? '',
       entry.concept ?? '',
       ...[0, 1, 2].map((i) => entry.exampleSentences?.[i] ?? '')

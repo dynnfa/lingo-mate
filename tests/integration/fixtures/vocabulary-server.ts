@@ -110,7 +110,7 @@ export async function startVocabularyServer(): Promise<VocabularyServer> {
         // 参数化内容非法（例句不是 JSON 数组），应用必须拒绝且不写库。
         toolCallResponse(res, 'insert_vocabulary', {
           term: 'invalid',
-          phonetic: '/ˈɪnvəlɪd/',
+          phonetic: ['/ˈɪnvəlɪd/'],
           meaning: 'A malformed fixture entry.',
           concept: 'The example_sentences field is not valid JSON.',
           example_sentences: 'not json'
@@ -121,7 +121,7 @@ export async function startVocabularyServer(): Promise<VocabularyServer> {
       const meaning = MEANINGS[data.term] ?? MEANINGS.apple
       const result = {
         term: data.term,
-        phonetic: meaning.ipa,
+        phonetic: [meaning.ipa],
         meaning: english ? meaning.en : meaning.zh,
         concept: english
           ? 'The fruit as everyday food in shopping and meals.'

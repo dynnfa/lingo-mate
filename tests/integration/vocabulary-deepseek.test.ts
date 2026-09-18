@@ -89,7 +89,7 @@ describe.each(['tool', 'text', 'sql'] as const)(
                         arguments: JSON.stringify({
                           ...(responseKind === 'sql' ? { sql: 'DELETE FROM vocabulary' } : {}),
                           term: 'apple',
-                          phonetic: '/ˈæpəl/',
+                          phonetic: ['/ˈæpəl/'],
                           meaning: 'A round fruit.',
                           concept: 'A fruit eaten as food.',
                           example_sentences: ['I ate an apple.']

@@ -5,7 +5,7 @@ import { content } from '../../core/learning/vocabulary/__tests__/fixtures'
 
 describe('vocabulary Excel', () => {
   it('round trips complete content as strings and leaves legacy NULL fields blank', async () => {
-    const data = content('apple', { meaning: '=1+1' })
+    const data = content('apple', { meaning: '=1+1', phonetic: ['/riːd/', '/rɛd/'] })
     const bytes = await encodeVocabularyExcel(
       [data, { term: 'old', phonetic: null, meaning: null, concept: null, exampleSentences: null }],
       'en'
@@ -22,7 +22,7 @@ describe('vocabulary Excel', () => {
     ])
     expect(rows[1].cells).toEqual([
       'apple',
-      data.phonetic,
+      data.phonetic.join('\n'),
       '=1+1',
       data.concept,
       data.exampleSentences[0],
@@ -101,4 +101,22 @@ it('bounds XML coordinates even with single quotes and escaped attribute values'
   await expect(decodeVocabularyExcel(Buffer.from(workbook))).rejects.toMatchObject({
     code: 'LIMIT_EXCEEDED'
   })
+})
+
+it('round trips multiple phonetics through Excel export and import confirmation', async () => {
+  const { VocabularyTransferService } =
+    await import('../../core/learning/vocabulary/vocabulary-transfer')
+  const { memoryRepository } = await import('../../core/learning/vocabulary/__tests__/fixtures')
+  const repository = memoryRepository()
+  const service = new VocabularyTransferService(repository, () => {
+    throw new Error('No LLM needed')
+  })
+  const phonetic = ['/riːd/', '[rɛd]']
+  const rows = await decodeVocabularyExcel(
+    await encodeVocabularyExcel([content('read', { phonetic })], 'en')
+  )
+  const preview = service.preview(1, rows)
+  expect(preview.issues).toEqual([])
+  service.confirm(1, preview.importId)
+  expect(repository.find('read')?.phonetic).toEqual(phonetic)
 })

@@ -163,7 +163,11 @@ export function VocabularyDetail(): React.JSX.Element {
                 {list.entries.map((entry) => (
                   <tr key={entry.id}>
                     <td className="vocabulary-cell-term">{entry.term}</td>
-                    <td className="vocabulary-cell-phonetic">{missing(entry.phonetic)}</td>
+                    <td className="vocabulary-cell-phonetic">
+                      {entry.phonetic
+                        ? entry.phonetic.map((phonetic, index) => <div key={index}>{phonetic}</div>)
+                        : missing()}
+                    </td>
                     <td className="vocabulary-cell-prewrap">{missing(entry.meaning)}</td>
                     <td className="vocabulary-cell-prewrap">{missing(entry.concept)}</td>
                     <td className="vocabulary-cell-examples">
