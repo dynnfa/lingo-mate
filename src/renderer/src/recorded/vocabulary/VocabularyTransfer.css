@@ -1,0 +1,54 @@
+.vocabulary-transfer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.vocabulary-transfer button {
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-message);
+  border-radius: 6px;
+  background: var(--color-surface-secondary);
+  color: inherit;
+  cursor: pointer;
+}
+.vocabulary-transfer button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.vocabulary-transfer button[aria-pressed='true'] {
+  border-color: #397caa;
+}
+.vocabulary-transfer .confirm-card {
+  width: min(760px, calc(100vw - 48px));
+  max-height: calc(100vh - 64px);
+  overflow: hidden;
+}
+.vocabulary-import-panel {
+  overflow-y: auto;
+  min-height: 0;
+  font-size: 13px;
+  display: grid;
+  gap: 12px;
+}
+.vocabulary-import-panel p {
+  margin: 0;
+}
+.vocabulary-import-modes {
+  display: flex;
+  gap: 12px;
+}
+.vocabulary-import-panel textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 10px;
+  font: inherit;
+}
+.vocabulary-import-results {
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding-left: 24px;
+  overflow-wrap: anywhere;
+}

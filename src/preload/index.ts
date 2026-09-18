@@ -1,3 +1,14 @@
+import {
+  VOCABULARY_TRANSFER_CHANNELS as VT,
+  confirmImportSchema,
+  startImportSchema,
+  taskInputSchema,
+  cancelImportSchema,
+  fileResultSchema,
+  previewResultSchema,
+  taskResultSchema,
+  importTaskSchema
+} from '../shared/vocabulary-transfer'
 import { contextBridge, ipcRenderer } from 'electron'
 import {
   cancelMessageInputSchema,
@@ -157,6 +168,43 @@ const api: LingoMateApi = {
     }
   },
   vocabulary: {
+    async downloadTemplate() {
+      return fileResultSchema.parse(await ipcRenderer.invoke(VT.template))
+    },
+    async exportExcel() {
+      return fileResultSchema.parse(await ipcRenderer.invoke(VT.export))
+    },
+    async previewExcel() {
+      return previewResultSchema.parse(await ipcRenderer.invoke(VT.preview))
+    },
+    async confirmExcel(input) {
+      return taskResultSchema.parse(
+        await ipcRenderer.invoke(VT.confirm, confirmImportSchema.parse(input))
+      )
+    },
+    async startImport(input) {
+      return taskResultSchema.parse(
+        await ipcRenderer.invoke(VT.start, startImportSchema.parse(input))
+      )
+    },
+    async getImportTask(input) {
+      return taskResultSchema.parse(await ipcRenderer.invoke(VT.task, taskInputSchema.parse(input)))
+    },
+    async cancelImport(input) {
+      return taskResultSchema.parse(
+        await ipcRenderer.invoke(VT.cancel, cancelImportSchema.parse(input))
+      )
+    },
+    onImportProgress(listener) {
+      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
+        const parsed = importTaskSchema.safeParse(raw)
+        if (parsed.success) listener(parsed.data)
+      }
+      ipcRenderer.on(VT.event, handler)
+      return () => {
+        ipcRenderer.removeListener(VT.event, handler)
+      }
+    },
     async list(rawInput) {
       const input = listVocabularyInputSchema.parse(rawInput)
       const result: unknown = await ipcRenderer.invoke(VOCABULARY_CHANNELS.list, input)

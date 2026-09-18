@@ -71,14 +71,25 @@ test('exposes the conversation skill and preferences interfaces from the sandbox
       )
       expect(exposedUsageKeys).toEqual(['getOverview'])
 
-      // 词汇窄接口：只暴露列表与删除，不暴露通用 invoke 或任意 SQL
+      // 词汇窄接口：列表、删除与受控导入导出，不暴露通用 invoke、文件路径或任意 SQL
       const exposedVocabularyKeys = await window.evaluate(() =>
         Object.keys(
           (globalThis as typeof globalThis & { api?: { vocabulary?: object } }).api?.vocabulary ??
             {}
         ).sort()
       )
-      expect(exposedVocabularyKeys).toEqual(['delete', 'list'])
+      expect(exposedVocabularyKeys).toEqual([
+        'cancelImport',
+        'confirmExcel',
+        'delete',
+        'downloadTemplate',
+        'exportExcel',
+        'getImportTask',
+        'list',
+        'onImportProgress',
+        'previewExcel',
+        'startImport'
+      ])
 
       // 短语窄接口：只暴露列表与删除，不暴露通用 invoke 或任意 SQL
       const exposedPhraseKeys = await window.evaluate(() =>
