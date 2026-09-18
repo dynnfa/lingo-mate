@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { VocabularyTransferService } from '../vocabulary-transfer'
 import { VOCABULARY_COLUMNS } from '../../../../shared/vocabulary-transfer'
 import { insertResult, memoryRepository } from './fixtures'
+import { VocabularyError } from '../parse-vocabulary-input'
 const excel = (terms: string[]): { row: number; cells: string[] }[] => [
   { row: 1, cells: [...VOCABULARY_COLUMNS] },
   ...terms.map((term, i) => ({
@@ -222,4 +223,23 @@ it('reports oversized serialized examples during preview before confirmation', (
   })
   expect(() => service.confirm(1, preview.importId)).toThrow('INVALID_INPUT')
   expect(repository.commands).toHaveLength(0)
+})
+
+it('reports the storage failure cause through the log sink instead of dropping it', () => {
+  const repository = memoryRepository()
+  const failure = new VocabularyError('STORAGE_FAILED', { cause: new Error('disk full') })
+  repository.saveBatch = vi.fn(() => {
+    throw failure
+  })
+  const logged: unknown[] = []
+  const service = new VocabularyTransferService(
+    repository,
+    () => ({ analyze: vi.fn() }),
+    () => 0,
+    (error) => logged.push(error)
+  )
+  const preview = service.preview(1, excel(['apple']))
+  const task = service.confirm(1, preview.importId)
+  expect(task).toMatchObject({ phase: 'failed', counts: { saved: 0, failed: 1 } })
+  expect(logged).toEqual([failure])
 })

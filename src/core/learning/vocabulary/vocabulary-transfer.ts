@@ -48,7 +48,9 @@ export class VocabularyTransferService {
   constructor(
     private readonly repository: Pick<VocabularyRepository, 'findExisting' | 'saveBatch'>,
     private readonly createAnalyzer: () => VocabularyAnalyzer,
-    private readonly now = Date.now
+    private readonly now = Date.now,
+    // 跨进程只回传安全错误码；原始原因交由主进程日志定位。
+    private readonly log: (error: unknown) => void = () => {}
   ) {}
 
   getTask(owner: number, requestId?: string): ImportTask | null {
@@ -334,7 +336,8 @@ export class VocabularyTransferService {
       rows.forEach((row, i) => {
         row.status = results[i].status
       })
-    } catch {
+    } catch (error) {
+      this.log(error)
       rows.forEach((row) => {
         row.status = 'failed'
         row.code = 'STORAGE_FAILED'

@@ -26,6 +26,7 @@ import { createPhraseFeedbackFormatter } from './phrase-feedback'
 import type { ConversationSkill } from '../core/conversation/conversation-skill'
 import type { ConversationSkillId } from '../shared/conversation'
 import { app, shell, BrowserWindow } from 'electron'
+import log from 'electron-log/main'
 import { join } from 'path'
 import { pathToFileURL } from 'node:url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -209,20 +210,25 @@ app.whenReady().then(() => {
     registerTrustedHandler
   )
   disposeVocabularyTransfer = registerVocabularyTransferIpc(
-    new VocabularyTransferService(vocabularyRepository, () => {
-      try {
-        return new LlmVocabularyAnalyzer(modelsService.resolveSnapshot(), 30_000, createLlmClient)
-      } catch (cause) {
-        throw new TransferError(
-          cause instanceof ModelNotConfiguredError
-            ? 'MODEL_NOT_CONFIGURED'
-            : cause instanceof ModelConfigValidationError &&
-                cause.code === 'CREDENTIAL_DECRYPT_FAILED'
-              ? 'CREDENTIAL_DECRYPT_FAILED'
-              : 'MODEL_ERROR'
-        )
-      }
-    }),
+    new VocabularyTransferService(
+      vocabularyRepository,
+      () => {
+        try {
+          return new LlmVocabularyAnalyzer(modelsService.resolveSnapshot(), 30_000, createLlmClient)
+        } catch (cause) {
+          throw new TransferError(
+            cause instanceof ModelNotConfiguredError
+              ? 'MODEL_NOT_CONFIGURED'
+              : cause instanceof ModelConfigValidationError &&
+                  cause.code === 'CREDENTIAL_DECRYPT_FAILED'
+                ? 'CREDENTIAL_DECRYPT_FAILED'
+                : 'MODEL_ERROR'
+          )
+        }
+      },
+      Date.now,
+      (error) => log.error('Vocabulary import commit failed:', error)
+    ),
     createVocabularyTransferFiles(() => vocabularyRepository.exportAll()),
     () => resolveLanguages().outputLanguage,
     registerTrustedHandler
