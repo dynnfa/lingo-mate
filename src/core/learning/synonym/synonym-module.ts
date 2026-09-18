@@ -10,14 +10,17 @@ import type { SynonymAnalyzer } from './synonym-analyzer'
 import { parseSynonymInput, SynonymError, type SynonymInputItem } from './parse-synonym-input'
 import { SynonymToolExecutor } from '../../tools/synonym-tools'
 import { abortableSynonymOperation } from './abortable-operation'
-import { reportSynonymFailure } from './synonym-diagnostics'
+import { summarizeSynonymFailure } from './synonym-diagnostics'
+import { noopCoreDiagnostics, type CoreDiagnostics } from '../../error-diagnostics'
 
 export class SynonymModule {
   private queue: Promise<unknown> = Promise.resolve()
   constructor(
     private readonly repository: SynonymRepository,
     private readonly createAnalyzer: (timeoutMs: number) => SynonymAnalyzer,
-    private readonly wordMs = 60000
+    private readonly wordMs = 60000,
+    // 单词失败经诊断接口上报脱敏后的 cause 链；默认丢弃，Main 装配时注入。
+    private readonly diagnostics: CoreDiagnostics = noopCoreDiagnostics
   ) {}
   async addBatch(input: ConversationSkillRunInput): Promise<SynonymBatch> {
     const items = parseSynonymInput(input.arguments.text)
@@ -144,7 +147,15 @@ export class SynonymModule {
           results[item.inputIndex].status !== 'existing'
         ) {
           const code = cause instanceof SynonymError ? cause.code : 'MODEL_ERROR'
-          if (code !== 'CANCELLED') reportSynonymFailure(cause)
+          if (code !== 'CANCELLED') {
+            this.diagnostics.report({
+              module: 'synonym',
+              operation: 'word',
+              code,
+              message: 'synonym word analysis failed',
+              context: { chain: summarizeSynonymFailure(cause) }
+            })
+          }
           results[item.inputIndex] =
             code === 'CANCELLED'
               ? { ...base, status: 'cancelled' }

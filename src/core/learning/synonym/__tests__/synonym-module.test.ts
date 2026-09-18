@@ -27,52 +27,70 @@ function repository(): SynonymRepository {
 }
 describe('synonym batch interruption', () => {
   it('diagnoses the original storage cause without leaking it into logs or reports', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
-    try {
-      const underlying = Object.assign(new Error('secret word and API key'), {
-        code: 'SQLITE_CONSTRAINT_FOREIGNKEY'
-      })
-      const storage = repository()
-      const module = new SynonymModule(storage, () => ({
+    const entries: Array<Record<string, unknown>> = []
+    const underlying = Object.assign(new Error('secret word and API key'), {
+      code: 'SQLITE_CONSTRAINT_FOREIGNKEY'
+    })
+    const storage = repository()
+    const module = new SynonymModule(
+      storage,
+      () => ({
         analyze: async () => {
           throw new SynonymError('STORAGE_FAILED', { cause: underlying })
         }
-      }))
-      const report = await module.addBatch(input(new AbortController(), 'adequate'))
-      expect(log).toHaveBeenCalledWith('[synonym] WORD_FAILED', [
-        { type: 'SynonymError', code: 'STORAGE_FAILED' },
-        { type: 'Error', code: 'SQLITE_CONSTRAINT_FOREIGNKEY' }
-      ])
-      expect(report.items[0]).toEqual({
-        inputIndex: 0,
-        input: 'adequate',
-        word: 'adequate',
-        status: 'failed',
-        code: 'STORAGE_FAILED'
+      }),
+      60000,
+      {
+        report: (entry) => {
+          entries.push(entry as unknown as Record<string, unknown>)
+        }
+      }
+    )
+    const report = await module.addBatch(input(new AbortController(), 'adequate'))
+    expect(entries).toEqual([
+      expect.objectContaining({
+        module: 'synonym',
+        code: 'STORAGE_FAILED',
+        context: {
+          chain: [
+            { type: 'SynonymError', code: 'STORAGE_FAILED' },
+            { type: 'Error', code: 'SQLITE_CONSTRAINT_FOREIGNKEY' }
+          ]
+        }
       })
-      expect(
-        JSON.stringify([log.mock.calls, report, vi.mocked(storage.saveReport).mock.calls])
-      ).not.toContain('secret')
-    } finally {
-      log.mockRestore()
-    }
+    ])
+    expect(report.items[0]).toEqual({
+      inputIndex: 0,
+      input: 'adequate',
+      word: 'adequate',
+      status: 'failed',
+      code: 'STORAGE_FAILED'
+    })
+    expect(
+      JSON.stringify([entries, report, vi.mocked(storage.saveReport).mock.calls])
+    ).not.toContain('secret')
   })
 
   it('does not diagnose ordinary cancellation as a failure', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
-    try {
-      const module = new SynonymModule(repository(), () => ({
+    const entries: Array<Record<string, unknown>> = []
+    const module = new SynonymModule(
+      repository(),
+      () => ({
         analyze: async () => {
           throw new SynonymError('CANCELLED')
         }
-      }))
-      expect(
-        (await module.addBatch(input(new AbortController(), 'adequate'))).items[0].status
-      ).toBe('cancelled')
-      expect(log).not.toHaveBeenCalled()
-    } finally {
-      log.mockRestore()
-    }
+      }),
+      60000,
+      {
+        report: (entry) => {
+          entries.push(entry as unknown as Record<string, unknown>)
+        }
+      }
+    )
+    expect((await module.addBatch(input(new AbortController(), 'adequate'))).items[0].status).toBe(
+      'cancelled'
+    )
+    expect(entries).toHaveLength(0)
   })
   it('cancels a queued batch immediately without calling its model', async () => {
     const active = new AbortController()
