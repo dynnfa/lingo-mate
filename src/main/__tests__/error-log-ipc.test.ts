@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ErrorLogger } from '../error-logger'
-import { createErrorLogger } from '../error-logger'
+import { createErrorLogger, createIpcGuardDiagnostics } from '../error-logger'
 import { registerErrorReportIpc } from '../error-log-ipc'
 import { createTrustedHandlerRegistrar } from '../ipc-guard'
 import { ERROR_LOG_CHANNELS } from '../../shared/error-report'
@@ -15,22 +15,28 @@ const NOW = new Date('2026-09-18T12:00:00')
 
 let temporaryRoot = ''
 let logger: ErrorLogger
+let currentTime: number
 
 beforeEach(() => {
   resetIpcMocks()
+  currentTime = NOW.getTime()
   temporaryRoot = mkdtempSync(join(tmpdir(), 'error-log-ipc-'))
   logger = createErrorLogger(join(temporaryRoot, 'logs'), { now: () => NOW })
-  const register = createTrustedHandlerRegistrar({
-    rendererUrl: 'file:///app/renderer/index.html'
-  })
+  const register = createTrustedHandlerRegistrar(
+    {
+      rendererUrl: 'file:///app/renderer/index.html'
+    },
+    createIpcGuardDiagnostics(logger)
+  )
   registerErrorReportIpc(logger, register, {
     maxReports: 3,
     windowMs: 10_000,
-    now: () => NOW.getTime()
+    now: () => currentTime
   })
 })
 
-afterEach(() => {
+afterEach(async () => {
+  await logger.flush()
   rmSync(temporaryRoot, { recursive: true, force: true })
 })
 
@@ -76,10 +82,10 @@ describe('error report ipc', () => {
     expect((entries[0]['error'] as Record<string, unknown>)['stack']).toContain('component crashed')
   })
 
-  it('rejects schema-invalid reports without writing anything', async () => {
+  it('rejects schema-invalid reports and logs only safe metadata', async () => {
     const result = report({ source: 'main', message: 'spoofed source' })
     expect(result).toEqual({ status: 'error', error: { code: 'INVALID_REPORT' } })
-    expect(await readEntries()).toHaveLength(0)
+    expect(await readEntries()).toMatchObject([{ level: 'warn', operation: 'invalid-input' }])
   })
 
   it('rejects oversized payloads before serialization', async () => {
@@ -111,6 +117,38 @@ describe('error report ipc', () => {
     expect(warn).toMatchObject({ level: 'warn', code: 'RATE_LIMITED' })
     const text = JSON.stringify(entries)
     expect(text).not.toContain('one too many')
+  })
+
+  it('counts invalid reports against the same budget before validation diagnostics', async () => {
+    const sender = new FakeSender()
+    for (let i = 0; i < 50; i += 1) {
+      report({ source: 'renderer', message: 'x'.repeat(2001) }, sender)
+    }
+    expect(report({ source: 'renderer', message: 'valid but over budget' }, sender)).toEqual({
+      status: 'error',
+      error: { code: 'RATE_LIMITED' }
+    })
+    const entries = await readEntries()
+    expect(entries).toHaveLength(4)
+    expect(entries.filter((entry) => entry.operation === 'invalid-input')).toHaveLength(3)
+    expect(entries.filter((entry) => entry.code === 'RATE_LIMITED')).toHaveLength(1)
+    expect(JSON.stringify(entries)).not.toContain('x'.repeat(100))
+  })
+
+  it('bounds untrusted-source diagnostics and restores the budget after the window', async () => {
+    const sender = new FakeSender()
+    sender.owned = false
+    for (let i = 0; i < 50; i += 1) {
+      expect(report({ source: 'renderer', message: 'untrusted' }, sender)).toMatchObject({
+        status: 'error',
+        error: { code: 'UNTRUSTED_SOURCE' }
+      })
+    }
+    expect(await readEntries()).toHaveLength(4)
+    currentTime += 10_000
+    sender.owned = true
+    expect(report({ source: 'renderer', message: 'recovered' }, sender)).toEqual({ status: 'ok' })
+    expect(await readEntries()).toHaveLength(5)
   })
 
   it('tracks rate limits per sender', () => {

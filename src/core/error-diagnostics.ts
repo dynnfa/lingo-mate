@@ -7,6 +7,7 @@ export interface CoreDiagnosticEntry {
   level?: CoreDiagnosticLevel
   module: string
   operation: string
+  requestId?: string
   code?: string
   message: string
   error?: unknown

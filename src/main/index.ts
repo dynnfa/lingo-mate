@@ -19,7 +19,7 @@ import { VocabularyConversationSkill } from '../core/learning/vocabulary/vocabul
 import { PhraseConversationSkill } from '../core/learning/phrase/phrase-conversation-skill'
 import { LlmVocabularyAnalyzer } from '../core/llm/llm-vocabulary-analyzer'
 import { LlmPhraseAnalyzer } from '../core/llm/llm-phrase-analyzer'
-import { LlmClient, type CreateLlmClient } from '../core/llm/llm-client'
+import { createLlmClientFactory } from './llm-client-factory'
 import { LlmUsageRecorder } from '../core/llm/llm-usage-recorder'
 import { createVocabularyFeedbackFormatter } from './vocabulary-feedback'
 import { createPhraseFeedbackFormatter } from './phrase-feedback'
@@ -188,7 +188,7 @@ app.whenReady().then(() => {
   llmUsageRepository.markInterruptedStarted()
   const coreDiagnostics = createCoreDiagnostics(errorLogger)
   const llmUsageRecorder = new LlmUsageRecorder(llmUsageRepository, coreDiagnostics)
-  const createLlmClient: CreateLlmClient = (config) => new LlmClient(config, llmUsageRecorder)
+  const createLlmClient = createLlmClientFactory(errorLogger, llmUsageRecorder)
 
   // 用量统计按系统本地时区归属自然日/周；时区每次查询读取，
   // 系统时区改变后下次查询按新时区重新归属历史记录。
@@ -430,7 +430,8 @@ app.whenReady().then(() => {
     conversationRepository,
     resolveLanguages,
     conversationSkills,
-    conversationRepository
+    conversationRepository,
+    coreDiagnostics
   )
   registerConversationIpc(conversationModule, registerTrustedHandler)
 

@@ -18,11 +18,6 @@ export interface ErrorReportIpcOptions {
 const DEFAULT_MAX_REPORTS = 30
 const DEFAULT_WINDOW_MS = 10_000
 
-interface RateLimitState {
-  timestamps: number[]
-  warnedAt: number
-}
-
 /**
  * 注册 Renderer/Preload 的受限错误上报入口。复用 IPC 守卫的可信来源校验
  * 与输入 schema；Main 生成时间戳，不信任载荷里的任何身份或路径字段。
@@ -33,44 +28,20 @@ export function registerErrorReportIpc(
   register: RegisterTrustedHandler,
   options: ErrorReportIpcOptions = {}
 ): () => void {
-  const maxReports = options.maxReports ?? DEFAULT_MAX_REPORTS
-  const windowMs = options.windowMs ?? DEFAULT_WINDOW_MS
-  const now = options.now ?? (() => Date.now())
-  const limits = new Map<number, RateLimitState>()
-
-  const isRateLimited = (senderId: number): boolean => {
-    const state = limits.get(senderId) ?? { timestamps: [], warnedAt: 0 }
-    const at = now()
-    state.timestamps = state.timestamps.filter((stamp) => at - stamp < windowMs)
-    if (state.timestamps.length >= maxReports) {
-      limits.set(senderId, state)
-      // 限频本身也限频告警：一个窗口内最多记录一次，且只含安全元信息。
-      if (at - state.warnedAt >= windowMs) {
-        state.warnedAt = at
-        logger.log({
-          level: 'warn',
-          source: 'renderer',
-          module: 'error-report',
-          operation: 'rate-limit',
-          code: 'RATE_LIMITED',
-          message: 'renderer error reports exceeded the rate limit and were dropped'
-        })
-      }
-      return true
-    }
-    state.timestamps.push(at)
-    limits.set(senderId, state)
-    return false
-  }
-
   return register({
     channel: ERROR_LOG_CHANNELS.report,
     inputSchema: rendererErrorReportSchema,
+    rateLimit: {
+      maxRequests: options.maxReports ?? DEFAULT_MAX_REPORTS,
+      windowMs: options.windowMs ?? DEFAULT_WINDOW_MS,
+      now: options.now,
+      error: { code: 'RATE_LIMITED' }
+    },
     resultSchema: errorReportResultSchema,
     invalidInputError: () => ({ code: 'INVALID_REPORT' as const }),
     mapError: () => ({ code: 'INVALID_REPORT' as const }),
     fallbackError: { code: 'INVALID_REPORT' },
-    handler: (input: RendererErrorReport, context): z.output<typeof errorReportResultSchema> => {
+    handler: (input: RendererErrorReport): z.output<typeof errorReportResultSchema> => {
       let serialized: string
       try {
         serialized = JSON.stringify(input)
@@ -79,9 +50,6 @@ export function registerErrorReportIpc(
       }
       if (Buffer.byteLength(serialized, 'utf8') > ERROR_REPORT_MAX_BYTES) {
         return { status: 'error', error: { code: 'PAYLOAD_TOO_LARGE' } }
-      }
-      if (isRateLimited(context.sender.id)) {
-        return { status: 'error', error: { code: 'RATE_LIMITED' } }
       }
       try {
         logger.log({
