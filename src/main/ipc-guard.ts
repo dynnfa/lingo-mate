@@ -38,6 +38,12 @@ export interface TrustedHandlerConfig<
   invalidInputError: (issues: readonly ZodIssue[]) => TrustedResultError<z.output<TResultSchema>>
   mapError: (error: unknown) => TrustedResultError<z.output<TResultSchema>>
   fallbackError: TrustedResultError<z.output<TResultSchema>>
+  rateLimit?: {
+    maxRequests: number
+    windowMs: number
+    now?: () => number
+    error: TrustedResultError<z.output<TResultSchema>>
+  }
   handler: (
     input: z.output<TInputSchema>,
     context: TrustedHandlerContext
@@ -54,11 +60,17 @@ export type RegisterTrustedHandler = <
 // 守卫诊断：来源拒绝、输入校验失败、handler 异常、错误映射异常与结果
 // 校验失败在转换为安全返回之前上报原始原因，由公共错误日志落盘。
 export type IpcGuardOperation =
-  'untrusted-source' | 'invalid-input' | 'handler' | 'map-error' | 'result-validation'
+  | 'untrusted-source'
+  | 'invalid-input'
+  | 'handler'
+  | 'map-error'
+  | 'result-validation'
+  | 'rate-limit'
 
 export interface IpcGuardDiagnostic {
   level: 'error' | 'warn'
   operation: IpcGuardOperation
+  code?: string
   message: string
   error?: unknown
   context?: {
@@ -104,6 +116,36 @@ export function createTrustedHandlerRegistrar(
       error: fallbackError
     })
 
+    // 上报入口的预算覆盖所有尝试，包括不可信来源和非法载荷。
+    // WeakMap 随 WebContents 销毁释放状态；不保留页面提交的任何数据。
+    const limits = new WeakMap<WebContents, { timestamps: number[]; warnedAt?: number }>()
+    const rateLimit = config.rateLimit
+    const limitedResult = rateLimit
+      ? registerFixedResult(channel, resultSchema, { status: 'error', error: rateLimit.error })
+      : undefined
+    const isRateLimited = (sender: WebContents): boolean => {
+      if (!rateLimit) return false
+      const at = (rateLimit.now ?? Date.now)()
+      const state = limits.get(sender) ?? { timestamps: [] }
+      state.timestamps = state.timestamps.filter((stamp) => at - stamp < rateLimit.windowMs)
+      limits.set(sender, state)
+      if (state.timestamps.length < rateLimit.maxRequests) {
+        state.timestamps.push(at)
+        return false
+      }
+      if (state.warnedAt === undefined || at - state.warnedAt >= rateLimit.windowMs) {
+        state.warnedAt = at
+        report({
+          level: 'warn',
+          operation: 'rate-limit',
+          code: 'RATE_LIMITED',
+          message: `request rate limit exceeded on ${channel}`,
+          context: { channel }
+        })
+      }
+      return true
+    }
+
     // 动态错误映射的返回值仍按协议校验；映射自身抛错或返回非法结构时
     // 使用已验证的兜底结果，不再递归调用错误映射。
     const errorResultFrom = (produceError: () => unknown): z.output<typeof resultSchema> => {
@@ -147,9 +189,11 @@ export function createTrustedHandlerRegistrar(
       event: IpcMainInvokeEvent,
       rawInput: unknown
     ): z.output<typeof resultSchema> | Promise<z.output<typeof resultSchema>> => {
-      // 执行顺序：来源检查 → 输入 safeParse → 调用 handler → 结果校验。
+      // 执行顺序：来源检查 → 可选请求限流 → 输入 safeParse → handler → 结果校验。
       // 来源检查必须先于输入解析和服务调用。
-      if (!isTrustedSource(event, rendererUrl)) {
+      const trustedSource = isTrustedSource(event, rendererUrl)
+      if (isRateLimited(event.sender)) return trustedSource ? limitedResult! : untrustedResult
+      if (!trustedSource) {
         // 拒绝请求只记录安全元信息（channel），不含载荷内容。
         report({
           level: 'warn',

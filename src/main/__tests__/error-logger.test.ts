@@ -81,6 +81,24 @@ describe('error logger directory and per-day routing', () => {
     expect(String(readLines(directory, '2026-09-19.log')[0]['timestamp'])).toMatch(timestampPattern)
   })
 
+  it('routes queued entries by event time even when the queue drains after midnight', async () => {
+    const directory = join(temporaryRoot, 'logs')
+    const clock = clockAt('2026-09-18T23:59:59')
+    const logger = createErrorLogger(directory, { now: clock.now })
+    logger.log({ source: 'main', message: 'first' })
+    logger.log({ source: 'main', message: 'queued before midnight' })
+    clock.advanceTo('2026-09-19T00:00:01')
+    logger.log({ source: 'main', message: 'after midnight' })
+    await logger.flush()
+    expect(readLines(directory, '2026-09-18.log').map((entry) => entry.message)).toEqual([
+      'first',
+      'queued before midnight'
+    ])
+    expect(readLines(directory, '2026-09-19.log').map((entry) => entry.message)).toEqual([
+      'after midnight'
+    ])
+  })
+
   it('appends on restart without truncating earlier content', async () => {
     const directory = join(temporaryRoot, 'logs')
     const first = createErrorLogger(directory, { now: clockAt('2026-09-18T08:00:00').now })
@@ -126,6 +144,37 @@ describe('error logger directory and per-day routing', () => {
 
 describe('error logger serialization', () => {
   const now = clockAt('2026-09-18T12:00:00').now
+
+  it('redacts registered secrets in metadata, error names and object keys', async () => {
+    const directory = join(temporaryRoot, 'logs')
+    const logger = createErrorLogger(directory, { now })
+    const secret = 'sk-metadata-secret'
+    logger.registerSecret(secret)
+    const error = new Error(secret)
+    Object.defineProperty(error, 'name', { value: secret })
+    Object.assign(error, { [secret]: secret })
+    logger.log({
+      source: 'main',
+      module: secret,
+      operation: secret,
+      code: secret,
+      requestId: secret,
+      message: secret,
+      error,
+      context: { [secret]: secret }
+    })
+    await logger.flush()
+    const entries = readLines(directory, '2026-09-18.log')
+    expect(entries).toHaveLength(1)
+    expect(JSON.stringify(entries)).not.toContain(secret)
+    expect(entries[0]).toMatchObject({
+      module: '[REDACTED]',
+      operation: '[REDACTED]',
+      code: '[REDACTED]',
+      requestId: '[REDACTED]',
+      error: { name: '[REDACTED]' }
+    })
+  })
 
   it('serializes error name, message, stack and nested cause chain', async () => {
     const directory = join(temporaryRoot, 'logs')

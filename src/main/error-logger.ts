@@ -161,7 +161,7 @@ export function createErrorLogger(
     seen.add(value)
     const sanitized: Record<string, unknown> = {}
     for (const [key, item] of Object.entries(value)) {
-      sanitized[key] = SENSITIVE_KEY_PATTERN.test(key)
+      sanitized[sanitizeText(key)] = SENSITIVE_KEY_PATTERN.test(key)
         ? REDACTED
         : sanitizeValue(item, depth + 1, seen)
     }
@@ -173,13 +173,13 @@ export function createErrorLogger(
     if (seen.has(error)) return '[Circular]'
     seen.add(error)
     const serialized: Record<string, unknown> = {
-      name: error.name,
+      name: sanitizeText(error.name),
       message: sanitizeText(error.message)
     }
     if (typeof error.stack === 'string') serialized['stack'] = sanitizeText(error.stack)
     for (const [key, item] of Object.entries(error)) {
       if (key === 'cause' || key === 'errors' || key === 'message' || key === 'stack') continue
-      serialized[key] = SENSITIVE_KEY_PATTERN.test(key)
+      serialized[sanitizeText(key)] = SENSITIVE_KEY_PATTERN.test(key)
         ? REDACTED
         : sanitizeValue(item, depth, seen)
     }
@@ -217,16 +217,16 @@ export function createErrorLogger(
     return `${formatLocalDate(at)}T${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}:${String(at.getSeconds()).padStart(2, '0')}.${String(at.getMilliseconds()).padStart(3, '0')}${sign}${hh}:${mm}`
   }
 
-  const serializeEntry = (entry: ErrorLogEntry): string => {
+  const serializeEntry = (entry: ErrorLogEntry, at: Date): string => {
     const seen = new Set<object>()
     const record: Record<string, unknown> = {
-      timestamp: formatLocalTimestamp(now()),
+      timestamp: formatLocalTimestamp(at),
       level: entry.level ?? 'error',
       source: entry.source
     }
-    if (entry.module !== undefined) record['module'] = entry.module
-    if (entry.operation !== undefined) record['operation'] = entry.operation
-    if (entry.code !== undefined) record['code'] = entry.code
+    if (entry.module !== undefined) record['module'] = sanitizeText(entry.module)
+    if (entry.operation !== undefined) record['operation'] = sanitizeText(entry.operation)
+    if (entry.code !== undefined) record['code'] = sanitizeText(entry.code)
     record['message'] = sanitizeText(entry.message)
     if (entry.error !== undefined) {
       record['error'] =
@@ -235,7 +235,7 @@ export function createErrorLogger(
           : sanitizeValue(entry.error, 0, seen)
     }
     if (entry.context !== undefined) record['context'] = sanitizeValue(entry.context, 0, seen)
-    if (entry.requestId !== undefined) record['requestId'] = entry.requestId
+    if (entry.requestId !== undefined) record['requestId'] = sanitizeText(entry.requestId)
 
     // 超过单条上限时按明确降级顺序收缩：先丢 context，再收缩 error，
     // 每步都留下 truncated 标记。
@@ -262,22 +262,22 @@ export function createErrorLogger(
 
   const filePathFor = (at: Date): string => join(directory, `${formatLocalDate(at)}.log`)
 
-  const appendLineSync = (line: string): void => {
+  const appendLineSync = (path: string, line: string): void => {
     try {
       ensureDirectory()
-      appendFileSync(filePathFor(now()), line, { encoding: 'utf8', mode: LOG_FILE_MODE })
+      appendFileSync(path, line, { encoding: 'utf8', mode: LOG_FILE_MODE })
     } catch {
       reportSelfFailure('WRITE_FAILED')
     }
   }
 
   // 串行队列：并发 log() 只入队，由单一 drain 循环逐条追加，避免行交错。
-  const queue: string[] = []
+  const queue: Array<{ path: string; line: string }> = []
   let draining: Promise<void> | null = null
 
-  const appendLine = async (line: string): Promise<void> => {
+  const appendLine = async ({ path, line }: { path: string; line: string }): Promise<void> => {
     try {
-      await appendFile(filePathFor(now()), line, { encoding: 'utf8', mode: LOG_FILE_MODE })
+      await appendFile(path, line, { encoding: 'utf8', mode: LOG_FILE_MODE })
     } catch {
       reportSelfFailure('WRITE_FAILED')
     }
@@ -306,7 +306,8 @@ export function createErrorLogger(
     },
     log(entry: ErrorLogEntry): void {
       try {
-        queue.push(serializeEntry(entry))
+        const at = now()
+        queue.push({ path: filePathFor(at), line: serializeEntry(entry, at) })
         scheduleDrain()
       } catch {
         reportSelfFailure('SERIALIZE_FAILED')
@@ -314,7 +315,8 @@ export function createErrorLogger(
     },
     logSync(entry: ErrorLogEntry): void {
       try {
-        appendLineSync(serializeEntry(entry))
+        const at = now()
+        appendLineSync(filePathFor(at), serializeEntry(entry, at))
       } catch {
         reportSelfFailure('SERIALIZE_FAILED')
       }
@@ -384,6 +386,7 @@ export function createCoreDiagnostics(logger: ErrorLogger): CoreDiagnostics {
         source: 'core',
         module: entry.module,
         operation: entry.operation,
+        requestId: entry.requestId,
         code: entry.code,
         message: entry.message,
         error: entry.error,
@@ -402,6 +405,7 @@ export function createIpcGuardDiagnostics(logger: ErrorLogger): IpcGuardDiagnost
         source: 'main',
         module: 'ipc-guard',
         operation: diagnostic.operation,
+        code: diagnostic.code,
         message: diagnostic.message,
         error: diagnostic.error,
         context: diagnostic.context

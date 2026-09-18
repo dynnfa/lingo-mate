@@ -137,7 +137,7 @@
 | React 渲染异常（原无边界） | 可用 | `ErrorBoundary` + i18n 回退 UI | 已接入 |
 | Main uncaughtException/unhandledRejection（原缺失） | 可用 | `installProcessErrorHandlers` | 已接入（前者同步写入后非零退出） |
 | 窗口 loadURL/render-process-gone、child-process-gone（原缺失） | 可用 | Main：`window/*`、`process/child-process-gone` | 已接入 |
-| LLM 客户端/流式失败、各分析器 | 领域错误透传或折叠为安全码 | 由 IPC 守卫在 handler 抛出时记录；业务返回的失败结果已在 UI 呈现且带错误码，不重复记录 | 明确不另接入 |
+| 对话流式失败、后台标题、技能执行与回复重试 | 转换前异常及 cause | ConversationModule 在内部捕获处记录并携带 requestId；继续抛给 IPC 的异常仅由守卫记录 | 已接入 |
 | 主动取消（CANCELLED/abort） | — | — | 明确不记录（符合约定） |
 
 无法采集的情况：进程被强杀、系统崩溃、磁盘不可写时无法保证落盘（写入失败仅输出限频诊断码）。
@@ -148,6 +148,17 @@
 - `pnpm test:electron` 42 项全部通过，含新增 `tests/e2e/error-logging.test.ts`（启动建目录、Renderer 全局异常上报落盘为可解析 JSONL、无日志读取接口）与更新后的 `tests/e2e/preload.test.ts` 键清单。
 - 跨模块集成 `tests/integration/error-log.test.ts`：守卫/Core 诊断/AI 导入三类来源写入同一按天文件，守卫条目保留映射前原始 message/stack。
 - 实施中发现并修复：will-quit 内二次 `app.quit()` 不会重启退出序列导致进程悬挂，改为 flush 有界等待后 `app.exit(0)`（e2e 验证 65ms 内干净退出）。
+
+## Review 修复（2026-09-18）
+
+- 对话后台任务在安全错误转换前保留原始原因；主动取消不记错，取消状态持久化失败仍记录；诊断自身失败不改变任务终态。
+- 统一客户端工厂在构造前登记当前请求密钥，保留旧密钥以覆盖在途请求；覆盖对话、学习任务及草稿/已保存连接测试。
+- 元数据、错误 name、对象键名均经过统一脱敏。
+- 入队时固定事件时间与目标文件，排队跨午夜不会错档。
+- 上报限流前移到 IPC 守卫，非法载荷与来源拒绝共享预算；拒绝告警受限，窗口过后恢复。
+- 验证结果：`pnpm lint`、`pnpm typecheck`、`pnpm build` 通过；`pnpm test` 115 个文件 / 1332 项全部通过。
+- Electron：全量运行原有 42 项通过；新增用例最初因 preload 提前校验而未到达 Main，改用超大 context 后，`pnpm exec playwright test tests/e2e/error-logging.test.ts` 两项通过（含新增限流用例），43 项均已验证。测试使用临时 userData 和假模型服务；首次沙箱运行受回环端口及桌面进程权限限制，获准后重跑。
+- 回归覆盖：排队跨午夜、元数据与对象键脱敏、客户端构造前登记及旧密钥保留、对话失败原始原因与安全终态、取消不记错、诊断故障隔离、非法载荷/来源拒绝限流与窗口恢复。
 
 ## 验收标准
 

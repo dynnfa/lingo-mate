@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ConversationEvent, ConversationSummary } from '../../../shared/conversation'
 import { conversationEventSchema } from '../../../shared/conversation'
 import type { LanguageModel, ModelStreamEvent, StreamReplyInput } from '../../llm/language-model'
@@ -484,31 +484,88 @@ describe('ConversationModule', () => {
       expect(repository.messages.map((message) => message.role)).toEqual(['user'])
     })
 
-    it('fails with the assistant messageId and keeps only the user when the model fails before chunks', async () => {
-      const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new ImmediateFailureModel(), repository)
-      const { sessionId } = await repository.seedConversation()
-
-      const events = await new Promise<ConversationEvent[]>((resolve) => {
-        const collected: ConversationEvent[] = []
-        void module
-          .sendMessage({ requestId: REQUEST_ID, sessionId, text: 'Hello' }, (event) => {
-            collected.push(event)
-            if (event.type === 'failed') resolve(collected)
-          })
-          .then(() => undefined)
-      })
-
-      const started = events[0]
-      const failed = events.at(-1)
-      if (started?.type !== 'started' || failed?.type !== 'failed') {
-        throw new Error('unexpected event sequence')
+    it('records a background title failure while the reply still completes', async () => {
+      const cause = new Error('title provider unavailable')
+      const model: LanguageModel = {
+        async *streamReply(input) {
+          if (input.promptKind === 'conversation-title') throw cause
+          yield textEvent('reply')
+        }
       }
-      expect(events.map((event) => event.type)).toEqual(['started', 'failed'])
-      expect(failed.messageId).toBe(started.assistantMessageId)
-      expect(failed.error).toEqual({ code: 'MODEL_ERROR' })
-      expect(repository.messages.map(({ role }) => role)).toEqual(['user'])
+      const report = vi.fn()
+      const module = new ConversationModule(
+        model,
+        new MemoryConversationRepository(),
+        undefined,
+        undefined,
+        undefined,
+        { report }
+      )
+      const { sessionId } = await module.createConversation()
+      const events: ConversationEvent[] = []
+      await module.sendMessage({ requestId: REQUEST_ID, sessionId, text: 'Hello' }, (event) =>
+        events.push(event)
+      )
+      await untilTerminal(events)
+      expect(events.at(-1)?.type).toBe('completed')
+      await vi.waitFor(() =>
+        expect(report).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            operation: 'update-title',
+            requestId: REQUEST_ID,
+            error: expect.objectContaining({ cause })
+          })
+        )
+      )
     })
+
+    it.each([false, true])(
+      'preserves failure terminal when diagnostics throws: %s',
+      async (diagnosticsThrows) => {
+        const repository = new MemoryConversationRepository()
+        const report = vi.fn(() => {
+          if (diagnosticsThrows) throw new Error('diagnostic unavailable')
+        })
+        const module = new ConversationModule(
+          new ImmediateFailureModel(),
+          repository,
+          undefined,
+          undefined,
+          undefined,
+          { report }
+        )
+        const { sessionId } = await repository.seedConversation()
+
+        const events = await new Promise<ConversationEvent[]>((resolve) => {
+          const collected: ConversationEvent[] = []
+          void module
+            .sendMessage({ requestId: REQUEST_ID, sessionId, text: 'Hello' }, (event) => {
+              collected.push(event)
+              if (event.type === 'failed') resolve(collected)
+            })
+            .then(() => undefined)
+        })
+
+        const started = events[0]
+        const failed = events.at(-1)
+        if (started?.type !== 'started' || failed?.type !== 'failed') {
+          throw new Error('unexpected event sequence')
+        }
+        expect(events.map((event) => event.type)).toEqual(['started', 'failed'])
+        expect(failed.messageId).toBe(started.assistantMessageId)
+        expect(failed.error).toEqual({ code: 'MODEL_ERROR' })
+        expect(report).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            module: 'conversation',
+            operation: 'generate-reply',
+            requestId: REQUEST_ID,
+            error: expect.objectContaining({ message: 'model unavailable' })
+          })
+        )
+        expect(JSON.stringify(events)).not.toContain('model unavailable')
+        expect(repository.messages.map(({ role }) => role)).toEqual(['user'])
+      }
+    )
 
     it('fails with the assistant messageId after partial chunks and keeps only the user', async () => {
       const repository = new MemoryConversationRepository()
@@ -555,7 +612,15 @@ describe('ConversationModule', () => {
         }
       }
       const repository = new FailingAssistantAppendRepository()
-      const module = new ConversationModule(new SuccessfulModel(), repository)
+      const report = vi.fn()
+      const module = new ConversationModule(
+        new SuccessfulModel(),
+        repository,
+        undefined,
+        undefined,
+        undefined,
+        { report }
+      )
 
       const events = await new Promise<ConversationEvent[]>((resolve) => {
         const collected: ConversationEvent[] = []
@@ -575,11 +640,24 @@ describe('ConversationModule', () => {
       expect(failed.messageId).toBe(started.assistantMessageId)
       expect(failed.error.code).toBe('PERSISTENCE_ERROR')
       expect(repository.messages.map(({ role }) => role)).toEqual(['user'])
+      expect(report).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          error: expect.objectContaining({ message: 'database details' })
+        })
+      )
     })
 
     it('cancels an active stream without persisting a partial assistant reply', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new BlockingOnceModel(), repository)
+      const report = vi.fn()
+      const module = new ConversationModule(
+        new BlockingOnceModel(),
+        repository,
+        undefined,
+        undefined,
+        undefined,
+        { report }
+      )
       const { sessionId } = await repository.seedConversation()
 
       const events = await new Promise<ConversationEvent[]>((resolve) => {
@@ -602,6 +680,7 @@ describe('ConversationModule', () => {
       expect(cancelled.messageId).toBe(started.assistantMessageId)
       expect(repository.messages).toHaveLength(1)
       expect(repository.messages[0].role).toBe('user')
+      expect(report).not.toHaveBeenCalled()
     })
 
     it('cancels before model execution when requested as soon as the generation starts', async () => {

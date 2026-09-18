@@ -27,7 +27,7 @@
 | 进程级 | `installProcessErrorHandlers`：uncaughtException 尽力同步写入后按非零码终止；unhandledRejection 入队记录 |
 | Main 启动/生命周期 | 数据库、偏好初始化、语言解析回退、窗口 loadURL、render-process-gone、child-process-gone |
 | IPC 公共守卫 | `ipc-guard` 诊断回调：来源拒绝（warn）、输入校验失败（warn，仅 issue path+code）、handler 异常（error，映射前原始原因）、错误映射异常、结果校验失败 |
-| Core | `src/core/error-diagnostics.ts` 诊断接口由 Main 注入：llm-usage 记账失败、synonym 单词失败（脱敏 cause 链）、AI 导入失败（含模型原始响应） |
+| Core | `src/core/error-diagnostics.ts` 诊断接口由 Main 注入：llm-usage 记账失败、synonym 单词失败（脱敏 cause 链）、AI 导入失败（含模型原始响应）、会话后台回复/标题/技能与重试失败（转换前原始异常及 requestId） |
 | 词汇导入 | 提交失败回调从 electron-log 改为公共日志 |
 | Preload | 会话事件/导入进度 schema 解析失败，经 `window.api.reportError` 上报 |
 | Renderer | 全局 `error`/`unhandledrejection` 与顶层 React ErrorBoundary（`components/ErrorBoundary`） |
@@ -38,7 +38,7 @@
 
 - 协议见 `src/shared/error-report.ts`：`window.api.reportError`，channel `error-log:report`。
 - 复用 IPC 守卫的可信来源校验；载荷为受限 schema（不含时间、路径、进程身份），单条 ≤ 16 KiB。
-- Main 生成可信时间戳；按 sender 限流（默认 30 条 / 10s，超出返回 `RATE_LIMITED` 并限频记录一条 warn）。
+- Main 生成可信时间戳；在守卫中按 sender 限流，所有尝试（含非法载荷和来源拒绝）共享预算（默认 30 条 / 10s，可信来源超出返回 `RATE_LIMITED` 并限频记录一条 warn）。
 - 上报失败静默放弃，不重试、不再触发上报（防循环）。Renderer 没有任何读取日志的接口。
 
 ## 脱敏
@@ -46,7 +46,7 @@
 统一由 `src/main/error-logger.ts` 的序列化层完成：
 
 - 敏感字段名（headers/authorization/api key/token/cookie/password 等，全词匹配）→ `[REDACTED]`。
-- 已登记密钥（`registerSecret`，AI 导入等场景注入，只增不减以覆盖在途请求的旧密钥）替换所有文本中出现的位置。
+- 已登记密钥（`registerSecret`，统一模型客户端工厂在构造前登记请求快照，覆盖对话、学习与连接测试；只增不减以覆盖在途请求的旧密钥）替换所有文本中出现的位置，包括元数据、错误 name 和对象键名。
 - 自由文本中的 `Bearer <token>` 与 URL 内嵌凭据 `//user:pass@` 一律脱敏。
 
 ## 日志服务自身失败
@@ -57,5 +57,5 @@
 
 1. 在 `<userData>/logs/YYYY-MM-DD.log` 中按 `module`/`operation`/`code`/时间过滤。
 2. `source: renderer|preload` 条目来自页面；`module: ipc-guard` 条目的 `context.channel` 指出问题入口。
-3. 关联一次操作：词汇导入条目带批次上下文；会话请求以事件序列相邻定位。
+3. 关联一次操作：词汇导入条目带批次上下文；会话后台任务按 requestId 关联。
 4. 出现 `[REDACTED]` 表示原值被脱敏；`truncated: true` 表示该条被收缩，可对照上游缩短采集面。

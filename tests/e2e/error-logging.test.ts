@@ -59,3 +59,40 @@ test('collects renderer errors into the per-day local log', async () => {
     }
   })
 })
+
+test('counts oversized renderer reports against the rate limit', async () => {
+  await withTempUserData(async (userDataPath) => {
+    const electronApp = await launchApp(userDataPath)
+    try {
+      const window = await electronApp.firstWindow()
+      await waitForReady(window)
+      const codes = await window.evaluate(async () => {
+        const codes: string[] = []
+        for (let i = 0; i < 45; i += 1) {
+          const result = await globalThis.window.api.reportError({
+            source: 'renderer',
+            message: 'oversized report',
+            context: { blob: 'x'.repeat(20 * 1024) }
+          })
+          if (result.status === 'error') codes.push(result.error.code)
+        }
+        return codes
+      })
+      expect(codes.filter((code) => code === 'PAYLOAD_TOO_LARGE')).toHaveLength(30)
+      expect(codes.filter((code) => code === 'RATE_LIMITED')).toHaveLength(15)
+    } finally {
+      await electronApp.close()
+    }
+    const directory = join(userDataPath, 'logs')
+    const entries = readdirSync(directory)
+      .flatMap((file) =>
+        readFileSync(join(directory, file), 'utf8')
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line) as { operation?: string; context?: { channel?: string } })
+      )
+      .filter((entry) => entry.context?.channel === 'error-log:report')
+    expect(entries).toHaveLength(1)
+    expect(entries.filter((entry) => entry.operation === 'rate-limit')).toHaveLength(1)
+  })
+})
