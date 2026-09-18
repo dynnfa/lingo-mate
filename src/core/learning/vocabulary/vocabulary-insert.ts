@@ -21,7 +21,7 @@ export const exampleSentenceListSchema = z
 export type ExampleSentenceList = z.infer<typeof exampleSentenceListSchema>
 
 // 音标保留旧分析协议的真实性检查：斜杠或方括号包裹、内部含字母、无占位内容。
-const phoneticSchema = z
+export const phoneticSchema = z
   .string()
   .trim()
   .min(3)
@@ -29,7 +29,7 @@ const phoneticSchema = z
   .regex(/^(\/[^/]+\/|\[[^[\]]+\])$/)
   .superRefine((phonetic, context) => {
     const phonemes = phonetic.slice(1, -1).trim()
-    if (!/\p{Letter}/u.test(phonemes) || /[?\d]|unknown|unavailable|n\/a/i.test(phonemes)) {
+    if (!/\p{Letter}/u.test(phonemes) || /[?\d"\\,]|unknown|unavailable|n\/a/i.test(phonemes)) {
       context.addIssue({ code: 'custom', message: 'Invalid IPA transcription' })
     }
   })
@@ -37,7 +37,7 @@ const phoneticSchema = z
 // 模型通过 insert_vocabulary 返回的参数。四个系统字段由应用补入，不接受模型传入。
 export const insertToolArgumentsSchema = z.strictObject({
   term: z.string().min(1).max(4000),
-  phonetic: phoneticSchema,
+  phonetic: z.array(phoneticSchema).min(1).max(10),
   meaning: z.string().trim().min(1).max(2000),
   concept: z.string().trim().min(1).max(2000),
   example_sentences: exampleSentenceListSchema
@@ -50,7 +50,7 @@ export const unrecognizedToolArgumentsSchema = z.strictObject({
 // 已通过全部校验的学习内容；例句保留数组形态，入库时由程序序列化。
 export interface VocabularyInsertContent {
   term: string
-  phonetic: string
+  phonetic: string[]
   meaning: string
   concept: string
   exampleSentences: ExampleSentenceList
@@ -86,7 +86,7 @@ export const vocabularyInsertBindingSchema = z
   .strictObject({
     id: z.uuid(),
     term: z.string().min(1).max(4000),
-    phonetic: z.string().min(1).max(200),
+    phonetic: z.string().min(2).max(12000),
     meaning: z.string().min(1).max(2000),
     concept: z.string().min(1).max(2000),
     example_sentences: z.string().min(2).max(MAX_SERIALIZED_EXAMPLES_LENGTH),
@@ -95,6 +95,12 @@ export const vocabularyInsertBindingSchema = z
     created_at: z.iso.datetime()
   })
   .superRefine((binding, context) => {
+    if (
+      !insertToolArgumentsSchema.shape.phonetic.safeParse(parseJsonOrUndefined(binding.phonetic))
+        .success
+    ) {
+      context.addIssue({ code: 'custom', message: 'Invalid phonetic encoding' })
+    }
     if (
       !exampleSentenceListSchema.safeParse(parseJsonOrUndefined(binding.example_sentences)).success
     ) {
@@ -118,7 +124,7 @@ export function buildVocabularyInsertCommand(
     parameters: {
       id: system.id,
       term: content.term,
-      phonetic: content.phonetic,
+      phonetic: JSON.stringify(content.phonetic),
       meaning: content.meaning,
       concept: content.concept,
       example_sentences: JSON.stringify(content.exampleSentences),
@@ -165,7 +171,12 @@ export function vocabularyInsertTools(): VocabularyToolDefinition[] {
           type: 'object',
           properties: {
             term: { type: 'string', minLength: 1, maxLength: 4000 },
-            phonetic: { type: 'string', minLength: 3, maxLength: 200 },
+            phonetic: {
+              type: 'array',
+              items: { type: 'string', minLength: 3, maxLength: 200 },
+              minItems: 1,
+              maxItems: 10
+            },
             meaning: { type: 'string', minLength: 1, maxLength: 2000 },
             concept: { type: 'string', minLength: 1, maxLength: 2000 },
             example_sentences: {

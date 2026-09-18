@@ -18,7 +18,7 @@ import { content as sampleContent } from './fixtures'
 type InsertArguments = Record<string, unknown>
 const insertArguments = (overrides: Record<string, unknown> = {}): InsertArguments => ({
   term: 'apple',
-  phonetic: '/ˈæpəl/',
+  phonetic: ['/ˈæpəl/'],
   meaning: '苹果，一种水果。',
   concept: '通常指作为食物的苹果果实。',
   example_sentences: ['I ate an apple after lunch.'],
@@ -49,7 +49,7 @@ describe('vocabulary insert contract', () => {
     const validated = validateInsertArguments(insertArguments(), 'apple')
     expect(validated).toEqual({
       term: 'apple',
-      phonetic: '/ˈæpəl/',
+      phonetic: ['/ˈæpəl/'],
       meaning: '苹果，一种水果。',
       concept: '通常指作为食物的苹果果实。',
       exampleSentences: ['I ate an apple after lunch.']
@@ -74,6 +74,14 @@ describe('vocabulary insert contract', () => {
     insertArguments({ prompt_version: 'v0' }),
     insertArguments({ created_at: 'now' }),
     insertArguments({ phonetic: 'apple' }),
+    ...[
+      [],
+      [''],
+      ['/riːd/', 'read'],
+      ['/unknown/'],
+      Array(11).fill('/a/'),
+      ['/' + 'a'.repeat(199) + '/']
+    ].map((phonetic) => insertArguments({ phonetic })),
     insertArguments({ phonetic: '/unknown/' }),
     insertArguments({ phonetic: '/?/' }),
     insertArguments({
@@ -130,12 +138,12 @@ describe('vocabulary insert contract', () => {
   it('accepts authentic IPA in brackets and multiple sentences', () => {
     const validated = validateInsertArguments(
       insertArguments({
-        phonetic: '[ˈæpəl]',
+        phonetic: ['[ˈæpəl]'],
         example_sentences: ['One.', 'Two.']
       }),
       'apple'
     )
-    expect(validated.phonetic).toBe('[ˈæpəl]')
+    expect(validated.phonetic).toEqual(['[ˈæpəl]'])
     expect(validated.exampleSentences).toEqual(['One.', 'Two.'])
   })
   it('accepts only the unrecognized reason enum', () => {
@@ -186,4 +194,31 @@ describe('vocabulary insert contract', () => {
     expect(VOCABULARY_INSERT_TOOL_NAME).toBe('insert_vocabulary')
     expect(VOCABULARY_UNRECOGNIZED_TOOL_NAME).toBe('vocabulary_unrecognized')
   })
+})
+
+it('accepts multiple IPA variants and serializes them losslessly', () => {
+  const phonetic = ['/riːd/', '/rɛd/']
+  const result = validateInsertArguments(insertArguments({ term: 'read', phonetic }), 'read')
+  expect(result.phonetic).toEqual(phonetic)
+  const command = buildVocabularyInsertCommand(result, {
+    id: '11111111-1111-4111-8111-111111111111',
+    modelId: 'model',
+    promptVersion: 'test',
+    createdAt: '2026-09-18T00:00:00.000Z'
+  })
+  expect(JSON.parse(command.parameters.phonetic)).toEqual(phonetic)
+})
+
+it('rejects malformed phonetic JSON at the storage boundary', () => {
+  const command = buildVocabularyInsertCommand(sampleContent(), {
+    id: '11111111-1111-4111-8111-111111111111',
+    modelId: 'model',
+    promptVersion: 'test',
+    createdAt: '2026-09-18T00:00:00.000Z'
+  })
+  for (const phonetic of ['/riːd/', '[]', '["/riːd/", 1]', '["word"]']) {
+    expect(() =>
+      assertValidInsertCommand({ ...command, parameters: { ...command.parameters, phonetic } })
+    ).toThrow('Invalid vocabulary insert bindings')
+  }
 })

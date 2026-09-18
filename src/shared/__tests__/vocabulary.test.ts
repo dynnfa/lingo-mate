@@ -16,7 +16,7 @@ describe('vocabulary schemas', () => {
       vocabularyEntrySchema.safeParse({
         id: '11111111-1111-4111-8111-111111111111',
         term: 'apple',
-        phonetic: '/ˈæpəl/',
+        phonetic: ['/ˈæpəl/'],
         meaning: '苹果，一种水果。',
         concept: '通常指作为食物的苹果果实。',
         exampleSentences: ['I ate an apple after lunch.'],
@@ -54,7 +54,7 @@ describe('vocabulary schemas', () => {
       vocabularyEntrySchema.safeParse({
         id: '11111111-1111-4111-8111-111111111111',
         term: 'apple',
-        phonetic: '/ˈæpəl/',
+        phonetic: ['/ˈæpəl/'],
         meaning: '苹果',
         concept: '苹果果实',
         exampleSentences: ['A sentence.'],
@@ -119,7 +119,7 @@ describe('batch response integrity', () => {
 const ENTRY = {
   id: '11111111-1111-4111-8111-111111111111',
   term: 'apple',
-  phonetic: '/ˈæpəl/',
+  phonetic: ['/ˈæpəl/'],
   meaning: '苹果，一种水果。',
   concept: '苹果果实。',
   exampleSentences: ['I ate an apple after lunch.'],

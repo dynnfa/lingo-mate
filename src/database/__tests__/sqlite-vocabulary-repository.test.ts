@@ -139,7 +139,7 @@ describe('vocabulary repository on the v5 schema', () => {
     expect(entry).toMatchObject({
       id: command.parameters.id,
       term: command.parameters.term,
-      phonetic: command.parameters.phonetic,
+      phonetic: JSON.parse(command.parameters.phonetic),
       meaning: command.parameters.meaning,
       concept: command.parameters.concept,
       exampleSentences: ["It's a test; isn't it?\nNew line here.", 'Second sentence.'],
@@ -522,4 +522,22 @@ it('exports a full sorted snapshot beyond page size, including manual-import con
   const entries = repository.exportAll()
   expect(entries).toHaveLength(115)
   expect(entries.slice(0, 50)).toEqual(repository.list({}).entries)
+})
+
+it('reads multiple phonetics and legacy slash, bracket and NULL values without rewriting rows', () => {
+  const database = open()
+  const repository = new SqliteVocabularyRepository(database)
+  const command = insertCommand('read')
+  command.parameters.phonetic = JSON.stringify(['/riːd/', '/rɛd/'])
+  repository.saveBatch([command])
+  expect(repository.find('read')?.phonetic).toEqual(['/riːd/', '/rɛd/'])
+  for (const value of ['/riːd/', '[riːd]', null]) {
+    database.prepare('UPDATE vocabulary SET phonetic = ?').run(value)
+    expect(repository.list({}).entries[0].phonetic).toEqual(value === null ? null : [value])
+    expect(database.prepare('SELECT phonetic FROM vocabulary').get()).toEqual({ phonetic: value })
+  }
+  for (const value of ['[]', '["/riːd/", 1]', '["broken"', '[""]']) {
+    database.prepare('UPDATE vocabulary SET phonetic = ?').run(value)
+    expect(() => repository.list({})).toThrow('STORAGE_FAILED')
+  }
 })

@@ -11,7 +11,7 @@
   "transfer": {
     "instructions": [
       "Use the vocabulary sheet. Keep all seven headers; column order may change. All cells must be text; formulas are rejected.",
-      "Required: term (English, 4000 characters), phonetic (IPA, 200), meaning and concept (2000 each), example_sentence_1 (500). Optional: example_sentence_2 and example_sentence_3 (500 each).",
+      "Required: term (English, 4000 characters), phonetic (1–10 IPA transcriptions, one per line, 200 characters each), meaning and concept (2000 each), example_sentence_1 (500). Optional: example_sentence_2 and example_sentence_3 (500 each).",
       "Example: apple | /ˈæpəl/ | a round fruit | a common edible fruit | I ate an apple. | |",
       "Import limit: 5 MiB and 1000 data rows. Existing terms are skipped without changes."
     ],
