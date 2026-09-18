@@ -21,6 +21,8 @@ export const exampleSentenceListSchema = z
 export type ExampleSentenceList = z.infer<typeof exampleSentenceListSchema>
 
 // 音标保留旧分析协议的真实性检查：斜杠或方括号包裹、内部含字母、无占位内容。
+// 引号、反斜杠和逗号不是真实 IPA 成分；拒绝它们同时保证 JSON 编码的音标数组
+// 不会因整体呈方括号外形被误读为单个音标（存储读取靠该区分判定旧行/新行）。
 export const phoneticSchema = z
   .string()
   .trim()
@@ -34,10 +36,13 @@ export const phoneticSchema = z
     }
   })
 
+// 单个词条的音标集合；分析协议校验、入库绑定校验与存储读取共用同一约束。
+export const phoneticListSchema = z.array(phoneticSchema).min(1).max(10)
+
 // 模型通过 insert_vocabulary 返回的参数。四个系统字段由应用补入，不接受模型传入。
 export const insertToolArgumentsSchema = z.strictObject({
   term: z.string().min(1).max(4000),
-  phonetic: z.array(phoneticSchema).min(1).max(10),
+  phonetic: phoneticListSchema,
   meaning: z.string().trim().min(1).max(2000),
   concept: z.string().trim().min(1).max(2000),
   example_sentences: exampleSentenceListSchema
@@ -95,10 +100,7 @@ export const vocabularyInsertBindingSchema = z
     created_at: z.iso.datetime()
   })
   .superRefine((binding, context) => {
-    if (
-      !insertToolArgumentsSchema.shape.phonetic.safeParse(parseJsonOrUndefined(binding.phonetic))
-        .success
-    ) {
+    if (!phoneticListSchema.safeParse(parseJsonOrUndefined(binding.phonetic)).success) {
       context.addIssue({ code: 'custom', message: 'Invalid phonetic encoding' })
     }
     if (

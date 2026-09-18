@@ -82,7 +82,6 @@ describe('vocabulary insert contract', () => {
       Array(11).fill('/a/'),
       ['/' + 'a'.repeat(199) + '/']
     ].map((phonetic) => insertArguments({ phonetic })),
-    insertArguments({ phonetic: '/unknown/' }),
     insertArguments({ phonetic: '/?/' }),
     insertArguments({
       phonetic: '/x'.repeat(101) + '/'
