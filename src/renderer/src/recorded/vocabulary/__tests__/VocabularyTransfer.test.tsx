@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import { I18nextProvider } from 'react-i18next'
 import { createI18n } from '../../../i18n'
 import { VocabularyTransfer } from '../VocabularyTransfer'
 import { transferApiStub } from './helpers/transfer-api'
+import { importTaskSchema, type ImportTask } from '../../../../../shared/vocabulary-transfer'
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
@@ -108,4 +109,63 @@ it('normal file dialog cancellation does not display an error', async () => {
     expect(screen.getByRole('button', { name: 'Select Excel file' })).toBeEnabled()
   )
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+it('polls the task query only while an import task is active', async () => {
+  vi.useFakeTimers()
+  try {
+    const base = {
+      kind: 'ai',
+      requestId: '11111111-1111-4111-8111-111111111111',
+      revision: 1,
+      phase: 'analyzing',
+      processed: 0,
+      total: 1,
+      rows: [{ row: 1, term: 'apple', status: 'pending' }],
+      counts: { saved: 0, existing: 0, duplicate: 0, failed: 0 }
+    }
+    const analyzing = importTaskSchema.parse(base)
+    const terminal = importTaskSchema.parse({
+      ...base,
+      revision: 2,
+      phase: 'completed',
+      processed: 1,
+      rows: [{ row: 1, term: 'apple', status: 'saved' }],
+      counts: { saved: 1, existing: 0, duplicate: 0, failed: 0 }
+    })
+    let current: ImportTask | null = null
+    let listener: (value: ImportTask) => void = () => {}
+    const api = {
+      ...transferApiStub(),
+      getImportTask: vi.fn(async () => ({ status: 'ok' as const, task: current })),
+      onImportProgress: vi.fn((callback: (value: ImportTask) => void) => {
+        listener = callback
+        return () => {}
+      })
+    }
+    vi.stubGlobal('api', { vocabulary: api })
+    render(
+      <I18nextProvider i18n={createI18n('en')}>
+        <VocabularyTransfer onSaved={() => {}} />
+      </I18nextProvider>
+    )
+    await vi.advanceTimersByTimeAsync(0)
+    expect(api.getImportTask).toHaveBeenCalledTimes(1)
+    // Idle window: the mount recovery query is the only call.
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(api.getImportTask).toHaveBeenCalledTimes(1)
+    // While analyzing, the interval backs up the progress events.
+    current = analyzing
+    act(() => listener(analyzing))
+    await vi.advanceTimersByTimeAsync(2500)
+    expect(api.getImportTask).toHaveBeenCalledTimes(3)
+    // After the terminal phase, polling stops again.
+    const settled = api.getImportTask.mock.calls.length
+    current = terminal
+    act(() => listener(terminal))
+    await vi.advanceTimersByTimeAsync(2500)
+    expect(api.getImportTask).toHaveBeenCalledTimes(settled)
+  } finally {
+    vi.useRealTimers()
+  }
 })
