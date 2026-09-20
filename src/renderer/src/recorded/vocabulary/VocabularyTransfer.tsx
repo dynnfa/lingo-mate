@@ -66,10 +66,20 @@ export function VocabularyTransfer({ onSaved }: { onSaved: () => void }): React.
   const errorText = error ? t(`transfer.errors.${error}`) : null
   return (
     <div className="vocabulary-transfer">
-      <button ref={returnFocus} type="button" onClick={() => setOpen(true)}>
+      <button
+        ref={returnFocus}
+        type="button"
+        className="vocabulary-transfer-action"
+        onClick={() => setOpen(true)}
+      >
         {t('transfer.import')}
       </button>
-      <button type="button" disabled={busy} onClick={() => saveFile(false)}>
+      <button
+        type="button"
+        className="vocabulary-transfer-action"
+        disabled={busy}
+        onClick={() => saveFile(false)}
+      >
         {t('transfer.export')}
       </button>
       {!open && errorText && <p role="alert">{errorText}</p>}

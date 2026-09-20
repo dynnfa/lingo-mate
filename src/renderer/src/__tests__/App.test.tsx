@@ -1263,17 +1263,17 @@ describe('App recorded page navigation', () => {
     await renderReady(mock)
     expect(await screen.findByText('Hello')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '错题集（单词）' }))
+    fireEvent.click(screen.getByRole('button', { name: '错题集' }))
 
     // 错题集页替换对话视图；空列表展示空态，对话视图保持挂载但隐藏
-    expect(screen.getByRole('main', { name: '错题集（单词）' })).toBeInTheDocument()
+    expect(screen.getByRole('main', { name: '错题集' })).toBeInTheDocument()
     expect(await screen.findByText('还没有错题')).toBeInTheDocument()
     expect(document.querySelector('.chat-shell')).toHaveAttribute('hidden')
 
     fireEvent.click(screen.getByRole('button', { name: '返回' }))
 
-    expect(screen.queryByRole('main', { name: '错题集（单词）' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '错题集（单词）' })).toHaveFocus()
+    expect(screen.queryByRole('main', { name: '错题集' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '错题集' })).toHaveFocus()
     expect(screen.getByLabelText('练习内容')).toBeVisible()
   })
 

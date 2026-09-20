@@ -13,7 +13,7 @@
     "loadingSessions": "Loading conversations…",
     "noSessions": "No conversations yet",
     "toolbarLabel": "Sidebar toolbar",
-    "menuMistakes": "Mistake book (words)"
+    "menuMistakes": "Mistake book"
   },
   "settings": {
     "title": "Settings",
@@ -300,14 +300,14 @@
     }
   },
   "mistakes": {
-    "title": "Mistake book (words)",
+    "title": "Mistake book",
     "back": "Back",
     "menuLabel": "Mistake book menu",
     "sections": {
       "vocabulary": "Words"
     },
     "vocabulary": {
-      "detailTitle": "Mistake book (words)",
+      "detailTitle": "Mistake book",
       "tableCaption": "Word mistake list",
       "columnTerm": "Word",
       "columnLastMeaning": "Latest wrong meaning",
