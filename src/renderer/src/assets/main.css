@@ -77,6 +77,14 @@ body {
   min-height: 0;
 }
 
+/* 已记录·词汇详情标题行：标题居左，导入/导出入口靠右。 */
+.vocabulary-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .vocabulary-detail-header h2,
 .phrase-detail-header h2,
 .synonym-detail-header h2 {
@@ -238,7 +246,7 @@ body {
 
 /* 列表底部加载区已收敛到 LoadMoreBar。 */
 
-/* ── 错题集（单词）详情：聚合表格与行内展开的错误历史 ── */
+/* ── 错题集·单词详情：聚合表格与行内展开的错误历史 ── */
 .vocabulary-mistakes-detail {
   display: flex;
   flex-direction: column;

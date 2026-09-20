@@ -12,6 +12,11 @@
   color: inherit;
   cursor: pointer;
 }
+/* 详情标题行内的导入/导出入口按钮，缩小以贴合标题行。 */
+.vocabulary-transfer .vocabulary-transfer-action {
+  padding: 4px 10px;
+  font-size: 12px;
+}
 .vocabulary-transfer button:disabled {
   opacity: 0.5;
   cursor: default;

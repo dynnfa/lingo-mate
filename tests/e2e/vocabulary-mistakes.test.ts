@@ -65,8 +65,8 @@ async function fillMeaning(window: Page, term: string, meaning: string): Promise
 }
 
 async function openMistakes(window: Page): Promise<void> {
-  await window.getByRole('button', { name: 'Mistake book (words)' }).click()
-  await expect(window.getByRole('main', { name: 'Mistake book (words)' })).toBeVisible()
+  await window.getByRole('button', { name: 'Mistake book' }).click()
+  await expect(window.getByRole('main', { name: 'Mistake book' })).toBeVisible()
 }
 
 test('collects wrong answers into the mistake book and keeps them across restarts', async () => {

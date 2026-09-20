@@ -11,7 +11,7 @@ import {
 import { useVocabularyMistakes } from './useVocabularyMistakes'
 import { VocabularyMistakeHistory } from './VocabularyMistakeHistory'
 
-// 错题集（单词）详情：按词条聚合展示最近错误释义、累计次数与最近时间；
+// 错题集·单词详情：按词条聚合展示最近错误释义、累计次数与最近时间；
 // 行内可展开该词的错误历史并分页加载。列表状态由 useVocabularyMistakes
 // 持有，展开词条的历史分页由 VocabularyMistakeHistory 子组件自持；
 // 模型返回与用户输入内容按纯文本渲染。

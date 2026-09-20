@@ -13,7 +13,7 @@
     "loadingSessions": "正在加载会话…",
     "noSessions": "暂无会话",
     "toolbarLabel": "侧栏工具栏",
-    "menuMistakes": "错题集（单词）"
+    "menuMistakes": "错题集"
   },
   "settings": {
     "title": "设置",
@@ -300,14 +300,14 @@
     }
   },
   "mistakes": {
-    "title": "错题集（单词）",
+    "title": "错题集",
     "back": "返回",
     "menuLabel": "错题集菜单",
     "sections": {
       "vocabulary": "单词"
     },
     "vocabulary": {
-      "detailTitle": "错题集（单词）",
+      "detailTitle": "错题集",
       "tableCaption": "单词错题列表",
       "columnTerm": "单词",
       "columnLastMeaning": "最近错误释义",
