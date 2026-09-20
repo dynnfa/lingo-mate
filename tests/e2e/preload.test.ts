@@ -44,8 +44,18 @@ test('exposes the conversation skill and preferences interfaces from the sandbox
         'synonym',
         'usage',
         'vocabulary',
+        'vocabularyMistakes',
         'vocabularyPractice'
       ])
+
+      // 错题集窄接口：只暴露聚合列表与单词条历史读取，不暴露写入或通用 invoke
+      const exposedVocabularyMistakesKeys = await window.evaluate(() =>
+        Object.keys(
+          (globalThis as typeof globalThis & { api?: { vocabularyMistakes?: object } }).api
+            ?.vocabularyMistakes ?? {}
+        ).sort()
+      )
+      expect(exposedVocabularyMistakesKeys).toEqual(['list', 'listHistory'])
 
       // 造句练习窄接口：只暴露开始、提示、点评、取消与释放
       const exposedSentencePracticeKeys = await window.evaluate(() =>

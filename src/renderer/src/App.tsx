@@ -7,6 +7,7 @@ import { ConversationPanel } from './conversation/ConversationPanel'
 import { formatDateTime } from './i18n/formatters'
 import { normalizeI18nLocale } from './i18n'
 import { useAppViewNavigation } from './hooks/useAppViewNavigation'
+import { MistakesPage } from './mistakes/MistakesPage'
 import { RecordedPage } from './recorded/RecordedPage'
 import { SettingsPage } from './settings/SettingsPage'
 import { PracticePage } from './practice/PracticePage'
@@ -42,7 +43,8 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
   const {
     settings: settingsButtonRef,
     recorded: recordedButtonRef,
-    practice: practiceButtonRef
+    practice: practiceButtonRef,
+    mistakes: mistakesButtonRef
   } = entryButtonRefs
   const [preferenceNoticeVisible, setPreferenceNoticeVisible] = useState(initialPreferenceError)
   // 启动焦点请求会在会话加载完成、输入框解锁后执行。
@@ -101,6 +103,20 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
                 <path d="m8 4 12 8-12 8V4Z" />
               </svg>
               {t('common:sidebar.menuPractice')}
+            </button>
+            <button
+              className="sidebar-menu-item"
+              onClick={() => openView('mistakes')}
+              ref={mistakesButtonRef}
+              type="button"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-1 5h2v6h-2zm0 8h2v2h-2z"
+                  fillRule="evenodd"
+                />
+              </svg>
+              {t('common:sidebar.menuMistakes')}
             </button>
           </nav>
           <div className="session-heading">
@@ -179,6 +195,7 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
       {activeView === 'settings' ? <SettingsPage onExit={returnToConversation} /> : null}
       {activeView === 'recorded' ? <RecordedPage onExit={returnToConversation} /> : null}
       {activeView === 'practice' ? <PracticePage onExit={returnToConversation} /> : null}
+      {activeView === 'mistakes' ? <MistakesPage onExit={returnToConversation} /> : null}
     </>
   )
 }

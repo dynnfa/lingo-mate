@@ -12,7 +12,8 @@
     "listLabel": "Conversation list",
     "loadingSessions": "Loading conversations…",
     "noSessions": "No conversations yet",
-    "toolbarLabel": "Sidebar toolbar"
+    "toolbarLabel": "Sidebar toolbar",
+    "menuMistakes": "Mistake book (words)"
   },
   "settings": {
     "title": "Settings",
@@ -296,6 +297,43 @@
       "confirmNewRoundBody": "Your current answer has not been submitted. Starting with new words will clear the hints, answer and review.",
       "confirmNewRoundCancel": "Keep answering",
       "confirmNewRoundConfirm": "New words"
+    }
+  },
+  "mistakes": {
+    "title": "Mistake book (words)",
+    "back": "Back",
+    "menuLabel": "Mistake book menu",
+    "sections": {
+      "vocabulary": "Words"
+    },
+    "vocabulary": {
+      "detailTitle": "Mistake book (words)",
+      "tableCaption": "Word mistake list",
+      "columnTerm": "Word",
+      "columnLastMeaning": "Latest wrong meaning",
+      "columnCount": "Mistakes",
+      "columnLastErrorAt": "Last mistake at",
+      "columnActions": "History",
+      "showHistory": "Show history",
+      "hideHistory": "Hide history",
+      "expandHistoryLabel": "Show mistake history of \"{{term}}\"",
+      "collapseHistoryLabel": "Hide mistake history of \"{{term}}\"",
+      "historyLabel": "Mistake history of \"{{term}}\"",
+      "mistakeCount_one": "{{count}} time",
+      "mistakeCount_other": "{{count}} times",
+      "loading": "Loading mistakes…",
+      "emptyTitle": "No mistakes yet",
+      "emptyBody": "Words you get wrong in vocabulary practice are collected here automatically.",
+      "loadErrorTitle": "Couldn't load mistakes",
+      "retry": "Retry",
+      "loadMore": "Load more",
+      "loadingMore": "Loading more…",
+      "loadMoreFailed": "Couldn't load more",
+      "historyLoading": "Loading mistake history…",
+      "historyErrorTitle": "Couldn't load mistake history",
+      "historyLoadMore": "Load more history",
+      "historyLoadingMore": "Loading history…",
+      "historyLoadMoreFailed": "Couldn't load more history"
     }
   },
   "preferences": {
