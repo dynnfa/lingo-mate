@@ -459,6 +459,22 @@ describe('vocabulary practice mistake collection', () => {
     ).resolves.toEqual(ERRORS_OUTCOME_SINGLE)
   })
 
+  it('rejects changed answers for an older requestId after a later review completes', async () => {
+    const { reviewer, calls } = instantReviewer(ERRORS_OUTCOME_SINGLE)
+    const sink = mistakeSink()
+    const svc = service([entry(0)], reviewer, { mistakes: sink })
+    const round = svc.start(1)
+
+    await svc.review(round.sessionId, REQUEST_ID, answersFor(1, ['第一次错']), 'zh-CN')
+    await svc.review(round.sessionId, REQUEST_ID_2, answersFor(1, ['第二次错']), 'zh-CN')
+
+    await expect(
+      svc.review(round.sessionId, REQUEST_ID, answersFor(1, ['篡改后的答案']), 'zh-CN')
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+    expect(calls()).toBe(2)
+    expect(sink.saved.map((record) => record.submittedMeaning)).toEqual(['第一次错', '第二次错'])
+  })
+
   it('treats an edited resubmission with a new requestId as a fresh review', async () => {
     const { reviewer, calls } = instantReviewer(ERRORS_OUTCOME_SINGLE)
     const sink = mistakeSink()

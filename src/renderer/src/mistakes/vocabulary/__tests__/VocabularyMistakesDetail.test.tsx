@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import { I18nextProvider } from 'react-i18next'
 import type {
@@ -196,6 +196,41 @@ describe('VocabularyMistakesDetail', () => {
     expect(within(reloaded).getByText('第三次答错')).toBeInTheDocument()
     // 三次调用：首屏、追加一页、收起后重新展开的首屏
     expect(stub.calls.listHistory).toEqual([row.entryId, row.entryId, row.entryId])
+  })
+
+  it('ignores an earlier history failure after collapsing and reopening the row', async () => {
+    const row = item({ term: 'apple' })
+    let resolveEarlier!: (result: ListVocabularyMistakeHistoryResult) => void
+    const earlier = new Promise<ListVocabularyMistakeHistoryResult>((resolve) => {
+      resolveEarlier = resolve
+    })
+    const listHistory = vi
+      .fn<VocabularyMistakesApi['listHistory']>()
+      .mockReturnValueOnce(earlier)
+      .mockResolvedValueOnce({
+        status: 'ok',
+        items: [historyItem('20000000-0000-4000-8000-000000000004', '重新展开后的释义')]
+      })
+    installApi({
+      list: async () => ({ status: 'ok', entries: [row] }),
+      listHistory
+    })
+    renderDetail()
+
+    expect(await screen.findByText('apple')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '查看“apple”的错误历史' }))
+    fireEvent.click(screen.getByRole('button', { name: '收起“apple”的错误历史' }))
+    fireEvent.click(screen.getByRole('button', { name: '查看“apple”的错误历史' }))
+
+    const history = await screen.findByRole('group', { name: '“apple”的错误历史' })
+    expect(await within(history).findByText('重新展开后的释义')).toBeInTheDocument()
+
+    await act(async () => {
+      resolveEarlier({ status: 'error', error: { code: 'STORAGE_FAILED' } })
+      await earlier
+    })
+    expect(within(history).queryByText('错误历史加载失败')).not.toBeInTheDocument()
+    expect(within(history).getByText('重新展开后的释义')).toBeInTheDocument()
   })
 
   it('offers retry when the first history page fails', async () => {

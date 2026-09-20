@@ -31,7 +31,7 @@ export interface VocabularyPracticeAnswerInput {
   meaning: string
 }
 
-// 最近一次已完成的审查：保存失败后的重试复用其结果，不再调用模型。
+// 一次已完成的审查：保存失败或请求重放时复用其结果，不再调用模型。
 interface CompletedReview {
   requestId: string
   answers: PracticeReviewEntry[]
@@ -43,7 +43,8 @@ interface PracticeSession {
   // 轮次开始时的词条快照：审查期间词库变化不混入新内容。
   entries: Map<string, VocabularyEntry>
   review: { controller: AbortController } | undefined
-  completedReview: CompletedReview | undefined
+  // 当前会话内所有已完成提交：保证任一 requestId 重放时都能校验原答案。
+  completedReviews: Map<string, CompletedReview>
 }
 
 export interface VocabularyPracticeStartOutcome {
@@ -82,7 +83,7 @@ export class VocabularyPracticeService {
       // 随机取样按主键天然不重复；防御重复 ID 只保留首个。
       if (!entries.has(entry.id)) entries.set(entry.id, entry)
     }
-    this.active = { id: randomUUID(), entries, review: undefined, completedReview: undefined }
+    this.active = { id: randomUUID(), entries, review: undefined, completedReviews: new Map() }
     return {
       sessionId: this.active.id,
       requestedCount: count,
@@ -102,8 +103,8 @@ export class VocabularyPracticeService {
     if (session.review) throw new VocabularyPracticeError('BUSY')
     const reviewEntries = this.resolveReviewEntries(session, answers)
 
-    const completed = session.completedReview
-    if (completed && completed.requestId === requestId) {
+    const completed = session.completedReviews.get(requestId)
+    if (completed) {
       if (!sameSubmission(completed.answers, reviewEntries)) {
         throw new VocabularyPracticeError('INVALID_INPUT')
       }
@@ -127,7 +128,7 @@ export class VocabularyPracticeService {
       )
       this.validateMarks(session, outcome)
       // 先缓存已完成审查再写入：保存失败时重试可复用结果，不再次调用模型。
-      session.completedReview = { requestId, answers: reviewEntries, outcome }
+      session.completedReviews.set(requestId, { requestId, answers: reviewEntries, outcome })
       this.saveMistakes(requestId, outcome, reviewEntries)
       return outcome
     } finally {

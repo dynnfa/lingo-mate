@@ -117,7 +117,8 @@ export function useVocabularyMistakes(): {
     (entryId: string): void => {
       if (expandedRef.current.has(entryId)) {
         expandedRef.current.delete(entryId)
-        historySeqRef.current.delete(entryId)
+        // 使收起前的在途响应永久过期；保留递增序号，避免重新展开时复用身份。
+        historySeqRef.current.set(entryId, (historySeqRef.current.get(entryId) ?? 0) + 1)
         writeHistories((current) => {
           const next = { ...current }
           delete next[entryId]
