@@ -10,6 +10,8 @@ function input(controller: AbortController, text: string): ConversationSkillRunI
   return {
     requestId: randomUUID(),
     executionId: randomUUID(),
+    sessionId: randomUUID(),
+    userMessageId: randomUUID(),
     arguments: { text, wordLanguage: 'en' },
     explanationLanguage: 'en',
     signal: controller.signal,

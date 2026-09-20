@@ -99,6 +99,34 @@ describe('conversation status translation', () => {
     ).toBe('短语已处理，但结果描述失败。你可以只重试结果描述。')
   })
 
+  it('translates explore-phrase phases with generation wording', () => {
+    const zh = createI18n('zh-CN')
+    const t = zh.t as TFunction<['common', 'conversation', 'errors']>
+    expect(
+      translateConversationStatus(t, {
+        kind: 'skillPhase',
+        phase: 'analyzing',
+        skillId: 'explore-phrase'
+      })
+    ).toBe('正在生成短语…')
+    expect(
+      translateConversationStatus(t, {
+        kind: 'skillPhase',
+        phase: 'committing',
+        skillId: 'explore-phrase'
+      })
+    ).toBe('正在保存生成的短语…')
+    const en = createI18n('en')
+    const enT = en.t as TFunction<['common', 'conversation', 'errors']>
+    expect(
+      translateConversationStatus(enT, {
+        kind: 'skillPhase',
+        phase: 'analyzing',
+        skillId: 'explore-phrase'
+      })
+    ).toBe('Generating phrases…')
+  })
+
   it('maps every request error code to its dedicated message', () => {
     const t = en.t as TFunction<['common', 'conversation', 'errors']>
     expect(

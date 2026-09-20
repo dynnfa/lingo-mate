@@ -23,6 +23,8 @@ export class SynonymModule {
     private readonly diagnostics: CoreDiagnostics = noopCoreDiagnostics
   ) {}
   async addBatch(input: ConversationSkillRunInput): Promise<SynonymBatch> {
+    // 文本技能参数：由 ConversationModule 按 skillId 分派保证带 text 分支。
+    if (!('text' in input.arguments)) throw new Error('Synonym skill requires text arguments')
     const items = parseSynonymInput(input.arguments.text)
     const previous = input.previousReport
       ? synonymBatchSchema.parse(input.previousReport)
