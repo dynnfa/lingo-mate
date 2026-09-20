@@ -33,7 +33,8 @@
   overflow-y: auto;
   min-height: 0;
   font-size: 13px;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 .vocabulary-import-panel p {
@@ -44,11 +45,19 @@
   gap: 12px;
 }
 .vocabulary-import-panel textarea {
+  /* field-sizing 让高度随输入增长，行数较多时由弹窗面板统一滚动，
+     避免滚轮被 textarea 内部滚动占用导致弹窗滚不动；
+     flex: none 防止面板空间不足时把输入框压扁。 */
+  flex: none;
   width: 100%;
+  max-width: 420px;
+  min-height: calc(4lh + 20px);
+  max-height: 320px;
   box-sizing: border-box;
-  resize: vertical;
+  resize: none;
   padding: 10px;
   font: inherit;
+  field-sizing: content;
 }
 .vocabulary-import-results {
   max-height: 220px;
