@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type {
-  ListVocabularyMistakeHistoryInput,
-  ListVocabularyMistakesInput,
+  ListVocabularyMistakeHistoryQuery,
+  ListVocabularyMistakesQuery,
   VocabularyMistakeHistoryCursor,
   VocabularyMistakeHistoryItem,
   VocabularyMistakeListItem,
@@ -55,8 +55,9 @@ export interface VocabularyMistakeRepository {
   // 同一次审查的全部错题在一个事务内写入；(review_id, entry_id) 冲突时
   // 幂等跳过，保存重试不重复计数。空批次为无操作。
   saveBatch(records: VocabularyMistakeRecord[]): void
+  // 查询入参为 IPC 边界校验后的结果（limit 已含默认值），本层不再重复校验。
   // 按词条聚合的错题列表：最近错误时间倒序，entryId 作稳定排序条件。
-  list(input: ListVocabularyMistakesInput): VocabularyMistakesPage
+  list(query: ListVocabularyMistakesQuery): VocabularyMistakesPage
   // 单词条的错误释义历史：发生时间倒序，记录 id 作稳定排序条件。
-  listHistory(input: ListVocabularyMistakeHistoryInput): VocabularyMistakeHistoryPage
+  listHistory(query: ListVocabularyMistakeHistoryQuery): VocabularyMistakeHistoryPage
 }

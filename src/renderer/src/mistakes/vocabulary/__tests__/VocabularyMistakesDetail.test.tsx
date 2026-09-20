@@ -292,7 +292,6 @@ describe('VocabularyMistakesDetail', () => {
 
     await screen.findByText('apple')
     const cell = document.querySelector('.vocabulary-mistakes-meaning')
-    console.log('DEBUG cell text:', JSON.stringify(cell?.textContent))
     expect(cell?.textContent).toBe('第一行\n第二行')
   })
 })

@@ -31,28 +31,17 @@ function service(): {
   return { query: new VocabularyMistakeQueryService(repository), repository }
 }
 
+// 输入校验（含 limit 默认值补全）在 IPC 进程边界完成；本层只验证原样委托。
 describe('vocabulary mistake query service', () => {
-  it('validates input and delegates list queries to the repository', () => {
+  it('delegates list queries to the repository untouched', () => {
     const { query, repository } = service()
     expect(query.list({ limit: 10 })).toBe(LIST_PAGE)
     expect(repository.list).toHaveBeenCalledWith({ limit: 10 })
-    // 缺省 limit 由 schema 补全
-    expect(query.list({})).toBe(LIST_PAGE)
-    expect(repository.list).toHaveBeenLastCalledWith({ limit: 50 })
   })
 
-  it('validates input and delegates history queries to the repository', () => {
+  it('delegates history queries to the repository untouched', () => {
     const { query, repository } = service()
-    expect(query.listHistory({ entryId: UUID })).toBe(HISTORY_PAGE)
-    expect(repository.listHistory).toHaveBeenCalledWith({ entryId: UUID, limit: 50 })
-  })
-
-  it('rejects malformed queries before touching the repository', () => {
-    const { query, repository } = service()
-    expect(() => query.list({ limit: 0 })).toThrow()
-    expect(() => query.list({ cursor: { lastErrorAt: 'nope', entryId: UUID } })).toThrow()
-    expect(() => query.listHistory({ entryId: 'not-a-uuid' })).toThrow()
-    expect(repository.list).not.toHaveBeenCalled()
-    expect(repository.listHistory).not.toHaveBeenCalled()
+    expect(query.listHistory({ entryId: UUID, limit: 20 })).toBe(HISTORY_PAGE)
+    expect(repository.listHistory).toHaveBeenCalledWith({ entryId: UUID, limit: 20 })
   })
 })

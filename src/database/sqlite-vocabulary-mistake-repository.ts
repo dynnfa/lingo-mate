@@ -1,12 +1,10 @@
 import type Database from 'better-sqlite3'
 import { z } from 'zod'
 import {
-  listVocabularyMistakeHistoryInputSchema,
-  listVocabularyMistakesInputSchema,
   vocabularyMistakeHistoryItemSchema,
   vocabularyMistakeListItemSchema,
-  type ListVocabularyMistakeHistoryInput,
-  type ListVocabularyMistakesInput,
+  type ListVocabularyMistakeHistoryQuery,
+  type ListVocabularyMistakesQuery,
   type VocabularyMistakeHistoryItem,
   type VocabularyMistakeListItem
 } from '../shared/vocabulary-mistakes'
@@ -76,9 +74,9 @@ export class SqliteVocabularyMistakeRepository implements VocabularyMistakeRepos
     })
   }
 
-  list(raw: ListVocabularyMistakesInput): VocabularyMistakesPage {
+  list(query: ListVocabularyMistakesQuery): VocabularyMistakesPage {
     return this.withStorage(() => {
-      const { limit, cursor } = listVocabularyMistakesInputSchema.parse(raw)
+      const { limit, cursor } = query
       const rows: unknown[] = cursor
         ? this.database
             .prepare(
@@ -99,9 +97,9 @@ export class SqliteVocabularyMistakeRepository implements VocabularyMistakeRepos
     })
   }
 
-  listHistory(raw: ListVocabularyMistakeHistoryInput): VocabularyMistakeHistoryPage {
+  listHistory(query: ListVocabularyMistakeHistoryQuery): VocabularyMistakeHistoryPage {
     return this.withStorage(() => {
-      const { entryId, limit, cursor } = listVocabularyMistakeHistoryInputSchema.parse(raw)
+      const { entryId, limit, cursor } = query
       const rows: unknown[] = cursor
         ? this.database
             .prepare(
