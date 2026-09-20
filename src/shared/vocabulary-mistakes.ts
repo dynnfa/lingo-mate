@@ -45,6 +45,8 @@ export const listVocabularyMistakesInputSchema = z.strictObject({
   cursor: vocabularyMistakesListCursorSchema.optional()
 })
 export type ListVocabularyMistakesInput = z.input<typeof listVocabularyMistakesInputSchema>
+// IPC 进程边界校验后的查询参数：limit 默认值已补全，供 Main 之后的可信调用方使用。
+export type ListVocabularyMistakesQuery = z.output<typeof listVocabularyMistakesInputSchema>
 
 // 聚合行：一个词条一行；释义与单词是错题落库时的快照，不回读词库。
 export const vocabularyMistakeListItemSchema = z.strictObject({
@@ -84,6 +86,10 @@ export const listVocabularyMistakeHistoryInputSchema = z.strictObject({
   cursor: vocabularyMistakeHistoryCursorSchema.optional()
 })
 export type ListVocabularyMistakeHistoryInput = z.input<
+  typeof listVocabularyMistakeHistoryInputSchema
+>
+// IPC 进程边界校验后的历史查询参数：limit 默认值已补全。
+export type ListVocabularyMistakeHistoryQuery = z.output<
   typeof listVocabularyMistakeHistoryInputSchema
 >
 

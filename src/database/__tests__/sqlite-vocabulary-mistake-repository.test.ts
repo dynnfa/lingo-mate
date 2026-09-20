@@ -214,7 +214,7 @@ describe('vocabulary mistake repository list', () => {
       })
     ])
 
-    const page = repository.list({})
+    const page = repository.list({ limit: 50 })
     expect(page.entries).toEqual([
       {
         entryId: ENTRY_A,
@@ -272,7 +272,7 @@ describe('vocabulary mistake repository list', () => {
       })
     ])
     // 后来答对不删除历史：仓储没有删除入口，历史仍可查
-    const history = repository.listHistory({ entryId: ENTRY_A })
+    const history = repository.listHistory({ entryId: ENTRY_A, limit: 50 })
     expect(history.items).toHaveLength(1)
   })
 })
@@ -324,18 +324,8 @@ describe('vocabulary mistake repository listHistory', () => {
     expect(second.nextCursor).toBeUndefined()
 
     // 其他词条的历史不混入
-    const other = repository.listHistory({ entryId: ENTRY_B })
+    const other = repository.listHistory({ entryId: ENTRY_B, limit: 50 })
     expect(other.items.map((item) => item.submittedMeaning)).toEqual(['别的词'])
-  })
-
-  it('rejects malformed inputs', () => {
-    const database = open()
-    const repository = new SqliteVocabularyMistakeRepository(database)
-    expect(() => repository.list({ limit: 0 })).toThrow('STORAGE_FAILED')
-    expect(() => repository.list({ cursor: { lastErrorAt: 'nope', entryId: ENTRY_A } })).toThrow(
-      'STORAGE_FAILED'
-    )
-    expect(() => repository.listHistory({ entryId: 'not-a-uuid' })).toThrow('STORAGE_FAILED')
   })
 })
 
@@ -345,7 +335,7 @@ describe('vocabulary mistake repository storage failures', () => {
     const repository = new SqliteVocabularyMistakeRepository(database)
     database.exec('DROP TABLE vocabulary_practice_mistakes')
     expect(() => repository.saveBatch([record()])).toThrow('STORAGE_FAILED')
-    expect(() => repository.list({})).toThrow('STORAGE_FAILED')
-    expect(() => repository.listHistory({ entryId: ENTRY_A })).toThrow('STORAGE_FAILED')
+    expect(() => repository.list({ limit: 50 })).toThrow('STORAGE_FAILED')
+    expect(() => repository.listHistory({ entryId: ENTRY_A, limit: 50 })).toThrow('STORAGE_FAILED')
   })
 })

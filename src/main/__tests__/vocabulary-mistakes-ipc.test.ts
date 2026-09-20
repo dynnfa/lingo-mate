@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { VocabularyMistakesError } from '../../core/learning/vocabulary-practice/parse-vocabulary-mistakes-input'
 import {
   VOCABULARY_MISTAKES_CHANNELS,
+  VOCABULARY_MISTAKES_LIMIT_DEFAULT,
   type ListVocabularyMistakeHistoryResult,
   type ListVocabularyMistakesResult
 } from '../../shared/vocabulary-mistakes'
@@ -101,6 +102,23 @@ describe('vocabulary mistakes IPC', () => {
     }
     expect(service.list).not.toHaveBeenCalled()
     expect(service.listHistory).not.toHaveBeenCalled()
+  })
+
+  it('passes guard-validated input with the default limit to the service', async () => {
+    const service = register()
+    const list = registeredHandler(VOCABULARY_MISTAKES_CHANNELS.list)
+    const listHistory = registeredHandler(VOCABULARY_MISTAKES_CHANNELS.listHistory)
+    const sender = { sender: new FakeSender() }
+
+    await list(sender, {})
+    await listHistory(sender, { entryId: UUID })
+
+    // 校验后的输入（含 limit 默认值补全）由此进入可信调用链，后续层不再重复校验
+    expect(service.list).toHaveBeenCalledWith({ limit: VOCABULARY_MISTAKES_LIMIT_DEFAULT })
+    expect(service.listHistory).toHaveBeenCalledWith({
+      entryId: UUID,
+      limit: VOCABULARY_MISTAKES_LIMIT_DEFAULT
+    })
   })
 
   it('returns aggregate pages and omits exhausted cursors', async () => {
