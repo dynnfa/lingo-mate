@@ -54,7 +54,7 @@ describe('vocabulary migrations', () => {
       .run('session', 'before', 'before')
     migrateDatabase(database)
     migrateDatabase(database)
-    expect(database.pragma('user_version', { simple: true })).toBe(10)
+    expect(database.pragma('user_version', { simple: true })).toBe(11)
     expect(database.prepare('SELECT id FROM conversations').all()).toEqual([])
     expect(new SqliteVocabularyRepository(database).list({})).toEqual({ entries: [] })
   })
@@ -87,7 +87,7 @@ describe('vocabulary migrations', () => {
     `)
     migrateDatabase(database)
     migrateDatabase(database)
-    expect(database.pragma('user_version', { simple: true })).toBe(10)
+    expect(database.pragma('user_version', { simple: true })).toBe(11)
     expect(columns(database)).toEqual(V5_COLUMNS)
     // 迁移保留身份与排序信息；四个内容字段按约定置 NULL，可读、可查重。
     const rows = database

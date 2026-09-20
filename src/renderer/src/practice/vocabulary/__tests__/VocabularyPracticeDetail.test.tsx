@@ -34,7 +34,11 @@ interface PracticeApiStub {
   api: VocabularyPracticeApi
   calls: {
     starts: number[]
-    reviews: Array<{ sessionId: string; answers: Array<{ entryId: string; meaning: string }> }>
+    reviews: Array<{
+      requestId: string
+      sessionId: string
+      answers: Array<{ entryId: string; meaning: string }>
+    }>
     cancels: string[]
   }
   respondStart(result: VocabularyPracticeStartResult): void
@@ -63,7 +67,11 @@ function practiceApiStub(initial?: VocabularyPracticeStartResult): PracticeApiSt
       })
     },
     async review(input) {
-      calls.reviews.push({ sessionId: input.sessionId, answers: input.answers })
+      calls.reviews.push({
+        requestId: input.requestId,
+        sessionId: input.sessionId,
+        answers: input.answers
+      })
       const queued = reviewQueue.shift()
       if (queued) return queued
       return new Promise((resolve) => {
@@ -375,5 +383,79 @@ describe('VocabularyPracticeDetail', () => {
       void i18n.changeLanguage('zh-CN')
     }
     expect(stub.calls.starts).toEqual([10])
+  })
+
+  it('reuses the requestId when retrying the same answers after a storage failure', async () => {
+    const stub = installApi(practiceApiStub(startOk(['apple'])))
+    renderDetail()
+    confirmCount()
+    await waitFor(() => screen.getByText('apple'))
+
+    fireEvent.change(screen.getByLabelText('apple 的释义'), { target: { value: 'wrong' } })
+    stub.respondReview({ status: 'error', error: { code: 'STORAGE_FAILED' } })
+    fireEvent.click(screen.getByRole('button', { name: '提交审查' }))
+
+    // 保存失败：答案保留，可重试；不能提示已完成审查
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '提交审查' })).toBeEnabled()
+    })
+    expect(screen.getByLabelText('apple 的释义')).toHaveValue('wrong')
+    expect(stub.calls.reviews).toHaveLength(1)
+    const firstRequestId = stub.calls.reviews[0].requestId
+
+    // 同答案重试：复用同一 requestId，Core 据此复用已完成审查并只重试保存
+    stub.respondReview({
+      status: 'ok',
+      verdict: 'has_errors',
+      summary: '释义有误。',
+      marks: [
+        { entryId: stub.calls.reviews[0].answers[0].entryId, field: 'meaning', reason: '不匹配' }
+      ]
+    })
+    fireEvent.click(screen.getByRole('button', { name: '提交审查' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('释义有误。')).toBeInTheDocument()
+    })
+    expect(stub.calls.reviews).toHaveLength(2)
+    expect(stub.calls.reviews[1].requestId).toBe(firstRequestId)
+  })
+
+  it('issues a new requestId after answers are edited or a review succeeds', async () => {
+    const stub = installApi(practiceApiStub(startOk(['apple'])))
+    renderDetail()
+    confirmCount()
+    await waitFor(() => screen.getByText('apple'))
+
+    fireEvent.change(screen.getByLabelText('apple 的释义'), { target: { value: 'wrong' } })
+    stub.respondReview({ status: 'error', error: { code: 'STORAGE_FAILED' } })
+    fireEvent.click(screen.getByRole('button', { name: '提交审查' }))
+    await waitFor(() => expect(stub.calls.reviews).toHaveLength(1))
+
+    // 修改答案后的主动提交：新审查使用新 requestId
+    fireEvent.change(screen.getByLabelText('apple 的释义'), { target: { value: 'still wrong' } })
+    stub.respondReview({
+      status: 'ok',
+      verdict: 'has_errors',
+      summary: '释义有误。',
+      marks: [
+        { entryId: stub.calls.reviews[0].answers[0].entryId, field: 'meaning', reason: '不匹配' }
+      ]
+    })
+    fireEvent.click(screen.getByRole('button', { name: '提交审查' }))
+    await waitFor(() => expect(stub.calls.reviews).toHaveLength(2))
+    expect(stub.calls.reviews[1].requestId).not.toBe(stub.calls.reviews[0].requestId)
+
+    // 审查成功后的再次提交同样属于新审查
+    fireEvent.change(screen.getByLabelText('apple 的释义'), { target: { value: 'fixed' } })
+    stub.respondReview({
+      status: 'ok',
+      verdict: 'all_correct',
+      summary: '全部正确。',
+      marks: []
+    })
+    fireEvent.click(screen.getByRole('button', { name: '提交审查' }))
+    await waitFor(() => expect(stub.calls.reviews).toHaveLength(3))
+    expect(stub.calls.reviews[2].requestId).not.toBe(stub.calls.reviews[1].requestId)
   })
 })

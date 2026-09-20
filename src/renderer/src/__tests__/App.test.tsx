@@ -269,6 +269,15 @@ function installApiMock(
     synonym: synonymApiStub(),
     vocabularyPractice: vocabularyPracticeApiStub(),
     sentencePractice: sentencePracticeApiStub(),
+    // App 测试不进入错题集详情；提供稳定空结果桩，避免页面挂起。
+    vocabularyMistakes: {
+      async list() {
+        return { status: 'ok', entries: [] }
+      },
+      async listHistory() {
+        return { status: 'error', error: { code: 'UNKNOWN_ERROR' } }
+      }
+    },
     conversation: {
       async create() {
         mock.calls.create += 1
@@ -1244,6 +1253,28 @@ describe('App recorded page navigation', () => {
 
     expect(screen.queryByRole('main', { name: '已记录词汇' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '已记录词汇' })).toHaveFocus()
+  })
+
+  it('opens the mistakes page from the menu and restores focus on exit', async () => {
+    const mock = installApiMock({
+      list: { status: 'ok', conversations: [summary(SESSION_A, NOW)] },
+      load: () => loadedWithHistory(SESSION_A)
+    })
+    await renderReady(mock)
+    expect(await screen.findByText('Hello')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '错题集（单词）' }))
+
+    // 错题集页替换对话视图；空列表展示空态，对话视图保持挂载但隐藏
+    expect(screen.getByRole('main', { name: '错题集（单词）' })).toBeInTheDocument()
+    expect(await screen.findByText('还没有错题')).toBeInTheDocument()
+    expect(document.querySelector('.chat-shell')).toHaveAttribute('hidden')
+
+    fireEvent.click(screen.getByRole('button', { name: '返回' }))
+
+    expect(screen.queryByRole('main', { name: '错题集（单词）' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '错题集（单词）' })).toHaveFocus()
+    expect(screen.getByLabelText('练习内容')).toBeVisible()
   })
 
   it('keeps the conversation, history and unsent draft across a recorded page round trip', async () => {

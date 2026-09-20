@@ -237,6 +237,154 @@ body {
 }
 
 /* 列表底部加载区已收敛到 LoadMoreBar。 */
+
+/* ── 错题集（单词）详情：聚合表格与行内展开的错误历史 ── */
+.vocabulary-mistakes-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+
+.vocabulary-mistakes-header h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.vocabulary-mistakes-state {
+  padding: 32px 0;
+}
+
+.vocabulary-mistakes-table-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--color-border-divider);
+  border-radius: 10px;
+  background: var(--color-surface);
+}
+
+.vocabulary-mistakes-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+
+.vocabulary-mistakes-table th,
+.vocabulary-mistakes-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border-header);
+  text-align: left;
+  vertical-align: top;
+  line-height: 1.55;
+}
+
+.vocabulary-mistakes-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: var(--color-text-label);
+  background: var(--color-surface);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.vocabulary-mistakes-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.vocabulary-mistakes-term {
+  width: 1px;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.vocabulary-mistakes-meaning {
+  max-width: 320px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.vocabulary-mistakes-count,
+.vocabulary-mistakes-time {
+  white-space: nowrap;
+}
+
+.vocabulary-mistakes-actions-column {
+  width: 1px;
+  white-space: nowrap;
+}
+
+.vocabulary-mistakes-actions-column button {
+  padding: 4px 10px;
+  color: var(--color-text-secondary);
+  background: transparent;
+  font-size: 12px;
+}
+
+.vocabulary-mistakes-actions-column button:hover {
+  color: var(--color-text);
+  background: var(--color-surface-hover);
+}
+
+/* 展开的历史行：浅底色与主行区分；历史条目按“释义 + 时间”上下排布。 */
+.vocabulary-mistakes-history-row > td {
+  background: var(--color-surface);
+}
+
+.vocabulary-mistakes-history {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vocabulary-mistakes-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vocabulary-mistakes-history-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vocabulary-mistakes-history-meaning {
+  max-width: 480px;
+  margin: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.vocabulary-mistakes-history-time {
+  color: var(--color-text-label);
+  font-size: 12px;
+}
+
+.vocabulary-mistakes-history-status {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.vocabulary-mistakes-history-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--color-text-secondary);
+}
+
+.vocabulary-mistakes-history-error p {
+  margin: 0;
+}
 /* ── 词汇练习详情：数量确认表单、两列练习区、审查状态与标红反馈 ── */
 .vocabulary-practice {
   display: flex;

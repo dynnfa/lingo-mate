@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 
 // 应用顶层视图：conversation 为常驻主视图，其余为全屏子页面。
-export type AppView = 'conversation' | 'settings' | 'recorded' | 'practice'
+export type AppView = 'conversation' | 'settings' | 'recorded' | 'practice' | 'mistakes'
 
 // 可通过入口按钮主动打开的子页面视图。
 export type SecondaryView = Exclude<AppView, 'conversation'>
@@ -13,11 +13,12 @@ export interface AppViewNavigation {
   openView: (view: SecondaryView) => void
   /** 返回对话视图（供子页面 onExit 调用） */
   returnToConversation: () => void
-  /** 三个入口按钮的 ref，由 App.tsx 绑定到侧栏按钮 */
+  /** 入口按钮的 ref，由 App.tsx 绑定到侧栏按钮 */
   entryButtonRefs: {
     settings: RefObject<HTMLButtonElement | null>
     recorded: RefObject<HTMLButtonElement | null>
     practice: RefObject<HTMLButtonElement | null>
+    mistakes: RefObject<HTMLButtonElement | null>
   }
 }
 
@@ -28,6 +29,7 @@ export function useAppViewNavigation(): AppViewNavigation {
   const settingsButtonRef = useRef<HTMLButtonElement>(null)
   const recordedButtonRef = useRef<HTMLButtonElement>(null)
   const practiceButtonRef = useRef<HTMLButtonElement>(null)
+  const mistakesButtonRef = useRef<HTMLButtonElement>(null)
   const previousViewRef = useRef<AppView>('conversation')
 
   // refs 对象在渲染间保持稳定引用，调用方可安全用于 effect 依赖。
@@ -35,9 +37,10 @@ export function useAppViewNavigation(): AppViewNavigation {
     () => ({
       settings: settingsButtonRef,
       recorded: recordedButtonRef,
-      practice: practiceButtonRef
+      practice: practiceButtonRef,
+      mistakes: mistakesButtonRef
     }),
-    [settingsButtonRef, recordedButtonRef, practiceButtonRef]
+    [settingsButtonRef, recordedButtonRef, practiceButtonRef, mistakesButtonRef]
   )
 
   // 从子页面返回对话视图时，把焦点还给对应入口按钮；初次挂载不抢焦点。
