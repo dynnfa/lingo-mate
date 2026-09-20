@@ -36,6 +36,8 @@ const INITIAL_STATE: VocabularyPracticeState = {
 
 // 词汇练习状态 hook：集中管理与 IPC 的交互、旧轮次迟到结果忽略与
 // 卸载时取消在途审查；审查期间答案被冻结（组件按 phase 禁用编辑）。
+// 提交失败后答案未变时复用同一 requestId 重试，让 Core 复用已完成的
+// 审查结果（保存重试不再次调用模型）；成功或开启新一轮后重置。
 export function useVocabularyPractice(): {
   state: VocabularyPracticeState
   hasAnyAnswer: boolean
@@ -50,6 +52,22 @@ export function useVocabularyPractice(): {
   const sessionRef = useRef<string | undefined>(undefined)
   const startSeqRef = useRef(0)
   const reviewSeqRef = useRef(0)
+  // 最近一次提交的身份与答案：失败重试按答案一致性决定是否复用。
+  const pendingReviewRef = useRef<
+    { requestId: string; answers: Array<{ entryId: string; meaning: string }> } | undefined
+  >(undefined)
+
+  // 与 Core 的提交一致性规则对齐：去首尾空白后逐项比较。
+  const sameSubmittedAnswers = (
+    cached: Array<{ entryId: string; meaning: string }>,
+    current: Array<{ entryId: string; meaning: string }>
+  ): boolean =>
+    cached.length === current.length &&
+    cached.every(
+      (answer, index) =>
+        answer.entryId === current[index].entryId &&
+        answer.meaning.trim() === current[index].meaning.trim()
+    )
 
   useEffect(() => {
     mountedRef.current = true
@@ -67,6 +85,7 @@ export function useVocabularyPractice(): {
     if (previousSession)
       void window.api.vocabularyPractice.cancel({ sessionId: previousSession }).catch(() => {})
     reviewSeqRef.current += 1
+    pendingReviewRef.current = undefined
     const seq = ++startSeqRef.current
     setState({ ...INITIAL_STATE, phase: 'loading' })
     window.api.vocabularyPractice
@@ -116,10 +135,18 @@ export function useVocabularyPractice(): {
       entryId: entry.entryId,
       meaning: state.answers[entry.entryId] ?? ''
     }))
+    // 失败重试且答案未改：复用同一 requestId，Core 据此复用已完成审查；
+    // 修改答案后的主动提交属于新审查，生成新 ID。
+    const pending = pendingReviewRef.current
+    const requestId =
+      pending && sameSubmittedAnswers(pending.answers, answers)
+        ? pending.requestId
+        : crypto.randomUUID()
+    pendingReviewRef.current = { requestId, answers }
     const seq = ++reviewSeqRef.current
     setState((current) => ({ ...current, phase: 'reviewing', error: undefined, notice: undefined }))
     window.api.vocabularyPractice
-      .review({ requestId: crypto.randomUUID(), sessionId, answers })
+      .review({ requestId, sessionId, answers })
       .then((result) => {
         if (!mountedRef.current || reviewSeqRef.current !== seq) return
         if (result.status === 'error') {
@@ -134,6 +161,8 @@ export function useVocabularyPractice(): {
           }))
           return
         }
+        // 审查完成：再次提交（含修改答案后的重做）属于新审查。
+        pendingReviewRef.current = undefined
         const marks: Record<string, string> = {}
         for (const mark of result.marks) marks[mark.entryId] = mark.reason
         setState((current) => ({

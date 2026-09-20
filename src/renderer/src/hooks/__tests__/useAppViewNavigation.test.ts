@@ -23,6 +23,7 @@ describe('useAppViewNavigation', () => {
     mountEntryButton('settings')
     mountEntryButton('recorded')
     mountEntryButton('practice')
+    mountEntryButton('mistakes')
 
     const { result } = renderHook(() => useAppViewNavigation())
 
@@ -38,7 +39,12 @@ describe('useAppViewNavigation', () => {
     expect(result.current.activeView).toBe('recorded')
   })
 
-  it.each(['settings', 'recorded', 'practice'] as const satisfies readonly SecondaryView[])(
+  it.each([
+    'settings',
+    'recorded',
+    'practice',
+    'mistakes'
+  ] as const satisfies readonly SecondaryView[])(
     'returns focus to the %s entry button on returnToConversation',
     (view) => {
       const { result } = renderHook(() => useAppViewNavigation())

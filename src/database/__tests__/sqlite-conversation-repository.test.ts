@@ -149,7 +149,7 @@ describe('SqliteConversationRepository', () => {
 
     const raw = new Database(path)
     try {
-      expect(raw.pragma('user_version', { simple: true })).toBe(10)
+      expect(raw.pragma('user_version', { simple: true })).toBe(11)
       expect(
         raw
           .prepare(
@@ -297,9 +297,9 @@ describe('SqliteConversationRepository', () => {
   it('rejects databases from a newer schema version', () => {
     const path = databasePath()
     const raw = new Database(path)
-    raw.pragma('user_version = 11')
+    raw.pragma('user_version = 12')
     raw.close()
 
-    expect(() => openRepository(path)).toThrow('Unsupported database schema version: 11')
+    expect(() => openRepository(path)).toThrow('Unsupported database schema version: 12')
   })
 })

@@ -70,6 +70,9 @@ import { VocabularyManagementService } from '../core/learning/vocabulary/vocabul
 import { registerVocabularyPracticeIpc } from './vocabulary-practice-ipc'
 import { VocabularyPracticeService } from '../core/learning/vocabulary-practice/vocabulary-practice-service'
 import { VocabularyPracticeError } from '../core/learning/vocabulary-practice/parse-vocabulary-practice-input'
+import { VocabularyMistakeQueryService } from '../core/learning/vocabulary-practice/vocabulary-mistake-query-service'
+import { SqliteVocabularyMistakeRepository } from '../database/sqlite-vocabulary-mistake-repository'
+import { registerVocabularyMistakesIpc } from './vocabulary-mistakes-ipc'
 import { LlmVocabularyPracticeReviewer } from '../core/llm/llm-vocabulary-practice-reviewer'
 import { registerSentencePracticeIpc } from './sentence-practice-ipc'
 import { SentencePracticeService } from '../core/learning/sentence-practice/sentence-practice-service'
@@ -306,30 +309,41 @@ app.whenReady().then(() => {
     () => resolveLanguages().outputLanguage,
     registerTrustedHandler
   )
-  // 词汇练习：同一词库仓储随机抽词，审查按请求解析模型快照；练习与审查
-  // 状态只保存在内存会话中，不落库。解释语言跟随当前界面语言。
-  vocabularyPracticeService = new VocabularyPracticeService(vocabularyRepository, () => {
-    try {
-      return new LlmVocabularyPracticeReviewer(
-        modelsService.resolveSnapshot(),
-        60_000,
-        createLlmClient
-      )
-    } catch (cause) {
-      throw new VocabularyPracticeError(
-        cause instanceof ModelNotConfiguredError
-          ? 'MODEL_NOT_CONFIGURED'
-          : cause instanceof ModelConfigValidationError &&
-              cause.code === 'CREDENTIAL_DECRYPT_FAILED'
-            ? 'CREDENTIAL_DECRYPT_FAILED'
-            : 'MODEL_ERROR',
-        { cause }
-      )
-    }
-  })
+  // 词汇练习：同一词库仓储随机抽词，审查按请求解析模型快照；练习会话
+  // 保持在内存。审查成功后按校验过的错误标记把错题（词条快照 + 提交释义）
+  // 整批写入错题仓储；解释语言跟随当前界面语言。
+  const vocabularyMistakeRepository = new SqliteVocabularyMistakeRepository(database)
+  vocabularyPracticeService = new VocabularyPracticeService(
+    vocabularyRepository,
+    () => {
+      try {
+        return new LlmVocabularyPracticeReviewer(
+          modelsService.resolveSnapshot(),
+          60_000,
+          createLlmClient
+        )
+      } catch (cause) {
+        throw new VocabularyPracticeError(
+          cause instanceof ModelNotConfiguredError
+            ? 'MODEL_NOT_CONFIGURED'
+            : cause instanceof ModelConfigValidationError &&
+                cause.code === 'CREDENTIAL_DECRYPT_FAILED'
+              ? 'CREDENTIAL_DECRYPT_FAILED'
+              : 'MODEL_ERROR',
+          { cause }
+        )
+      }
+    },
+    vocabularyMistakeRepository
+  )
   registerVocabularyPracticeIpc(
     vocabularyPracticeService,
     () => resolveLanguages().outputLanguage,
+    registerTrustedHandler
+  )
+  // 错题集页面的只读查询：聚合列表与单词条历史分页，复用同一仓储。
+  registerVocabularyMistakesIpc(
+    new VocabularyMistakeQueryService(vocabularyMistakeRepository),
     registerTrustedHandler
   )
   // 造句练习：同一词库仓储随机抽 3 词，独立内存会话，不与词汇练习

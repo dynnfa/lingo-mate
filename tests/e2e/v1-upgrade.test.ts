@@ -96,7 +96,7 @@ test('upgrades a v1 database and clears legacy conversations', async () => {
     // 升级后的数据库结构达到当前 schema 版本（v10 近义词）
     const raw = new Database(join(userDataPath, 'lingo-mate.sqlite'))
     try {
-      expect(raw.pragma('user_version', { simple: true })).toBe(10)
+      expect(raw.pragma('user_version', { simple: true })).toBe(11)
       expect(
         (
           raw

@@ -86,6 +86,13 @@ import {
   VOCABULARY_PRACTICE_CHANNELS
 } from '../shared/vocabulary-practice'
 import {
+  listVocabularyMistakeHistoryInputSchema,
+  listVocabularyMistakeHistoryResultSchema,
+  listVocabularyMistakesInputSchema,
+  listVocabularyMistakesResultSchema,
+  VOCABULARY_MISTAKES_CHANNELS
+} from '../shared/vocabulary-mistakes'
+import {
   sentencePracticeCancelInputSchema,
   sentencePracticeCancelResultSchema,
   sentencePracticeCloseInputSchema,
@@ -282,6 +289,21 @@ const api: LingoMateApi = {
       const input = vocabularyPracticeCancelInputSchema.parse(rawInput)
       const result: unknown = await ipcRenderer.invoke(VOCABULARY_PRACTICE_CHANNELS.cancel, input)
       return vocabularyPracticeCancelResultSchema.parse(result)
+    }
+  },
+  vocabularyMistakes: {
+    async list(rawInput) {
+      const input = listVocabularyMistakesInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(VOCABULARY_MISTAKES_CHANNELS.list, input)
+      return listVocabularyMistakesResultSchema.parse(result)
+    },
+    async listHistory(rawInput) {
+      const input = listVocabularyMistakeHistoryInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(
+        VOCABULARY_MISTAKES_CHANNELS.listHistory,
+        input
+      )
+      return listVocabularyMistakeHistoryResultSchema.parse(result)
     }
   },
   sentencePractice: {
