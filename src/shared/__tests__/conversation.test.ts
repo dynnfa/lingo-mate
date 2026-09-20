@@ -119,6 +119,46 @@ describe('conversation protocol schemas', () => {
     ).toBe(false)
   })
 
+  it('accepts the parameterless explore-phrase contract and rejects text on it', () => {
+    const valid = {
+      requestId: REQUEST_ID,
+      sessionId: SESSION_ID,
+      skillId: 'explore-phrase',
+      arguments: { wordLanguage: 'en' }
+    }
+    expect(runConversationSkillInputSchema.parse(valid)).toEqual(valid)
+    // explore-phrase 不接受 text：无参数命令不为它放宽全部技能的校验。
+    expect(
+      runConversationSkillInputSchema.safeParse({
+        ...valid,
+        arguments: { ...valid.arguments, text: 'anything' }
+      }).success
+    ).toBe(false)
+    expect(
+      runConversationSkillInputSchema.safeParse({
+        ...valid,
+        arguments: { wordLanguage: 'fr' }
+      }).success
+    ).toBe(false)
+  })
+
+  it('keeps requiring non-empty text for the phrase skill', () => {
+    const invalid = {
+      requestId: REQUEST_ID,
+      sessionId: SESSION_ID,
+      skillId: 'phrase',
+      arguments: { text: '', wordLanguage: 'en' }
+    }
+    expect(runConversationSkillInputSchema.safeParse(invalid).success).toBe(false)
+    // 文本技能也不接受无 text 的参数形状。
+    expect(
+      runConversationSkillInputSchema.safeParse({
+        ...invalid,
+        arguments: { wordLanguage: 'en' }
+      }).success
+    ).toBe(false)
+  })
+
   it('maps structured cancel results', () => {
     expect(cancelMessageResultSchema.parse({ status: 'ok' })).toEqual({ status: 'ok' })
     expect(

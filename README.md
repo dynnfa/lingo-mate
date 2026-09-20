@@ -10,6 +10,7 @@ Lingo Mate currently supports learning English, with an interface available in S
 
 - **Learning conversations:** Practice expression, rewrite sentences, and ask language questions. Multiple sessions, conversation history, streaming responses, cancellation, and retry are supported.
 - **Vocabulary and phrase collection:** Use `/vocabulary` and `/phrase` to save learning material. The model generates pronunciation, meanings, concept explanations, and examples for words, or explanations and examples for phrases. Saved entries can be reviewed and deleted from dedicated pages.
+- **Phrase exploration:** Use `/explore-phrase` to generate ten common English phrases with meanings and examples, shown as a table in the conversation. The last seven rounds are deduplicated through a local history file, so new rounds always bring fresh phrases.
 - **Synonym comparison:** Use `/synonym` to organize related words and save their meanings and usage distinctions for later comparison.
 - **Vocabulary practice and mistake tracking:** Draw a chosen number of random words from the local library, enter their meanings, and submit answers for model review. Incorrect answers are automatically collected, with error counts, recent mistakes, and answer history available for review.
 - **Sentence practice:** Draw three words from the vocabulary library and receive model-generated phrase hints. Submit a sentence for feedback on word usage, fluency, and grammar, together with a suggested revision.

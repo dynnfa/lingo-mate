@@ -168,11 +168,15 @@ function appendReasoningDelta(current: string, delta: string): string {
 }
 
 // 从消息内容派生技能身份；命令前缀是 canonical 数据，不依赖内存标记。
-// /concept 是普通对话流（概念讲解提示词），不属于技能。
+// /concept 是普通对话流（概念讲解提示词），不属于技能。/explore-phrase 是
+// 无参数命令：会话中保存的形态就是命令本身。
 function skillCommandOf(content: string): ConversationSkillId | undefined {
   if (content.startsWith('/synonym ')) return 'synonym'
   if (content.startsWith('/phrase ')) return 'phrase'
   if (content.startsWith('/vocabulary ')) return 'vocabulary'
+  if (content === '/explore-phrase' || content.startsWith('/explore-phrase ')) {
+    return 'explore-phrase'
+  }
   return undefined
 }
 

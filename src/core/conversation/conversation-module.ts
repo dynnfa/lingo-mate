@@ -27,6 +27,8 @@ import { ModelConfigValidationError, ModelNotConfiguredError } from '../llm/mode
 import { isWordConceptMessage } from '../prompt/word-concept'
 import { VocabularyError } from '../learning/vocabulary/parse-vocabulary-input'
 import { PhraseError } from '../learning/phrase/parse-phrase-input'
+import { ExplorePhraseError } from '../learning/explore-phrase/explore-phrase-error'
+import { isExplorePhraseReport } from '../../shared/explore-phrase'
 import type { ConversationSkill, ConversationSkillRunInput } from './conversation-skill'
 import type {
   ConversationSkillRepository,
@@ -188,7 +190,7 @@ export class ConversationModule {
     runConversationSkillInputSchema.parse(input)
     if (input.skillId === 'synonym') parseSynonymInput(input.arguments.text)
     const skill = this.skills.get(input.skillId)
-    if (!skill || !this.skillRepository) {
+    if (!skill) {
       throw new Error('Conversation skills are not configured')
     }
     const conversation =
@@ -201,6 +203,14 @@ export class ConversationModule {
     const languages = this.snapshotLanguages()
     if (input.arguments.wordLanguage !== languages.targetLanguage) {
       throw new SkillLanguageMismatchError(input.arguments.wordLanguage, languages.targetLanguage)
+    }
+    // /explore-phrase 的结果走 JSON 历史文件路径：不创建数据库技能执行，
+    // 也不写数据库报告；命令消息与最终助手消息仍走会话消息接口。
+    if (input.skillId === 'explore-phrase') {
+      return this.runExplorePhraseSkill(input, skill, languages, emit)
+    }
+    if (!this.skillRepository) {
+      throw new Error('Conversation skills are not configured')
     }
     const now = new Date().toISOString()
     const userMessage: StoredMessage = {
@@ -265,6 +275,161 @@ export class ConversationModule {
     if (!active) throw new Error('Skill execution is not registered')
     void this.runSkillExecution(generation, execution, skill, active, emit)
     return { accepted: true, generation }
+  }
+
+  // /explore-phrase 执行：无数据库执行记录，executionId 在 JSON 批次提交时
+  // 与 userMessageId 建立稳定关联；失败重试按该身份从文件恢复。
+  private async runExplorePhraseSkill(
+    input: Extract<RunConversationSkillInput, { skillId: 'explore-phrase' }>,
+    skill: ConversationSkill,
+    languages: ConversationLanguages,
+    emit: ConversationEventListener
+  ): Promise<GenerationAccepted> {
+    const now = new Date().toISOString()
+    const userMessage: StoredMessage = {
+      id: randomUUID(),
+      sessionId: input.sessionId,
+      role: 'user',
+      // 无参数命令：用户消息就是命令本身，不拼接空文本。
+      content: '/explore-phrase',
+      createdAt: now
+    }
+    const executionId = randomUUID()
+    const assistantMessageId = randomUUID()
+    this.registerExecution(input.requestId, {
+      controller: new AbortController(),
+      sessionId: input.sessionId,
+      userMessageId: userMessage.id,
+      assistantMessageId,
+      languages
+    })
+
+    const titled = this.prepareConversation(userMessage)
+    try {
+      await this.withPersistence(() => this.repository.appendMessage(userMessage, titled))
+      this.drafts.delete(input.sessionId)
+    } catch (error) {
+      this.releaseExecution(input.requestId)
+      emit({
+        type: 'failed',
+        requestId: input.requestId,
+        sessionId: input.sessionId,
+        error: this.toSafeError(error)
+      })
+      throw error
+    }
+
+    if (titled) void this.updateTitle(input.requestId, userMessage, emit)
+
+    const generation: GenerationStarted = {
+      requestId: input.requestId,
+      sessionId: input.sessionId,
+      userMessage: toMessage(userMessage),
+      assistantMessageId
+    }
+    const active = this.activeRequests.get(input.requestId)
+    if (!active) throw new Error('Skill execution is not registered')
+    void this.runExplorePhraseExecution(generation, executionId, input, skill, active, emit)
+    return { accepted: true, generation }
+  }
+
+  private async runExplorePhraseExecution(
+    generation: GenerationStarted,
+    executionId: string,
+    input: Extract<RunConversationSkillInput, { skillId: 'explore-phrase' }>,
+    skill: ConversationSkill,
+    execution: ActiveExecution,
+    emit: ConversationEventListener
+  ): Promise<void> {
+    const { requestId, sessionId, assistantMessageId } = generation
+    const eventBase = { requestId, sessionId }
+    try {
+      emit({ type: 'started', ...generation })
+      if (execution.controller.signal.aborted) {
+        emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
+        return
+      }
+      const result = await skill.run({
+        requestId,
+        executionId,
+        sessionId,
+        userMessageId: execution.userMessageId,
+        arguments: input.arguments,
+        explanationLanguage: execution.languages.outputLanguage,
+        signal: execution.controller.signal,
+        onPhase: async (phase) => {
+          emit({ ...eventBase, type: 'skillPhase', phase })
+        },
+        isReportProtected: (report) => this.isExplorePhraseReportProtected(report)
+      } satisfies ConversationSkillRunInput)
+      if (result.outcome === 'cancelled') {
+        emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
+        return
+      }
+      await this.persistExplorePhraseReply(generation, result.report, skill, emit)
+    } catch (error) {
+      if (execution.controller.signal.aborted) {
+        emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
+      } else {
+        this.reportFailure('run-explore-phrase', requestId, error)
+        emit({
+          ...eventBase,
+          type: 'failed',
+          messageId: assistantMessageId,
+          error: this.toSafeError(error)
+        })
+      }
+    } finally {
+      this.releaseExecution(requestId)
+    }
+  }
+
+  // 探索回复是本地格式化的 Markdown 表格；批次提交成功而消息保存失败时，
+  // 重试按 userMessageId 从 JSON 批次恢复同一结果，不重新生成。
+  private async persistExplorePhraseReply(
+    generation: GenerationStarted,
+    report: ConversationSkillReport,
+    skill: ConversationSkill,
+    emit: ConversationEventListener
+  ): Promise<void> {
+    if (!isExplorePhraseReport(report)) {
+      throw new Error('Unexpected explore phrase report')
+    }
+    // 反馈语言使用批次携带的解释语言快照，恢复路径与此保持一致。
+    const feedback = skill.feedback(report, report.explanationLanguage)
+    const assistantMessage: StoredMessage = {
+      id: generation.assistantMessageId,
+      sessionId: generation.sessionId,
+      role: 'assistant',
+      content: feedback,
+      createdAt: new Date().toISOString()
+    }
+    await this.withPersistence(() => this.repository.appendMessage(assistantMessage))
+    emit({
+      requestId: generation.requestId,
+      sessionId: generation.sessionId,
+      type: 'completed',
+      message: toMessage(assistantMessage),
+      skillCompletion: 'complete'
+    })
+  }
+
+  // JSON 历史批次的淘汰保护：批次对应的 user 消息尚无 assistant 回复（或
+  // 读取失败）时视为仍在恢复窗口内，不得被新批次淘汰。
+  private async isExplorePhraseReportProtected(report: ConversationSkillReport): Promise<boolean> {
+    if (!isExplorePhraseReport(report)) return false
+    try {
+      const history = await this.withPersistence(() => this.repository.history(report.sessionId))
+      const index = history.findIndex(
+        (message) => message.id === report.userMessageId && message.role === 'user'
+      )
+      if (index === -1) return false
+      const reply = history[index + 1]
+      return !(reply !== undefined && reply.role === 'assistant')
+    } catch {
+      // 无法核实时保守保护，避免淘汰可能仍在恢复的批次。
+      return true
+    }
   }
 
   async retryMessage(
@@ -333,6 +498,13 @@ export class ConversationModule {
       return { accepted: true, generation }
     }
 
+    // /explore-phrase 的执行身份保存在 JSON 历史文件而非数据库：恢复时先查
+    // 已有最终助手消息，再查文件批次；两者都没有时明确失败，不用同一旧身份
+    // 重新生成另一批。
+    if (userMessage.content === '/explore-phrase') {
+      return this.retryExplorePhraseMessage(input, userMessage, history, emit)
+    }
+
     const lastMessage = history.at(-1)
     if (!lastMessage || lastMessage.id !== userMessage.id) {
       throw new RetryNotAllowedError('only the last unanswered user message can be retried')
@@ -355,6 +527,81 @@ export class ConversationModule {
       assistantMessageId
     }
     return this.launchGeneration(generation, emit)
+  }
+
+  // 探索消息的重试只做恢复：批次存在则补齐同一 Markdown 表格回复；不存在
+  // （生成未提交或历史被删除）则明确失败。需要新的一批时发送新命令。
+  private async retryExplorePhraseMessage(
+    input: RetryMessageInput,
+    userMessage: StoredMessage,
+    history: StoredMessage[],
+    emit: ConversationEventListener
+  ): Promise<GenerationAccepted> {
+    const skill = this.skills.get('explore-phrase')
+    if (!skill?.restoreReport) {
+      throw new RetryNotAllowedError('explore phrase execution cannot be retried')
+    }
+    // 已完成消息不可再次当作新执行：其后存在任何消息即视为已有回复。
+    if (history.at(-1)?.id !== userMessage.id) {
+      throw new RetryNotAllowedError('only the last unanswered user message can be retried')
+    }
+    const report = await skill.restoreReport(userMessage.id)
+    if (!report || !isExplorePhraseReport(report)) {
+      throw new RetryNotAllowedError('explore phrase result is not recoverable')
+    }
+
+    const assistantMessageId = randomUUID()
+    // 恢复沿用批次的语言快照，不读取当前设置，也不重新生成。
+    this.registerExecution(input.requestId, {
+      controller: new AbortController(),
+      sessionId: input.sessionId,
+      userMessageId: userMessage.id,
+      assistantMessageId,
+      languages: {
+        outputLanguage: report.explanationLanguage,
+        targetLanguage: report.wordLanguage
+      }
+    })
+    const generation: GenerationStarted = {
+      requestId: input.requestId,
+      sessionId: input.sessionId,
+      userMessage: toMessage({ ...userMessage, retryable: false }),
+      assistantMessageId
+    }
+    const active = this.activeRequests.get(input.requestId)
+    if (!active) throw new Error('Explore phrase retry is not registered')
+    void this.retryExplorePhraseReply(generation, report, skill, active, emit)
+    return { accepted: true, generation }
+  }
+
+  private async retryExplorePhraseReply(
+    generation: GenerationStarted,
+    report: ConversationSkillReport,
+    skill: ConversationSkill,
+    execution: ActiveExecution,
+    emit: ConversationEventListener
+  ): Promise<void> {
+    const { requestId, sessionId, assistantMessageId } = generation
+    const eventBase = { requestId, sessionId }
+    try {
+      emit({ type: 'started', ...generation })
+      if (execution.controller.signal.aborted) {
+        emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
+        return
+      }
+      emit({ ...eventBase, type: 'skillPhase', phase: 'summarizing' })
+      await this.persistExplorePhraseReply(generation, report, skill, emit)
+    } catch (error) {
+      this.reportFailure('retry-explore-phrase', requestId, error)
+      emit({
+        ...eventBase,
+        type: 'failed',
+        messageId: assistantMessageId,
+        error: this.toSafeError(error)
+      })
+    } finally {
+      this.releaseExecution(requestId)
+    }
   }
 
   cancelMessage(requestId: string): void {
@@ -577,6 +824,8 @@ export class ConversationModule {
       const result = await skill.run({
         requestId,
         executionId: skillExecution.id,
+        sessionId,
+        userMessageId: execution.userMessageId,
         arguments: skillExecution.arguments,
         explanationLanguage: skillExecution.explanationLanguage,
         previousReport: skillExecution.batch,
@@ -756,6 +1005,21 @@ export class ConversationModule {
 
     if (error instanceof PhraseError && error.code === 'TOOL_CALL_NOT_SUPPORTED') {
       return { code: 'TOOL_CALL_NOT_SUPPORTED' }
+    }
+
+    if (error instanceof ExplorePhraseError) {
+      if (
+        error.code === 'STORAGE_FAILED' ||
+        error.code === 'HISTORY_UNREADABLE' ||
+        error.code === 'HISTORY_MODIFIED' ||
+        error.code === 'RECOVERY_PENDING'
+      ) {
+        return { code: 'PERSISTENCE_ERROR' }
+      }
+      if (error.code === 'TOOL_CALL_NOT_SUPPORTED') return { code: 'TOOL_CALL_NOT_SUPPORTED' }
+      if (error.code === 'MODEL_NOT_CONFIGURED') return { code: 'MODEL_NOT_CONFIGURED' }
+      if (error.code === 'CREDENTIAL_DECRYPT_FAILED') return { code: 'CREDENTIAL_DECRYPT_FAILED' }
+      return { code: 'MODEL_ERROR' }
     }
 
     if (error instanceof ModelConfigValidationError && error.code === 'CREDENTIAL_DECRYPT_FAILED') {

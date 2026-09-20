@@ -83,6 +83,11 @@ import { registerPhraseIpc } from './phrase-ipc'
 import { PhraseManagementService } from '../core/learning/phrase/phrase-management'
 import { registerSynonymIpc } from './synonym-ipc'
 import { SynonymManagementService } from '../core/learning/synonym/synonym-management'
+import { ExplorePhraseModule } from '../core/learning/explore-phrase/explore-phrase-module'
+import { ExplorePhraseConversationSkill } from '../core/learning/explore-phrase/explore-phrase-conversation-skill'
+import { LlmExplorePhraseGenerator } from '../core/llm/llm-explore-phrase-generator'
+import { JsonFileExplorePhraseHistoryStore } from './explore-phrase-history-store'
+import { createExplorePhraseFeedbackFormatter } from './explore-phrase-feedback'
 
 let database: Database.Database | undefined
 let conversationModule: ConversationModule | undefined
@@ -434,10 +439,26 @@ app.whenReady().then(() => {
     ),
     createSynonymFeedbackFormatter()
   )
+  // /explore-phrase：结果与去重历史保存在 userData 下的 JSON 文件（不写数据库
+  // 技能报告）；Main 是唯一写入方，模块内串行锁跨会话共享。启动时清理上次
+  // 进程可能遗留的临时文件，不把它们当作已提交历史。
+  const exploreHistoryStore = new JsonFileExplorePhraseHistoryStore(
+    join(app.getPath('userData'), 'explore-phrase-history.json')
+  )
+  void exploreHistoryStore.cleanupLeftoverTempFiles()
+  const exploreSkill = new ExplorePhraseConversationSkill(
+    new ExplorePhraseModule(
+      exploreHistoryStore,
+      (timeoutMs) =>
+        new LlmExplorePhraseGenerator(modelsService.resolveSnapshot(), timeoutMs, createLlmClient)
+    ),
+    createExplorePhraseFeedbackFormatter()
+  )
   const conversationSkills = new Map<ConversationSkillId, ConversationSkill>([
     [vocabularySkill.skillId, vocabularySkill],
     [phraseSkill.skillId, phraseSkill],
-    [synonymSkill.skillId, synonymSkill]
+    [synonymSkill.skillId, synonymSkill],
+    [exploreSkill.skillId, exploreSkill]
   ])
   conversationModule = new ConversationModule(
     conversationModel,

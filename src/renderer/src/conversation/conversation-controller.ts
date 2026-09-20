@@ -150,19 +150,29 @@ export class ConversationController {
 
   async runSkill(input: { skillId: ConversationSkillId; text: string }): Promise<boolean> {
     const sessionId = this.state.sessionId
-    if (this.state.phase !== 'ready' || !sessionId || !input.text.trim()) return false
+    // /explore-phrase 是无参数命令：空文本合法；其余技能仍要求非空文本。
+    if (this.state.phase !== 'ready' || !sessionId) return false
+    if (input.skillId !== 'explore-phrase' && !input.text.trim()) return false
     if (this.state.commandPending || isGenerating(this.state)) return false
 
     const requestId = crypto.randomUUID()
     this.pendingRequestId = requestId
     this.dispatch({ type: 'commandStarted' })
     try {
-      const result = await this.api.runSkill({
-        requestId,
-        sessionId,
-        skillId: input.skillId,
-        arguments: { text: input.text, wordLanguage: 'en' }
-      })
+      const result =
+        input.skillId === 'explore-phrase'
+          ? await this.api.runSkill({
+              requestId,
+              sessionId,
+              skillId: 'explore-phrase',
+              arguments: { wordLanguage: 'en' }
+            })
+          : await this.api.runSkill({
+              requestId,
+              sessionId,
+              skillId: input.skillId,
+              arguments: { text: input.text, wordLanguage: 'en' }
+            })
       if (result.status === 'error') {
         this.dispatch({
           type: 'commandFailed',

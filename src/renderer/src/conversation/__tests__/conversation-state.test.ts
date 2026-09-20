@@ -471,7 +471,12 @@ describe('conversation projection reducer', () => {
     })
 
     it('does not enable the reasoning placeholder for skill commands', () => {
-      for (const content of ['/vocabulary pursue', '/phrase give up', '/synonym big, large']) {
+      for (const content of [
+        '/vocabulary pursue',
+        '/phrase give up',
+        '/synonym big, large',
+        '/explore-phrase'
+      ]) {
         expect(findMessage(startedState(content), ASSISTANT_MESSAGE_ID)?.reasoning).toBeUndefined()
       }
     })

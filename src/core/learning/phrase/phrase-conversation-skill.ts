@@ -21,6 +21,8 @@ export class PhraseConversationSkill implements ConversationSkill {
   ) {}
 
   async run(input: ConversationSkillRunInput): Promise<ConversationSkillRunResult> {
+    // 文本技能参数：由 ConversationModule 按 skillId 分派保证带 text 分支。
+    if (!('text' in input.arguments)) throw new Error('Phrase skill requires text arguments')
     // 批次按需创建一次分析器，共享模型配置快照与模块的超时策略。
     const module = new PhraseModule(this.repository, this.createAnalyzer)
     const batch = await module.addBatch(

@@ -7,6 +7,7 @@ import type { ReactElement } from 'react'
 import { createI18n } from '../../i18n'
 import { ConversationPanel } from '../ConversationPanel'
 import type { ConversationStatus, DisplayMessage } from '../conversation-state'
+import type { SelectedConversationSkillId } from '../conversation-actions'
 
 // 测试语言显式固定为 zh-CN，断言使用真实资源渲染的文本与可访问名称。
 const i18n = createI18n('zh-CN')
@@ -42,7 +43,7 @@ function panelElement(props: Partial<Parameters<typeof ConversationPanel>[0]>): 
 
 interface PanelCallbacks {
   onSend: Mock<(text: string) => void>
-  onRunSkill: Mock<(input: { skillId: 'vocabulary' | 'phrase' | 'synonym'; text: string }) => void>
+  onRunSkill: Mock<(input: { skillId: SelectedConversationSkillId; text: string }) => void>
   onCancel: Mock<() => void>
   onRetry: Mock<(messageId: string) => void>
 }
@@ -53,8 +54,7 @@ function renderPanel(props: Partial<Parameters<typeof ConversationPanel>[0]> = {
 } {
   const callbacks: PanelCallbacks = {
     onSend: vi.fn<(text: string) => void>(),
-    onRunSkill:
-      vi.fn<(input: { skillId: 'vocabulary' | 'phrase' | 'synonym'; text: string }) => void>(),
+    onRunSkill: vi.fn<(input: { skillId: SelectedConversationSkillId; text: string }) => void>(),
     onCancel: vi.fn<() => void>(),
     onRetry: vi.fn<(messageId: string) => void>()
   }
@@ -339,7 +339,7 @@ describe('ConversationPanel slash trigger and filtering', () => {
 
     const listbox = screen.getByRole('listbox', { name: '可用行动' })
     expect(listbox).toBeInTheDocument()
-    expect(pickerOptions()).toHaveLength(4)
+    expect(pickerOptions()).toHaveLength(5)
     // 首次打开默认高亮第一项
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-concept')
   })
@@ -364,7 +364,7 @@ describe('ConversationPanel slash trigger and filtering', () => {
     expect(pickerOptions()[0]).toHaveTextContent('近义词分组')
 
     typeDraft('/o')
-    expect(pickerOptions()).toHaveLength(3)
+    expect(pickerOptions()).toHaveLength(4)
     // 过滤后高亮重置为第一项
     expect(screen.getByLabelText('练习内容')).toHaveAttribute(
       'aria-activedescendant',
@@ -447,6 +447,11 @@ describe('ConversationPanel picker keyboard selection', () => {
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-vocabulary')
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-phrase')
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(input).toHaveAttribute(
+      'aria-activedescendant',
+      'conversation-action-option-explore-phrase'
+    )
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-synonym')
     fireEvent.keyDown(input, { key: 'ArrowDown' })
@@ -629,7 +634,8 @@ describe('ConversationPanel picker keyboard selection', () => {
     const { callbacks } = renderPanel()
     const input = typeDraft('/phr')
 
-    expect(pickerOptions()).toHaveLength(1)
+    // phr 同时命中 phrase 与 explore-phrase，顺序沿用目录，Enter 选择第一项。
+    expect(pickerOptions()).toHaveLength(2)
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(input).toHaveValue('/phrase ')
     expect(callbacks.onSend).not.toHaveBeenCalled()
@@ -662,6 +668,48 @@ describe('ConversationPanel picker keyboard selection', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('请在 /phrase 后输入')
     expect(callbacks.onRunSkill).not.toHaveBeenCalled()
     expect(input).toHaveValue('/phrase ')
+  })
+
+  it.each(['/explore-phrase', '/explore-phrase '])(
+    'submits the parameterless explore command as a skill: %s',
+    (draft) => {
+      const { callbacks } = renderPanel()
+      const input = typeDraft(draft)
+
+      // 输完命令即关闭候选层，Enter 直接提交为技能请求，不作为普通聊天。
+      expect(input).toHaveAttribute('aria-expanded', 'false')
+      expect(fireEvent.keyDown(input, { key: 'Enter' })).toBe(false)
+      expect(callbacks.onRunSkill).toHaveBeenCalledExactlyOnceWith({
+        skillId: 'explore-phrase',
+        text: ''
+      })
+      expect(callbacks.onSend).not.toHaveBeenCalled()
+      expect(input).toHaveValue('')
+    }
+  )
+
+  it('rejects explore command arguments with a composer error and keeps the draft', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/explore-phrase foo')
+
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    expect(screen.getByRole('alert')).toHaveTextContent('/explore-phrase 不需要参数')
+    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(input).toHaveValue('/explore-phrase foo')
+  })
+
+  it('shows the explore hint while the explore command is active', () => {
+    renderPanel()
+    const input = typeDraft('/explo')
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(input).toHaveValue('/explore-phrase ')
+    expect(input).toHaveAttribute(
+      'placeholder',
+      '直接发送即可生成 10 个常用英语短语；近 7 次结果不会重复。'
+    )
   })
 
   it('requires vocabulary arguments and clears selection when the command is edited', () => {
@@ -888,7 +936,7 @@ describe('ConversationPanel picker closing and reopen suppression', () => {
 
     fireEvent.change(input, { target: { value: '/' } })
     expect(input).toHaveAttribute('aria-expanded', 'true')
-    expect(pickerOptions()).toHaveLength(4)
+    expect(pickerOptions()).toHaveLength(5)
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-concept')
 
     fireEvent.keyDown(input, { key: 'Enter' })
@@ -962,7 +1010,7 @@ describe('ConversationPanel picker input method composition', () => {
     fireEvent.change(input, { target: { value: '/收' } })
 
     // 组合期间不刷新候选
-    expect(pickerOptions()).toHaveLength(4)
+    expect(pickerOptions()).toHaveLength(5)
 
     // 组合确认键不选择候选、不发送
     fireEvent.keyDown(input, { key: 'Enter', isComposing: true })

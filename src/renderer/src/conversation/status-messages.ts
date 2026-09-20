@@ -30,21 +30,27 @@ type SkillStatusKeys = {
     | 'conversation:status.analyzingVocabulary'
     | 'conversation:status.analyzingPhrase'
     | 'conversation:status.analyzingSynonym'
+    | 'conversation:status.generatingExplorePhrase'
   committing:
     | 'conversation:status.committingVocabulary'
     | 'conversation:status.committingPhrase'
     | 'conversation:status.committingSynonym'
+    | 'conversation:status.committingExplorePhrase'
   descriptionFailed:
     | 'conversation:status.descriptionFailedVocabulary'
     | 'conversation:status.descriptionFailedPhrase'
     | 'conversation:status.descriptionFailedSynonym'
+    | 'conversation:status.descriptionFailedExplorePhrase'
   descriptionCancelled:
     | 'conversation:status.descriptionCancelledVocabulary'
     | 'conversation:status.descriptionCancelledPhrase'
     | 'conversation:status.descriptionCancelledSynonym'
+    | 'conversation:status.descriptionCancelledExplorePhrase'
 }
 
-const skillKeys = (skillId: 'vocabulary' | 'phrase' | 'synonym' | undefined): SkillStatusKeys =>
+const skillKeys = (
+  skillId: 'vocabulary' | 'phrase' | 'synonym' | 'explore-phrase' | undefined
+): SkillStatusKeys =>
   skillId === 'synonym'
     ? {
         analyzing: 'conversation:status.analyzingSynonym',
@@ -59,12 +65,20 @@ const skillKeys = (skillId: 'vocabulary' | 'phrase' | 'synonym' | undefined): Sk
           descriptionFailed: 'conversation:status.descriptionFailedPhrase',
           descriptionCancelled: 'conversation:status.descriptionCancelledPhrase'
         }
-      : {
-          analyzing: 'conversation:status.analyzingVocabulary',
-          committing: 'conversation:status.committingVocabulary',
-          descriptionFailed: 'conversation:status.descriptionFailedVocabulary',
-          descriptionCancelled: 'conversation:status.descriptionCancelledVocabulary'
-        }
+      : skillId === 'explore-phrase'
+        ? {
+            // 阶段文案表达“生成短语”，避免误用“收录/收藏成功”。
+            analyzing: 'conversation:status.generatingExplorePhrase',
+            committing: 'conversation:status.committingExplorePhrase',
+            descriptionFailed: 'conversation:status.descriptionFailedExplorePhrase',
+            descriptionCancelled: 'conversation:status.descriptionCancelledExplorePhrase'
+          }
+        : {
+            analyzing: 'conversation:status.analyzingVocabulary',
+            committing: 'conversation:status.committingVocabulary',
+            descriptionFailed: 'conversation:status.descriptionFailedVocabulary',
+            descriptionCancelled: 'conversation:status.descriptionCancelledVocabulary'
+          }
 
 export function translateConversationStatus(
   t: StatusTFunction,
