@@ -9,6 +9,10 @@ import type { VocabularyEntry } from '../../../shared/vocabulary'
 import { abortableOperation } from './abortable-operation'
 import { VocabularyPracticeError } from './parse-vocabulary-practice-input'
 import type {
+  VocabularyMistakeRecord,
+  VocabularyMistakeRepository
+} from './vocabulary-mistake-repository'
+import type {
   PracticeReviewEntry,
   PracticeReviewOutcome,
   VocabularyPracticeReviewer
@@ -19,9 +23,19 @@ export interface VocabularyPracticeSource {
   sampleRandom(count: number): VocabularyEntry[]
 }
 
+// 错题写入依赖的窄接口：完整仓储接口的结构子集，测试可注入内存实现。
+export type VocabularyPracticeMistakeSink = Pick<VocabularyMistakeRepository, 'saveBatch'>
+
 export interface VocabularyPracticeAnswerInput {
   entryId: string
   meaning: string
+}
+
+// 一次已完成的审查：保存失败或请求重放时复用其结果，不再调用模型。
+interface CompletedReview {
+  requestId: string
+  answers: PracticeReviewEntry[]
+  outcome: PracticeReviewOutcome
 }
 
 interface PracticeSession {
@@ -29,6 +43,8 @@ interface PracticeSession {
   // 轮次开始时的词条快照：审查期间词库变化不混入新内容。
   entries: Map<string, VocabularyEntry>
   review: { controller: AbortController } | undefined
+  // 当前会话内所有已完成提交：保证任一 requestId 重放时都能校验原答案。
+  completedReviews: Map<string, CompletedReview>
 }
 
 export interface VocabularyPracticeStartOutcome {
@@ -39,15 +55,18 @@ export interface VocabularyPracticeStartOutcome {
 
 const REVIEW_TOTAL_TIMEOUT_MS = 120_000
 
-// 词汇练习领域服务：内存保存单例会话，负责数量约束、抽词快照与审查生命周期。
-// 练习与审查状态不落库；新一轮 start 会中止旧轮次未完成的审查。
+// 词汇练习领域服务：内存保存单例会话，负责数量约束、抽词快照、审查
+// 生命周期与错题收集。练习与审查会话状态不落库；审查成功后按校验过的
+// 错误标记把错题整批写入仓储，新一轮 start 会中止旧轮次未完成的审查。
 export class VocabularyPracticeService {
   private active: PracticeSession | undefined
 
   constructor(
     private readonly source: VocabularyPracticeSource,
     private readonly createReviewer: () => VocabularyPracticeReviewer,
-    private readonly totalReviewTimeoutMs = REVIEW_TOTAL_TIMEOUT_MS
+    private readonly mistakes: VocabularyPracticeMistakeSink,
+    private readonly totalReviewTimeoutMs = REVIEW_TOTAL_TIMEOUT_MS,
+    private readonly now: () => Date = () => new Date()
   ) {}
 
   start(count: number): VocabularyPracticeStartOutcome {
@@ -64,7 +83,7 @@ export class VocabularyPracticeService {
       // 随机取样按主键天然不重复；防御重复 ID 只保留首个。
       if (!entries.has(entry.id)) entries.set(entry.id, entry)
     }
-    this.active = { id: randomUUID(), entries, review: undefined }
+    this.active = { id: randomUUID(), entries, review: undefined, completedReviews: new Map() }
     return {
       sessionId: this.active.id,
       requestedCount: count,
@@ -72,30 +91,53 @@ export class VocabularyPracticeService {
     }
   }
 
+  // requestId 是一次提交审查的稳定标识：同 ID 重试复用已完成的审查结果
+  // （含保存重试，不重新调用模型），同 ID 携带不同答案被拒绝。
   async review(
     sessionId: string,
+    requestId: string,
     answers: VocabularyPracticeAnswerInput[],
     explanationLanguage: SupportedLocale
   ): Promise<PracticeReviewOutcome> {
     const session = this.requireSession(sessionId)
     if (session.review) throw new VocabularyPracticeError('BUSY')
     const reviewEntries = this.resolveReviewEntries(session, answers)
+
+    const completed = session.completedReviews.get(requestId)
+    if (completed) {
+      if (!sameSubmission(completed.answers, reviewEntries)) {
+        throw new VocabularyPracticeError('INVALID_INPUT')
+      }
+      // 保存重试：仓储按 (review_id, entry_id) 幂等，重复写入不重复计数。
+      this.saveMistakes(requestId, completed.outcome, reviewEntries)
+      return completed.outcome
+    }
+
     const controller = new AbortController()
     session.review = { controller }
     try {
-      return await abortableOperation(controller.signal, this.totalReviewTimeoutMs, (signal) =>
-        this.createReviewer().review({
-          entries: reviewEntries,
-          explanationLanguage,
-          signal
-        })
+      const outcome = await abortableOperation(
+        controller.signal,
+        this.totalReviewTimeoutMs,
+        (signal) =>
+          this.createReviewer().review({
+            entries: reviewEntries,
+            explanationLanguage,
+            signal
+          })
       )
+      this.validateMarks(session, outcome)
+      // 先缓存已完成审查再写入：保存失败时重试可复用结果，不再次调用模型。
+      session.completedReviews.set(requestId, { requestId, answers: reviewEntries, outcome })
+      this.saveMistakes(requestId, outcome, reviewEntries)
+      return outcome
     } finally {
       session.review = undefined
     }
   }
 
   // 取消当前审查：返回是否存在被中止的在途审查；答案与会话保留。
+  // 审查完成后的错题写入是同步短事务，取消无法撤销已保存结果。
   cancel(sessionId: string): boolean {
     const session = this.active
     if (!session || session.id !== sessionId || !session.review) return false
@@ -145,8 +187,67 @@ export class VocabularyPracticeService {
     return entries
   }
 
+  // 错误标记必须与本轮快照一致：不认识的外部词条、重复标记以及与
+  // 判定矛盾的结果都按无效审查处理，不静默遗漏错题。
+  private validateMarks(session: PracticeSession, outcome: PracticeReviewOutcome): void {
+    if ((outcome.verdict === 'all_correct') !== (outcome.marks.length === 0)) {
+      throw new VocabularyPracticeError('INVALID_ANALYSIS')
+    }
+    const seen = new Set<string>()
+    for (const mark of outcome.marks) {
+      if (!session.entries.has(mark.entryId) || seen.has(mark.entryId)) {
+        throw new VocabularyPracticeError('INVALID_ANALYSIS')
+      }
+      seen.add(mark.entryId)
+    }
+  }
+
+  private saveMistakes(
+    requestId: string,
+    outcome: PracticeReviewOutcome,
+    answers: PracticeReviewEntry[]
+  ): void {
+    const mistakes = collectMistakeRecords(requestId, outcome, answers, this.now())
+    if (!mistakes.length) return
+    try {
+      this.mistakes.saveBatch(mistakes)
+    } catch (cause) {
+      throw new VocabularyPracticeError('STORAGE_FAILED', { cause })
+    }
+  }
+
   private cancelActiveReview(): void {
     const review = this.active?.review
     if (review) review.controller.abort(new VocabularyPracticeError('CANCELLED'))
   }
+}
+
+function sameSubmission(cached: PracticeReviewEntry[], current: PracticeReviewEntry[]): boolean {
+  if (cached.length !== current.length) return false
+  const meanings = new Map(cached.map((entry) => [entry.entryId, entry.submittedMeaning]))
+  return current.every((entry) => meanings.get(entry.entryId) === entry.submittedMeaning)
+}
+
+// 每个错误项保存单词快照、本次提交释义与发生时间；正确项不收集。
+function collectMistakeRecords(
+  requestId: string,
+  outcome: PracticeReviewOutcome,
+  answers: PracticeReviewEntry[],
+  at: Date
+): VocabularyMistakeRecord[] {
+  if (outcome.verdict === 'all_correct') return []
+  const submitted = new Map(answers.map((entry) => [entry.entryId, entry]))
+  const createdAt = at.toISOString()
+  return outcome.marks.map((mark) => {
+    const entry = submitted.get(mark.entryId)
+    if (!entry) throw new VocabularyPracticeError('INVALID_ANALYSIS')
+    return {
+      id: randomUUID(),
+      reviewId: requestId,
+      entryId: mark.entryId,
+      term: entry.term,
+      submittedMeaning: entry.submittedMeaning,
+      createdAt
+    }
+  })
 }

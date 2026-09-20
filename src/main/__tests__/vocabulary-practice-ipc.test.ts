@@ -31,7 +31,12 @@ const ENTRY_ID = '33333333-3333-4333-8333-333333333333'
 function fakeService(
   overrides: Partial<{
     start: (count: number) => unknown
-    review: (sessionId: string, answers: unknown[], language: string) => Promise<unknown>
+    review: (
+      sessionId: string,
+      requestId: string,
+      answers: unknown[],
+      language: string
+    ) => Promise<unknown>
     cancel: (sessionId: string) => boolean
   }> = {}
 ): {
@@ -163,7 +168,7 @@ describe('vocabulary practice IPC', () => {
   it('reviews with the resolved language and validates the output protocol', async () => {
     const service = register(
       fakeService({
-        review: async (_sessionId, answers, language) => ({
+        review: async (_sessionId, _requestId, answers, language) => ({
           verdict: 'has_errors',
           summary: '存在错误。',
           marks: [
@@ -191,6 +196,7 @@ describe('vocabulary practice IPC', () => {
     }
     expect(service.review).toHaveBeenCalledWith(
       SESSION_ID,
+      START_INPUT.requestId,
       [{ entryId: ENTRY_ID, meaning: '答案' }],
       'zh-CN'
     )

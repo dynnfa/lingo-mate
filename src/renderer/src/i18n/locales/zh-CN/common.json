@@ -12,7 +12,8 @@
     "listLabel": "会话列表",
     "loadingSessions": "正在加载会话…",
     "noSessions": "暂无会话",
-    "toolbarLabel": "侧栏工具栏"
+    "toolbarLabel": "侧栏工具栏",
+    "menuMistakes": "错题集（单词）"
   },
   "settings": {
     "title": "设置",
@@ -296,6 +297,43 @@
       "confirmNewRoundBody": "当前答案尚未提交。换一组将清空提示、答案和点评。",
       "confirmNewRoundCancel": "继续作答",
       "confirmNewRoundConfirm": "换一组"
+    }
+  },
+  "mistakes": {
+    "title": "错题集（单词）",
+    "back": "返回",
+    "menuLabel": "错题集菜单",
+    "sections": {
+      "vocabulary": "单词"
+    },
+    "vocabulary": {
+      "detailTitle": "错题集（单词）",
+      "tableCaption": "单词错题列表",
+      "columnTerm": "单词",
+      "columnLastMeaning": "最近错误释义",
+      "columnCount": "错误次数",
+      "columnLastErrorAt": "最近错误时间",
+      "columnActions": "错误历史",
+      "showHistory": "查看错误历史",
+      "hideHistory": "收起错误历史",
+      "expandHistoryLabel": "查看“{{term}}”的错误历史",
+      "collapseHistoryLabel": "收起“{{term}}”的错误历史",
+      "historyLabel": "“{{term}}”的错误历史",
+      "mistakeCount_one": "{{count}} 次",
+      "mistakeCount_other": "{{count}} 次",
+      "loading": "正在加载错题…",
+      "emptyTitle": "还没有错题",
+      "emptyBody": "完成词汇练习后，答错的单词会自动收集到这里。",
+      "loadErrorTitle": "错题加载失败",
+      "retry": "重试",
+      "loadMore": "加载更多",
+      "loadingMore": "正在加载更多…",
+      "loadMoreFailed": "加载更多失败",
+      "historyLoading": "正在加载错误历史…",
+      "historyErrorTitle": "错误历史加载失败",
+      "historyLoadMore": "加载更多历史",
+      "historyLoadingMore": "正在加载历史…",
+      "historyLoadMoreFailed": "加载更多历史失败"
     }
   },
   "preferences": {

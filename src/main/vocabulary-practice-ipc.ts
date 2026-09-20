@@ -63,6 +63,7 @@ export function registerVocabularyPracticeIpc(
     handler: async (input) => {
       const outcome = await service.review(
         input.sessionId,
+        input.requestId,
         input.answers,
         resolveExplanationLanguage()
       )

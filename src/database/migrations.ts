@@ -419,6 +419,27 @@ export const MIGRATIONS: Migration[] = [
       if ((database.pragma('foreign_key_check') as unknown[]).length)
         throw new Error('Invalid synonym migration foreign keys')
     }
+  },
+  {
+    // 词汇练习错题账本：独立于词库保存快照，不设外键与级联删除——
+    // 源词条删除后仍可查看原错误记录；删除后重新收藏生成新 ID 视为新词条。
+    version: 11,
+    up: (database) =>
+      database.exec(`
+      CREATE TABLE vocabulary_practice_mistakes (
+        id TEXT PRIMARY KEY NOT NULL,
+        review_id TEXT NOT NULL,
+        entry_id TEXT NOT NULL,
+        term TEXT NOT NULL CHECK(length(trim(term)) BETWEEN 1 AND 4000),
+        submitted_meaning TEXT NOT NULL CHECK(length(trim(submitted_meaning)) BETWEEN 1 AND 2000),
+        created_at TEXT NOT NULL,
+        UNIQUE (review_id, entry_id)
+      );
+      CREATE INDEX vocabulary_practice_mistakes_entry_recent
+        ON vocabulary_practice_mistakes (entry_id, created_at DESC, id DESC);
+      CREATE INDEX vocabulary_practice_mistakes_recent
+        ON vocabulary_practice_mistakes (created_at DESC, entry_id DESC);
+    `)
   }
 ]
 
