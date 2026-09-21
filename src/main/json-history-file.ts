@@ -10,7 +10,6 @@ import type { FileHandle } from 'node:fs/promises'
 // schema，也不通过放宽校验换取复用。
 
 export interface JsonHistoryFileMechanics<E> {
-  unreadable: (cause?: unknown) => E
   cancelled: () => E
   storageFailed: (cause?: unknown) => E
   commitUncertain: (cause?: unknown) => E

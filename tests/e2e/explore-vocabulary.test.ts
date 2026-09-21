@@ -55,9 +55,7 @@ test('runs /explore-vocabulary end to end and restores the table after restart',
         const secondRequest = JSON.parse(
           server.requests[1].messages.find((message) => message.role === 'user')?.content ?? '{}'
         ) as { count: number; excludedTerms: string[] }
-        expect(secondRequest.excludedTerms).toEqual(
-          expect.arrayContaining(['eeworda', 'eewordj'])
-        )
+        expect(secondRequest.excludedTerms).toEqual(expect.arrayContaining(['eeworda', 'eewordj']))
 
         // 结果保存在 userData 的 JSON 历史文件，不写数据库技能报告。
         const history = JSON.parse(
