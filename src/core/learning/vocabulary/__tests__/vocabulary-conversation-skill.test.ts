@@ -24,6 +24,8 @@ describe('VocabularyConversationSkill', () => {
     const result = await skill.run({
       requestId: randomUUID(),
       executionId: randomUUID(),
+      sessionId: randomUUID(),
+      userMessageId: randomUUID(),
       arguments: { text: 'apple, banana, apple, orange', wordLanguage: 'en' },
       explanationLanguage: 'en',
       signal: new AbortController().signal,
@@ -64,6 +66,8 @@ describe('VocabularyConversationSkill', () => {
     const result = await skill.run({
       requestId: randomUUID(),
       executionId: randomUUID(),
+      sessionId: randomUUID(),
+      userMessageId: randomUUID(),
       arguments: { text: 'apple', wordLanguage: 'en' },
       explanationLanguage: 'zh-CN',
       signal: controller.signal,

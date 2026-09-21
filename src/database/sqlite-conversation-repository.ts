@@ -1,6 +1,6 @@
 import { synonymBatchSchema } from '../shared/synonym'
 import type Database from 'better-sqlite3'
-import { runConversationSkillInputSchema } from '../shared/conversation'
+import { conversationSkillArgumentsSchema } from '../shared/conversation'
 import { vocabularyBatchSchema } from '../shared/vocabulary'
 import { phraseBatchSchema } from '../shared/phrase'
 import {
@@ -260,7 +260,8 @@ function toStoredMessage(row: MessageRow): StoredMessage {
 
 // 报告结构按 skill_id 判别解析；技能与报告不匹配的持久化数据视为损坏。
 function toStoredSkillExecution(row: SkillExecutionRow): StoredConversationSkillExecution {
-  const args = runConversationSkillInputSchema.shape.arguments.parse(JSON.parse(row.arguments_json))
+  // 数据库只保存文本技能（vocabulary/phrase/synonym）的参数；explore-phrase 走文件路径。
+  const args = conversationSkillArgumentsSchema.parse(JSON.parse(row.arguments_json))
   const common = {
     id: row.id,
     sessionId: row.session_id,

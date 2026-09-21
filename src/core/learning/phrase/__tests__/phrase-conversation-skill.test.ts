@@ -20,6 +20,8 @@ describe('PhraseConversationSkill', () => {
     const result = await skill.run({
       requestId: randomUUID(),
       executionId: randomUUID(),
+      sessionId: randomUUID(),
+      userMessageId: randomUUID(),
       arguments: {
         text: 'look forward to\npiece of cake\nlook forward to\nbreak even',
         wordLanguage: 'en'
@@ -61,6 +63,8 @@ describe('PhraseConversationSkill', () => {
     const result = await skill.run({
       requestId: randomUUID(),
       executionId: randomUUID(),
+      sessionId: randomUUID(),
+      userMessageId: randomUUID(),
       arguments: { text: 'look forward to', wordLanguage: 'en' },
       explanationLanguage: 'zh-CN',
       signal: controller.signal,

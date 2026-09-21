@@ -22,14 +22,20 @@
     "analyzingSynonym": "Analyzing synonym groups…",
     "committingSynonym": "Saving synonym entries…",
     "descriptionFailedSynonym": "Synonym results saved. Retry to restore the report.",
-    "descriptionCancelledSynonym": "Report interrupted. Saved synonym entries are retained."
+    "descriptionCancelledSynonym": "Report interrupted. Saved synonym entries are retained.",
+    "generatingExplorePhrase": "Generating phrases…",
+    "committingExplorePhrase": "Saving the generated phrases…",
+    "descriptionFailedExplorePhrase": "Phrases were generated and saved, but showing the result failed. You can retry to restore it.",
+    "descriptionCancelledExplorePhrase": "Phrases were generated and saved, but showing the result was cancelled. You can retry to restore it."
   },
   "composer": {
     "vocabularyRequired": "Enter one or more English words or phrases after /vocabulary.",
-    "phraseRequired": "Enter one or more English phrases after /phrase.",
+    "phraseRequired": "Enter English phrases after /phrase.",
     "phraseHint": "One phrase per line; batch input is supported. Spaces and punctuation inside a phrase are kept.",
     "synonymRequired": "Enter English words after /synonym, separated by commas.",
-    "synonymHint": "Example: /synonym adequate, decent. Previously saved words are skipped."
+    "synonymHint": "Example: /synonym adequate, decent. Previously saved words are skipped.",
+    "explorePhraseInvalid": "/explore-phrase takes no arguments. Send it as is.",
+    "explorePhraseHint": "Just send it to generate 10 common English phrases; the last 7 rounds are never repeated."
   },
   "thinking": {
     "label": "Model thinking",
@@ -50,6 +56,10 @@
       "phrase": {
         "name": "Phrase",
         "description": "Analyze and save English phrases and idioms in a batch, one per line."
+      },
+      "explorePhrase": {
+        "name": "Explore phrases",
+        "description": "Generate 10 common English phrases with meanings and examples. Just send it."
       },
       "synonym": {
         "name": "Synonym groups",

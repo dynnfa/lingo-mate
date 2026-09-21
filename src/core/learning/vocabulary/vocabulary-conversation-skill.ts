@@ -25,6 +25,8 @@ export class VocabularyConversationSkill implements ConversationSkill {
   ) {}
 
   async run(input: ConversationSkillRunInput): Promise<ConversationSkillRunResult> {
+    // 文本技能参数：由 ConversationModule 按 skillId 分派保证带 text 分支。
+    if (!('text' in input.arguments)) throw new Error('Vocabulary skill requires text arguments')
     // The whole batch shares this immutable runtime/configuration snapshot.
     const runtime = this.createRuntime()
     const module = new VocabularyModule(this.repository, () => runtime.analyzer)
