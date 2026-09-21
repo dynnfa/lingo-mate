@@ -297,7 +297,7 @@ export function ConversationPanel({
                   reasoning={message.reasoning}
                 />
               ) : null}
-              <MarkdownMessage content={message.content} />
+              <MarkdownMessage content={message.content} generating={message.streaming} />
               {message.role === 'user' && message.retryable && !composerLocked ? (
                 <button
                   className="secondary retry"

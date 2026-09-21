@@ -99,3 +99,27 @@
   border: 0;
   border-top: 1px solid var(--color-border-message);
 }
+
+/* 流式等待首个正文增量的旋转指示，替代静态省略号占位。 */
+.message-spinner {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-border-message);
+  border-top-color: var(--color-text-secondary);
+  border-radius: 50%;
+  animation: message-spinner-rotate 0.8s linear infinite;
+}
+
+@keyframes message-spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-spinner {
+    animation: none;
+  }
+}

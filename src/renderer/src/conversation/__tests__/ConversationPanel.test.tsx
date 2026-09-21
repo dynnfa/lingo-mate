@@ -102,8 +102,11 @@ describe('ConversationPanel rendering', () => {
 
     expect(screen.queryByText('从一句话开始')).not.toBeInTheDocument()
     expect(document.querySelector('[data-message-id="user-1"]')).toHaveTextContent('Hello')
-    // 空内容占位
-    expect(document.querySelector('[data-message-id="assistant-1"]')).toHaveTextContent('…')
+    // 空内容占位：流式等待期显示旋转指示
+    const spinner = document.querySelector('[data-message-id="assistant-1"] .message-spinner')
+    expect(spinner).toBeInTheDocument()
+    expect(spinner).toHaveAttribute('role', 'img')
+    expect(spinner).toHaveAttribute('aria-label', '正在生成回复…')
     // 状态随 props 重新翻译
     expect(document.querySelector('.status')).toHaveTextContent('正在生成…')
     expect(screen.getByRole('button', { name: '取消' })).toBeInTheDocument()
@@ -192,6 +195,10 @@ describe('ConversationPanel thinking preview', () => {
 
     expect(screen.queryByRole('group', { name: '模型思考过程' })).not.toBeInTheDocument()
     expect(screen.getByText('正在解析词汇…')).toBeInTheDocument()
+    // 技能执行期正文气泡显示旋转等待指示
+    const spinner = document.querySelector('[data-message-id="assistant-1"] .message-spinner')
+    expect(spinner).toBeInTheDocument()
+    expect(spinner).toHaveAttribute('aria-label', '正在生成回复…')
   })
 })
 
