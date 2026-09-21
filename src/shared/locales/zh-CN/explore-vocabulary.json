@@ -1,0 +1,8 @@
+{
+  "table": {
+    "index": "序号",
+    "word": "单词",
+    "meaning": "释义",
+    "example": "例句"
+  }
+}

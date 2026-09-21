@@ -475,7 +475,8 @@ describe('conversation projection reducer', () => {
         '/vocabulary pursue',
         '/phrase give up',
         '/synonym big, large',
-        '/explore-phrase'
+        '/explore-phrase',
+        '/explore-vocabulary'
       ]) {
         expect(findMessage(startedState(content), ASSISTANT_MESSAGE_ID)?.reasoning).toBeUndefined()
       }

@@ -127,6 +127,41 @@ describe('conversation status translation', () => {
     ).toBe('Generating phrases…')
   })
 
+  it('translates explore-vocabulary phases with generation wording', () => {
+    const zh = createI18n('zh-CN')
+    const t = zh.t as TFunction<['common', 'conversation', 'errors']>
+    expect(
+      translateConversationStatus(t, {
+        kind: 'skillPhase',
+        phase: 'analyzing',
+        skillId: 'explore-vocabulary'
+      })
+    ).toBe('正在生成单词…')
+    expect(
+      translateConversationStatus(t, {
+        kind: 'skillPhase',
+        phase: 'committing',
+        skillId: 'explore-vocabulary'
+      })
+    ).toBe('正在保存生成的单词…')
+    expect(
+      translateConversationStatus(t, {
+        kind: 'skillDescriptionFailed',
+        cancelled: false,
+        skillId: 'explore-vocabulary'
+      })
+    ).toBe('单词已生成并保存，但结果展示失败。你可以重试恢复展示。')
+    const en = createI18n('en')
+    const enT = en.t as TFunction<['common', 'conversation', 'errors']>
+    expect(
+      translateConversationStatus(enT, {
+        kind: 'skillPhase',
+        phase: 'analyzing',
+        skillId: 'explore-vocabulary'
+      })
+    ).toBe('Generating words…')
+  })
+
   it('maps every request error code to its dedicated message', () => {
     const t = en.t as TFunction<['common', 'conversation', 'errors']>
     expect(

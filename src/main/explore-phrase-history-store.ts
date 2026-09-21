@@ -1,7 +1,3 @@
-import { basename, dirname, join } from 'node:path'
-import { randomUUID } from 'node:crypto'
-import { open, readFile, readdir, rename, rm } from 'node:fs/promises'
-import type { FileHandle } from 'node:fs/promises'
 import {
   EXPLORE_PHRASE_HISTORY_BATCH_LIMIT,
   explorePhraseHistoryBatchSchema,
@@ -16,10 +12,18 @@ import type {
   ExplorePhraseHistoryStore
 } from '../core/learning/explore-phrase/explore-phrase-history-store'
 import { normalizeExplorePhrase } from '../core/learning/explore-phrase/normalize-explore-phrase'
+import {
+  cleanupJsonHistoryTempFiles,
+  readJsonHistoryFile,
+  writeJsonHistoryFileAtomically
+} from './json-history-file'
 
 // /explore-phrase 的 JSON 文件历史存储：<userData>/explore-phrase-history.json。
 // Main 是唯一应用内写入方；完整 JSON 先写入同目录唯一临时文件，flush 后通过
 // 原子 rename 替换目标文件，添加新批次与淘汰旧批次在同一次替换中生效。
+// 物理读写机制与 explore-vocabulary 共享（json-history-file.ts），本文件只持有
+// 短语 schema、规范化规则与提交语义；两个技能的历史文件、去重窗口与锁
+// 分别独立。
 
 function parseHistoryDocument(raw: string): ExplorePhraseHistoryDocument {
   // 空文件不得当作空历史：不覆盖原文档，返回可理解的错误。
@@ -69,31 +73,22 @@ function documentsEqual(
   return JSON.stringify(left) === JSON.stringify(right)
 }
 
-async function syncDirectory(directory: string): Promise<void> {
-  let handle: FileHandle | undefined
-  try {
-    handle = await open(directory, 'r')
-    await handle.sync()
-  } finally {
-    await handle?.close()
-  }
+function toUnreadable(cause?: unknown): ExplorePhraseError {
+  return cause === undefined
+    ? new ExplorePhraseError('HISTORY_UNREADABLE')
+    : new ExplorePhraseError('HISTORY_UNREADABLE', { cause })
 }
 
 export class JsonFileExplorePhraseHistoryStore implements ExplorePhraseHistoryStore {
   constructor(private readonly filePath: string) {}
 
   async read(): Promise<ExplorePhraseHistoryDocument> {
-    let raw: string
-    try {
-      raw = await readFile(this.filePath, 'utf8')
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        // 文件不存在视为首次使用。
-        return { schemaVersion: 1, batches: [] }
-      }
-      throw new ExplorePhraseError('HISTORY_UNREADABLE', { cause: error })
-    }
-    return parseHistoryDocument(raw)
+    return readJsonHistoryFile(
+      this.filePath,
+      () => ({ schemaVersion: 1, batches: [] }),
+      parseHistoryDocument,
+      toUnreadable
+    )
   }
 
   async findBatchByUserMessage(userMessageId: string): Promise<ExplorePhraseBatch | undefined> {
@@ -143,19 +138,7 @@ export class JsonFileExplorePhraseHistoryStore implements ExplorePhraseHistorySt
 
   // 启动时清理遗留临时文件：临时文件只是写入过程产物，不当作已提交历史。
   async cleanupLeftoverTempFiles(): Promise<void> {
-    const directory = dirname(this.filePath)
-    let entries: string[]
-    try {
-      entries = await readdir(directory)
-    } catch {
-      return
-    }
-    const prefix = `${basename(this.filePath)}.tmp-`
-    await Promise.all(
-      entries
-        .filter((name) => name.startsWith(prefix))
-        .map((name) => rm(join(directory, name), { force: true }).catch(() => undefined))
-    )
+    await cleanupJsonHistoryTempFiles(this.filePath)
   }
 
   private async writeAtomically(
@@ -163,36 +146,24 @@ export class JsonFileExplorePhraseHistoryStore implements ExplorePhraseHistorySt
     executionId: string,
     signal?: AbortSignal
   ): Promise<void> {
-    const tempPath = `${this.filePath}.tmp-${randomUUID()}`
-    let handle: FileHandle | undefined
-    try {
-      handle = await open(tempPath, 'w')
-      await handle.writeFile(JSON.stringify(document, null, 2), 'utf8')
-      await handle.sync()
-      await handle.close()
-      handle = undefined
-      if (signal?.aborted) throw new ExplorePhraseError('CANCELLED')
-      await rename(tempPath, this.filePath)
-    } catch (cause) {
-      if (handle) await handle.close().catch(() => undefined)
-      // 写入或替换失败：保留旧文件，清理临时文件。
-      await rm(tempPath, { force: true }).catch(() => undefined)
-      if (cause instanceof ExplorePhraseError && cause.code === 'CANCELLED') throw cause
-      throw new ExplorePhraseError('STORAGE_FAILED', { cause })
-    }
-    // 替换后的目录同步失败属于提交状态不确定：重读目标文件按 executionId
-    // 核实，不盲目重写、也不声称已回滚。
-    try {
-      await syncDirectory(dirname(this.filePath))
-    } catch (cause) {
-      try {
-        const verified = await this.read()
-        if (verified.batches.some((batch) => batch.executionId === executionId)) return
-      } catch (verificationError) {
-        throw new ExplorePhraseError('COMMIT_UNCERTAIN', { cause: verificationError })
-      }
-      throw new ExplorePhraseError('COMMIT_UNCERTAIN', { cause })
-    }
+    await writeJsonHistoryFileAtomically({
+      filePath: this.filePath,
+      document,
+      signal,
+      mechanics: {
+        cancelled: () => new ExplorePhraseError('CANCELLED'),
+        storageFailed: (cause) =>
+          cause === undefined
+            ? new ExplorePhraseError('STORAGE_FAILED')
+            : new ExplorePhraseError('STORAGE_FAILED', { cause }),
+        commitUncertain: (cause) =>
+          cause === undefined
+            ? new ExplorePhraseError('COMMIT_UNCERTAIN')
+            : new ExplorePhraseError('COMMIT_UNCERTAIN', { cause })
+      },
+      verifyCommitted: async () =>
+        (await this.read()).batches.some((batch) => batch.executionId === executionId)
+    })
   }
 }
 

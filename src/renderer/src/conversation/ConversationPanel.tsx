@@ -9,6 +9,7 @@ import {
   extractSkillDraft,
   filterConversationActions,
   isExplorePhraseCommand,
+  isExploreVocabularyCommand,
   isSelectedSkillDraft,
   parseSlashTrigger,
   resolveSkillSubmission,
@@ -101,7 +102,8 @@ export function ConversationPanel({
       action.id === 'vocabulary' ||
       action.id === 'phrase' ||
       action.id === 'synonym' ||
-      action.id === 'explore-phrase'
+      action.id === 'explore-phrase' ||
+      action.id === 'explore-vocabulary'
     ) {
       setSelectedSkillId(action.id)
       setDraft(`/${action.command} `)
@@ -200,14 +202,24 @@ export function ConversationPanel({
     // 技能命令（选择器选择或直接输入 /phrase）：转换为类型化技能请求，
     // 不作为普通聊天发送。
     if (activeSkillId) {
-      // /explore-phrase 是无参数命令：命令本身（含末尾空白）即可发送，
-      // 带额外参数时提示输入无效。
-      if (activeSkillId === 'explore-phrase') {
-        if (!isExplorePhraseCommand(draft)) {
-          setComposerError(t('conversation:composer.explorePhraseInvalid'))
+      // 探索命令是无参数命令：命令本身（含末尾空白）即可发送，带额外参数
+      // 时提示输入无效。
+      if (activeSkillId === 'explore-phrase' || activeSkillId === 'explore-vocabulary') {
+        const isBareCommand =
+          activeSkillId === 'explore-phrase'
+            ? isExplorePhraseCommand(draft)
+            : isExploreVocabularyCommand(draft)
+        if (!isBareCommand) {
+          setComposerError(
+            t(
+              activeSkillId === 'explore-phrase'
+                ? 'conversation:composer.explorePhraseInvalid'
+                : 'conversation:composer.exploreVocabularyInvalid'
+            )
+          )
           return
         }
-        const exploreSubmission = onRunSkill?.({ skillId: 'explore-phrase', text: '' })
+        const exploreSubmission = onRunSkill?.({ skillId: activeSkillId, text: '' })
         const clearAcceptedExplore = (accepted: boolean | void): void => {
           if (accepted === false) return
           setSelectedSkillId(null)
@@ -356,7 +368,9 @@ export function ConversationPanel({
                   ? t('conversation:composer.phraseHint')
                   : activeSkillId === 'explore-phrase'
                     ? t('conversation:composer.explorePhraseHint')
-                    : t('common:composer.placeholder')
+                    : activeSkillId === 'explore-vocabulary'
+                      ? t('conversation:composer.exploreVocabularyHint')
+                      : t('common:composer.placeholder')
             }
             ref={inputRef}
             role="combobox"

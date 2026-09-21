@@ -3,12 +3,14 @@
 // 类型化会话 skill 提交，不作为普通聊天发送。
 
 export type ConversationActionId =
-  'concept' | 'vocabulary' | 'phrase' | 'explore-phrase' | 'synonym'
-export type SelectedConversationSkillId = 'vocabulary' | 'phrase' | 'explore-phrase' | 'synonym'
+  'concept' | 'vocabulary' | 'phrase' | 'explore-phrase' | 'explore-vocabulary' | 'synonym'
+export type SelectedConversationSkillId =
+  'vocabulary' | 'phrase' | 'explore-phrase' | 'explore-vocabulary' | 'synonym'
 
 export const VOCABULARY_COMMAND_PREFIX = '/vocabulary'
 export const PHRASE_COMMAND_PREFIX = '/phrase'
 export const EXPLORE_PHRASE_COMMAND_PREFIX = '/explore-phrase'
+export const EXPLORE_VOCABULARY_COMMAND_PREFIX = '/explore-vocabulary'
 
 // 各技能命令（含斜杠）的前缀与完整命令模式：选择器建立的技能据此校验草稿，
 // 支持直接输入的技能据此判定提交。命令元数据只在此处维护。
@@ -18,17 +20,25 @@ const SKILL_COMMANDS: Record<SelectedConversationSkillId, { prefix: string; patt
     prefix: EXPLORE_PHRASE_COMMAND_PREFIX,
     pattern: /^\/explore-phrase\s/u
   },
+  'explore-vocabulary': {
+    prefix: EXPLORE_VOCABULARY_COMMAND_PREFIX,
+    pattern: /^\/explore-vocabulary\s/u
+  },
   phrase: { prefix: PHRASE_COMMAND_PREFIX, pattern: /^\/phrase\s/u },
   vocabulary: { prefix: VOCABULARY_COMMAND_PREFIX, pattern: /^\/vocabulary\s/u }
 }
 
 // 支持直接输入完整命令提交的技能；vocabulary 仍需从选择器选择。
-const TYPED_SKILL_IDS = ['synonym', 'phrase', 'explore-phrase'] as const
+const TYPED_SKILL_IDS = ['synonym', 'phrase', 'explore-phrase', 'explore-vocabulary'] as const
 
-// /explore-phrase 是无参数命令：仅允许命令本身加末尾空白；带任何额外
-// 参数的输入都不再是合法命令（由 composer 提示输入无效）。
+// /explore-phrase 与 /explore-vocabulary 是无参数命令：仅允许命令本身加末尾
+// 空白；带任何额外参数的输入都不再是合法命令（由 composer 提示输入无效）。
 export function isExplorePhraseCommand(draft: string): boolean {
   return /^\/explore-phrase\s*$/u.test(draft)
+}
+
+export function isExploreVocabularyCommand(draft: string): boolean {
+  return /^\/explore-vocabulary\s*$/u.test(draft)
 }
 
 export type SkillDraftResult =
@@ -82,6 +92,8 @@ export type ConversationActionTextKey =
   | 'conversation:actionPicker.actions.phrase.description'
   | 'conversation:actionPicker.actions.explorePhrase.name'
   | 'conversation:actionPicker.actions.explorePhrase.description'
+  | 'conversation:actionPicker.actions.exploreVocabulary.name'
+  | 'conversation:actionPicker.actions.exploreVocabulary.description'
   | 'conversation:actionPicker.actions.concept.name'
   | 'conversation:actionPicker.actions.concept.description'
 
@@ -122,6 +134,12 @@ export const CONVERSATION_ACTIONS: readonly ConversationActionMeta[] = [
     descriptionKey: 'conversation:actionPicker.actions.explorePhrase.description'
   },
   {
+    id: 'explore-vocabulary',
+    command: 'explore-vocabulary',
+    nameKey: 'conversation:actionPicker.actions.exploreVocabulary.name',
+    descriptionKey: 'conversation:actionPicker.actions.exploreVocabulary.description'
+  },
+  {
     id: 'synonym',
     command: 'synonym',
     nameKey: 'conversation:actionPicker.actions.synonym.name',
@@ -134,8 +152,9 @@ export const CONVERSATION_ACTIONS: readonly ConversationActionMeta[] = [
 export function parseSlashTrigger(draft: string): string | undefined {
   // 完整 concept 命令与可直输技能命令进入参数阶段后直接发送，不再作为选择器查询。
   if (/^\/concept\s/u.test(draft)) return undefined
-  // /explore-phrase 输完即命令完整（无参数命令），同样直接进入提交阶段。
+  // 无参数命令输完即命令完整，同样直接进入提交阶段。
   if (isExplorePhraseCommand(draft)) return undefined
+  if (isExploreVocabularyCommand(draft)) return undefined
   if (TYPED_SKILL_IDS.some((skillId) => SKILL_COMMANDS[skillId].pattern.test(draft)))
     return undefined
   return draft.startsWith('/') ? draft.slice(1) : undefined
