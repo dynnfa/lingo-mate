@@ -1,5 +1,6 @@
 import { SynonymError } from '../core/learning/synonym/parse-synonym-input'
 import { ExplorePhraseError } from '../core/learning/explore-phrase/explore-phrase-error'
+import { ExploreVocabularyError } from '../core/learning/explore-vocabulary/explore-vocabulary-error'
 import { ModelConfigValidationError, ModelNotConfiguredError } from '../core/llm/model-config'
 import { ModelRequestError } from '../core/llm/llm-client'
 import {
@@ -28,7 +29,7 @@ export function toSafeRequestError(error: unknown): ConversationRequestError {
   if (error instanceof SynonymError && error.code === 'INVALID_INPUT')
     return { code: 'INVALID_INPUT' }
 
-  // /explore-phrase 的历史文件类失败按持久化错误反馈；通信与配置类沿用各自
+  // 探索技能的历史文件类失败按持久化错误反馈；通信与配置类沿用各自
   // 安全码，其余（生成失败、协议耗尽等）归入模型错误。
   if (error instanceof ExplorePhraseError) {
     if (
@@ -43,6 +44,21 @@ export function toSafeRequestError(error: unknown): ConversationRequestError {
     if (error.code === 'MODEL_NOT_CONFIGURED') return { code: 'MODEL_NOT_CONFIGURED' }
     if (error.code === 'CREDENTIAL_DECRYPT_FAILED') return { code: 'CREDENTIAL_DECRYPT_FAILED' }
     // TOOL_CALL_NOT_SUPPORTED 只出现在生成事件错误中；请求拒绝路径归入模型错误。
+    return { code: 'MODEL_ERROR' }
+  }
+
+  if (error instanceof ExploreVocabularyError) {
+    if (
+      error.code === 'STORAGE_FAILED' ||
+      error.code === 'COMMIT_UNCERTAIN' ||
+      error.code === 'HISTORY_UNREADABLE' ||
+      error.code === 'HISTORY_MODIFIED' ||
+      error.code === 'RECOVERY_PENDING'
+    ) {
+      return { code: 'PERSISTENCE_ERROR' }
+    }
+    if (error.code === 'MODEL_NOT_CONFIGURED') return { code: 'MODEL_NOT_CONFIGURED' }
+    if (error.code === 'CREDENTIAL_DECRYPT_FAILED') return { code: 'CREDENTIAL_DECRYPT_FAILED' }
     return { code: 'MODEL_ERROR' }
   }
 

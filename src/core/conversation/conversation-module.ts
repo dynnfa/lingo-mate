@@ -28,7 +28,12 @@ import { isWordConceptMessage } from '../prompt/word-concept'
 import { VocabularyError } from '../learning/vocabulary/parse-vocabulary-input'
 import { PhraseError } from '../learning/phrase/parse-phrase-input'
 import { ExplorePhraseError } from '../learning/explore-phrase/explore-phrase-error'
-import { isExplorePhraseReport } from '../../shared/explore-phrase'
+import { ExploreVocabularyError } from '../learning/explore-vocabulary/explore-vocabulary-error'
+import { isExplorePhraseReport, type ExplorePhraseReport } from '../../shared/explore-phrase'
+import {
+  isExploreVocabularyReport,
+  type ExploreVocabularyReport
+} from '../../shared/explore-vocabulary'
 import type { ConversationSkill, ConversationSkillRunInput } from './conversation-skill'
 import type {
   ConversationSkillRepository,
@@ -48,6 +53,37 @@ import {
 } from './conversation-repository'
 
 export type ConversationEventListener = (event: ConversationEvent) => void
+
+// 文件结果技能：结果不走数据库技能执行，而是各自的 JSON 历史文件。命令
+// 消息内容与稳定回复 ID 命名空间按技能区分；新增文件结果技能时在此登记。
+const FILE_RESULT_SKILLS = {
+  'explore-phrase': { command: '/explore-phrase' },
+  'explore-vocabulary': { command: '/explore-vocabulary' }
+} as const
+
+type FileResultSkillId = keyof typeof FILE_RESULT_SKILLS
+
+type FileResultSkillInput = Extract<RunConversationSkillInput, { skillId: FileResultSkillId }>
+
+type FileResultExploreReport = ExplorePhraseReport | ExploreVocabularyReport
+
+// 会话中保存的命令形态就是命令本身（无参数），按内容精确匹配。
+function fileResultSkillByCommand(content: string): FileResultSkillId | undefined {
+  if (content === FILE_RESULT_SKILLS['explore-phrase'].command) return 'explore-phrase'
+  if (content === FILE_RESULT_SKILLS['explore-vocabulary'].command) return 'explore-vocabulary'
+  return undefined
+}
+
+// 恢复的报告必须属于该命令对应的技能：词汇批次不得当作短语报告使用。
+// 命中时报告必为对应技能的报告，因此收窄到联合类型是可靠的。
+function isFileResultReport(
+  skillId: FileResultSkillId,
+  report: unknown
+): report is FileResultExploreReport {
+  return skillId === 'explore-phrase'
+    ? isExplorePhraseReport(report)
+    : isExploreVocabularyReport(report)
+}
 
 // 一次执行的语言快照：解释语言跟随界面语言，目标语言来自独立配置。
 // 在执行开始时解析一次，同一次执行内的模型调用、工具分析与反馈保持一致。
@@ -86,9 +122,11 @@ export class ConversationModule {
   private readonly activeRequests = new Map<string, ActiveExecution>()
   private readonly sessionRequests = new Map<string, string>()
   // Runtime-only: absent entries never authorize regenerating a missing old batch.
+  // 运行期记录携带技能身份：词汇请求不得被重试为短语请求。
   private readonly uncommittedExploreExecutions = new Map<
     string,
     {
+      skillId: FileResultSkillId
       executionId: string
       languages: ConversationLanguages
     }
@@ -134,23 +172,20 @@ export class ConversationModule {
     }
 
     const messages = await this.withPersistence(() => this.repository.history(sessionId))
-    const exploreSkill = this.skills.get('explore-phrase')
     const visibleMessages = await Promise.all(
       messages.map(async (message) => {
-        if (
-          message.role !== 'user' ||
-          message.content !== '/explore-phrase' ||
-          findExplorePhraseReply(message, messages)
-        )
+        const fileSkillId =
+          message.role === 'user' ? fileResultSkillByCommand(message.content) : undefined
+        if (!fileSkillId || findExploreReply(fileSkillId, message, messages))
           return toMessage(message)
-        if (this.uncommittedExploreExecutions.has(message.id))
-          return toMessage({ ...message, retryable: true })
+        const pending = this.uncommittedExploreExecutions.get(message.id)
+        if (pending?.skillId === fileSkillId) return toMessage({ ...message, retryable: true })
         try {
-          const report = await exploreSkill?.restoreReport?.(message.id)
-          return toMessage({ ...message, retryable: isExplorePhraseReport(report) })
+          const report = await this.skills.get(fileSkillId)?.restoreReport?.(message.id)
+          return toMessage({ ...message, retryable: isFileResultReport(fileSkillId, report) })
         } catch (error) {
           // A broken history file must not hide already saved conversation messages.
-          this.reportFailure('load-explore-phrase', message.id, error)
+          this.reportFailure(`load-${fileSkillId}`, message.id, error)
           return toMessage(message)
         }
       })
@@ -233,10 +268,11 @@ export class ConversationModule {
     if (input.arguments.wordLanguage !== languages.targetLanguage) {
       throw new SkillLanguageMismatchError(input.arguments.wordLanguage, languages.targetLanguage)
     }
-    // /explore-phrase 的结果走 JSON 历史文件路径：不创建数据库技能执行，
-    // 也不写数据库报告；命令消息与最终助手消息仍走会话消息接口。
-    if (input.skillId === 'explore-phrase') {
-      return this.runExplorePhraseSkill(input, skill, languages, emit)
+    // 探索技能（explore-phrase / explore-vocabulary）的结果走各自的 JSON 历史
+    // 文件路径：不创建数据库技能执行，也不写数据库报告；命令消息与最终助手
+    // 消息仍走会话消息接口。
+    if (input.skillId === 'explore-phrase' || input.skillId === 'explore-vocabulary') {
+      return this.runExploreFileSkill(input, skill, languages, emit)
     }
     if (!this.skillRepository) {
       throw new Error('Conversation skills are not configured')
@@ -306,10 +342,10 @@ export class ConversationModule {
     return { accepted: true, generation }
   }
 
-  // /explore-phrase 执行：无数据库执行记录，executionId 在 JSON 批次提交时
+  // 探索技能执行：无数据库执行记录，executionId 在 JSON 批次提交时
   // 与 userMessageId 建立稳定关联；失败重试按该身份从文件恢复。
-  private async runExplorePhraseSkill(
-    input: Extract<RunConversationSkillInput, { skillId: 'explore-phrase' }>,
+  private async runExploreFileSkill(
+    input: FileResultSkillInput,
     skill: ConversationSkill,
     languages: ConversationLanguages,
     emit: ConversationEventListener
@@ -320,11 +356,11 @@ export class ConversationModule {
       sessionId: input.sessionId,
       role: 'user',
       // 无参数命令：用户消息就是命令本身，不拼接空文本。
-      content: '/explore-phrase',
+      content: FILE_RESULT_SKILLS[input.skillId].command,
       createdAt: now
     }
     const executionId = randomUUID()
-    const assistantMessageId = explorePhraseReplyId(userMessage.id)
+    const assistantMessageId = exploreReplyId(input.skillId, userMessage.id)
     this.registerExecution(input.requestId, {
       controller: new AbortController(),
       sessionId: input.sessionId,
@@ -358,21 +394,21 @@ export class ConversationModule {
     }
     const active = this.activeRequests.get(input.requestId)
     if (!active) throw new Error('Skill execution is not registered')
-    void this.runExplorePhraseExecution(generation, executionId, input, skill, active, emit)
+    void this.runExploreExecution(generation, executionId, input, skill, active, emit)
     return { accepted: true, generation }
   }
 
-  private async runExplorePhraseExecution(
+  private async runExploreExecution(
     generation: GenerationStarted,
     executionId: string,
-    input: Extract<RunConversationSkillInput, { skillId: 'explore-phrase' }>,
+    input: FileResultSkillInput,
     skill: ConversationSkill,
     execution: ActiveExecution,
     emit: ConversationEventListener
   ): Promise<void> {
     const { requestId, sessionId, assistantMessageId } = generation
     const eventBase = { requestId, sessionId }
-    const retryIdentity = { executionId, languages: execution.languages }
+    const retryIdentity = { skillId: input.skillId, executionId, languages: execution.languages }
     this.uncommittedExploreExecutions.set(execution.userMessageId, retryIdentity)
     try {
       emit({ type: 'started', ...generation })
@@ -393,7 +429,7 @@ export class ConversationModule {
             this.uncommittedExploreExecutions.delete(execution.userMessageId)
           emit({ ...eventBase, type: 'skillPhase', phase })
         },
-        isReportProtected: (report) => this.isExplorePhraseReportProtected(report)
+        isReportProtected: (report) => this.isExploreReportProtected(report)
       } satisfies ConversationSkillRunInput)
       if (result.outcome === 'cancelled') {
         this.uncommittedExploreExecutions.set(execution.userMessageId, retryIdentity)
@@ -401,12 +437,12 @@ export class ConversationModule {
         return
       }
       this.uncommittedExploreExecutions.delete(execution.userMessageId)
-      await this.persistExplorePhraseReply(generation, result.report, skill, emit)
+      await this.persistExploreReply(generation, result.report, skill, emit)
     } catch (error) {
       // These failures guarantee that atomic replacement did not happen.
       // COMMIT_UNCERTAIN deliberately does not authorize regeneration.
       if (
-        error instanceof ExplorePhraseError &&
+        (error instanceof ExplorePhraseError || error instanceof ExploreVocabularyError) &&
         ['STORAGE_FAILED', 'HISTORY_UNREADABLE', 'HISTORY_MODIFIED', 'RECOVERY_PENDING'].includes(
           error.code
         )
@@ -419,7 +455,7 @@ export class ConversationModule {
       ) {
         emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
       } else {
-        this.reportFailure('run-explore-phrase', requestId, error)
+        this.reportFailure(`run-${input.skillId}`, requestId, error)
         emit({
           ...eventBase,
           type: 'failed',
@@ -434,17 +470,22 @@ export class ConversationModule {
 
   // 探索回复是本地格式化的 Markdown 表格；批次提交成功而消息保存失败时，
   // 重试按 userMessageId 从 JSON 批次恢复同一结果，不重新生成。
-  private async persistExplorePhraseReply(
+  private async persistExploreReply(
     generation: GenerationStarted,
     report: ConversationSkillReport,
     skill: ConversationSkill,
     emit: ConversationEventListener
   ): Promise<void> {
-    if (!isExplorePhraseReport(report)) {
-      throw new Error('Unexpected explore phrase report')
+    const exploreReport: FileResultExploreReport | undefined = isExplorePhraseReport(report)
+      ? report
+      : isExploreVocabularyReport(report)
+        ? report
+        : undefined
+    if (!exploreReport) {
+      throw new Error('Unexpected explore report')
     }
     // 反馈语言使用批次携带的解释语言快照，恢复路径与此保持一致。
-    const feedback = skill.feedback(report, report.explanationLanguage)
+    const feedback = skill.feedback(exploreReport, exploreReport.explanationLanguage)
     const assistantMessage: StoredMessage = {
       id: generation.assistantMessageId,
       sessionId: generation.sessionId,
@@ -462,17 +503,27 @@ export class ConversationModule {
     })
   }
 
-  // JSON 历史批次的淘汰保护：批次对应的 user 消息尚无 assistant 回复（或
-  // 读取失败）时视为仍在恢复窗口内，不得被新批次淘汰。
-  private async isExplorePhraseReportProtected(report: ConversationSkillReport): Promise<boolean> {
-    if (!isExplorePhraseReport(report)) return false
+  // JSON 历史批次的淘汰保护：批次对应的 user 消息尚无该技能的 assistant
+  // 回复（或读取失败）时视为仍在恢复窗口内，不得被新批次淘汰。
+  private async isExploreReportProtected(report: ConversationSkillReport): Promise<boolean> {
+    const exploreReport: FileResultExploreReport | undefined = isExplorePhraseReport(report)
+      ? report
+      : isExploreVocabularyReport(report)
+        ? report
+        : undefined
+    if (!exploreReport) return false
+    const skillId: FileResultSkillId = isExplorePhraseReport(exploreReport)
+      ? 'explore-phrase'
+      : 'explore-vocabulary'
     try {
-      const history = await this.withPersistence(() => this.repository.history(report.sessionId))
+      const history = await this.withPersistence(() =>
+        this.repository.history(exploreReport.sessionId)
+      )
       const index = history.findIndex(
-        (message) => message.id === report.userMessageId && message.role === 'user'
+        (message) => message.id === exploreReport.userMessageId && message.role === 'user'
       )
       if (index === -1) return false
-      return !findExplorePhraseReply(history[index], history)
+      return !findExploreReply(skillId, history[index], history)
     } catch {
       // 无法核实时保守保护，避免淘汰可能仍在恢复的批次。
       return true
@@ -547,8 +598,9 @@ export class ConversationModule {
 
     // File-backed exploration recovery uses saved replies/batches first. Only a
     // known uncommitted execution from this process may run the model again.
-    if (userMessage.content === '/explore-phrase') {
-      return this.retryExplorePhraseMessage(input, userMessage, history, emit)
+    const fileSkillId = fileResultSkillByCommand(userMessage.content)
+    if (fileSkillId) {
+      return this.retryExploreMessage(fileSkillId, input, userMessage, history, emit)
     }
 
     const lastMessage = history.at(-1)
@@ -577,28 +629,30 @@ export class ConversationModule {
 
   // Window-retained batches may recover even after later messages. Missing results
   // may regenerate only when this process knows the execution never committed.
-  private async retryExplorePhraseMessage(
+  // 运行期记录携带技能身份：待提交执行只授权同一技能的重试。
+  private async retryExploreMessage(
+    skillId: FileResultSkillId,
     input: RetryMessageInput,
     userMessage: StoredMessage,
     history: StoredMessage[],
     emit: ConversationEventListener
   ): Promise<GenerationAccepted> {
-    const skill = this.skills.get('explore-phrase')
+    const skill = this.skills.get(skillId)
     if (!skill?.restoreReport) {
-      throw new RetryNotAllowedError('explore phrase execution cannot be retried')
+      throw new RetryNotAllowedError(`${skillId} execution cannot be retried`)
     }
-    if (findExplorePhraseReply(userMessage, history)) {
-      throw new RetryNotAllowedError('explore phrase already has a reply')
+    if (findExploreReply(skillId, userMessage, history)) {
+      throw new RetryNotAllowedError(`${skillId} already has a reply`)
     }
     const report = await skill.restoreReport(userMessage.id)
     const pending = this.uncommittedExploreExecutions.get(userMessage.id)
-    if (report && !isExplorePhraseReport(report)) {
-      throw new RetryNotAllowedError('unexpected explore phrase report')
+    if (report && !isFileResultReport(skillId, report)) {
+      throw new RetryNotAllowedError(`unexpected ${skillId} report`)
     }
-    if (!report && !pending) {
-      throw new RetryNotAllowedError('explore phrase result is not recoverable')
+    if (!report && (!pending || pending.skillId !== skillId)) {
+      throw new RetryNotAllowedError(`${skillId} result is not recoverable`)
     }
-    const assistantMessageId = explorePhraseReplyId(userMessage.id)
+    const assistantMessageId = exploreReplyId(skillId, userMessage.id)
     const languages = report
       ? {
           outputLanguage: report.explanationLanguage,
@@ -619,17 +673,17 @@ export class ConversationModule {
       assistantMessageId
     }
     const active = this.activeRequests.get(input.requestId)
-    if (!active) throw new Error('Explore phrase retry is not registered')
+    if (!active) throw new Error('Explore retry is not registered')
     if (report) {
-      void this.retryExplorePhraseReply(generation, report, skill, active, emit)
+      void this.retryExploreReply(generation, report, skill, active, emit)
     } else {
-      void this.runExplorePhraseExecution(
+      void this.runExploreExecution(
         generation,
         pending!.executionId,
         {
           requestId: input.requestId,
           sessionId: input.sessionId,
-          skillId: 'explore-phrase',
+          skillId,
           arguments: { wordLanguage: 'en' }
         },
         skill,
@@ -640,9 +694,9 @@ export class ConversationModule {
     return { accepted: true, generation }
   }
 
-  private async retryExplorePhraseReply(
+  private async retryExploreReply(
     generation: GenerationStarted,
-    report: ConversationSkillReport,
+    report: FileResultExploreReport,
     skill: ConversationSkill,
     execution: ActiveExecution,
     emit: ConversationEventListener
@@ -656,9 +710,12 @@ export class ConversationModule {
         return
       }
       emit({ ...eventBase, type: 'skillPhase', phase: 'summarizing' })
-      await this.persistExplorePhraseReply(generation, report, skill, emit)
+      await this.persistExploreReply(generation, report, skill, emit)
     } catch (error) {
-      this.reportFailure('retry-explore-phrase', requestId, error)
+      const skillId: FileResultSkillId = isExplorePhraseReport(report)
+        ? 'explore-phrase'
+        : 'explore-vocabulary'
+      this.reportFailure(`retry-${skillId}`, requestId, error)
       emit({
         ...eventBase,
         type: 'failed',
@@ -1089,6 +1146,22 @@ export class ConversationModule {
       return { code: 'MODEL_ERROR' }
     }
 
+    if (error instanceof ExploreVocabularyError) {
+      if (
+        error.code === 'STORAGE_FAILED' ||
+        error.code === 'COMMIT_UNCERTAIN' ||
+        error.code === 'HISTORY_UNREADABLE' ||
+        error.code === 'HISTORY_MODIFIED' ||
+        error.code === 'RECOVERY_PENDING'
+      ) {
+        return { code: 'PERSISTENCE_ERROR' }
+      }
+      if (error.code === 'TOOL_CALL_NOT_SUPPORTED') return { code: 'TOOL_CALL_NOT_SUPPORTED' }
+      if (error.code === 'MODEL_NOT_CONFIGURED') return { code: 'MODEL_NOT_CONFIGURED' }
+      if (error.code === 'CREDENTIAL_DECRYPT_FAILED') return { code: 'CREDENTIAL_DECRYPT_FAILED' }
+      return { code: 'MODEL_ERROR' }
+    }
+
     if (error instanceof ModelConfigValidationError && error.code === 'CREDENTIAL_DECRYPT_FAILED') {
       return { code: 'CREDENTIAL_DECRYPT_FAILED' }
     }
@@ -1135,9 +1208,10 @@ function byMostRecent(a: ConversationSummary, b: ConversationSummary): number {
 
 // UUIDv8 derived from the user identity: reply association survives restarts and
 // history-window eviction without adding a database column or changing JSON.
-function explorePhraseReplyId(userMessageId: string): string {
+// 命名空间按技能区分：词汇回复 ID 与短语回复 ID 不同，避免跨技能碰撞。
+function exploreReplyId(skillId: FileResultSkillId, userMessageId: string): string {
   const bytes = createHash('sha256')
-    .update(`explore-phrase-reply:${userMessageId}`)
+    .update(`${skillId}-reply:${userMessageId}`)
     .digest()
     .subarray(0, 16)
   bytes[6] = (bytes[6] & 0x0f) | 0x80
@@ -1146,22 +1220,24 @@ function explorePhraseReplyId(userMessageId: string): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
-function findExplorePhraseReply(
+function findExploreReply(
+  skillId: FileResultSkillId,
   user: StoredMessage,
   history: StoredMessage[]
 ): StoredMessage | undefined {
-  const replyId = explorePhraseReplyId(user.id)
+  const replyId = exploreReplyId(skillId, user.id)
   const reply = history.find((message) => message.role === 'assistant' && message.id === replyId)
   if (reply) return reply
   // Legacy replies used random IDs and were always appended directly after the
   // command. Do not mistake another command's newly recovered reply for this one.
   const adjacent = history[history.findIndex((message) => message.id === user.id) + 1]
   if (adjacent?.role !== 'assistant') return undefined
+  const command = FILE_RESULT_SKILLS[skillId].command
   const belongsToAnotherCommand = history.some(
     (message) =>
       message.role === 'user' &&
-      message.content === '/explore-phrase' &&
-      explorePhraseReplyId(message.id) === adjacent.id
+      message.content === command &&
+      exploreReplyId(skillId, message.id) === adjacent.id
   )
   return belongsToAnotherCommand ? undefined : adjacent
 }

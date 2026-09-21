@@ -26,7 +26,11 @@
     "generatingExplorePhrase": "正在生成短语…",
     "committingExplorePhrase": "正在保存生成的短语…",
     "descriptionFailedExplorePhrase": "短语已生成并保存，但结果展示失败。你可以重试恢复展示。",
-    "descriptionCancelledExplorePhrase": "短语已生成并保存，但结果展示已取消。你可以重试恢复展示。"
+    "descriptionCancelledExplorePhrase": "短语已生成并保存，但结果展示已取消。你可以重试恢复展示。",
+    "generatingExploreVocabulary": "正在生成单词…",
+    "committingExploreVocabulary": "正在保存生成的单词…",
+    "descriptionFailedExploreVocabulary": "单词已生成并保存，但结果展示失败。你可以重试恢复展示。",
+    "descriptionCancelledExploreVocabulary": "单词已生成并保存，但结果展示已取消。你可以重试恢复展示。"
   },
   "composer": {
     "vocabularyRequired": "请在 /vocabulary 后输入一个或多个英语单词或短语。",
@@ -35,7 +39,9 @@
     "synonymRequired": "请在 /synonym 后输入英语单词，以逗号分隔。",
     "synonymHint": "例如：/synonym adequate, decent；已收录的单词会跳过。",
     "explorePhraseInvalid": "/explore-phrase 不需要参数，请直接发送。",
-    "explorePhraseHint": "直接发送即可生成 10 个常用英语短语；近 7 次结果不会重复。"
+    "explorePhraseHint": "直接发送即可生成 10 个常用英语短语；近 7 次结果不会重复。",
+    "exploreVocabularyInvalid": "/explore-vocabulary 不需要参数，请直接发送。",
+    "exploreVocabularyHint": "直接发送即可生成 10 个常用英语单词、释义与例句；近 7 次结果不会重复。"
   },
   "thinking": {
     "label": "模型思考过程",
@@ -63,6 +69,10 @@
       "explorePhrase": {
         "name": "探索短语",
         "description": "生成 10 个常用英语短语、释义与例句，直接发送即可。"
+      },
+      "exploreVocabulary": {
+        "name": "探索词汇",
+        "description": "生成 10 个常用英语单词、释义与例句，直接发送即可。"
       },
       "synonym": {
         "name": "近义词分组",

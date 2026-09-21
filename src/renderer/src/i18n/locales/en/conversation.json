@@ -26,7 +26,11 @@
     "generatingExplorePhrase": "Generating phrases…",
     "committingExplorePhrase": "Saving the generated phrases…",
     "descriptionFailedExplorePhrase": "Phrases were generated and saved, but showing the result failed. You can retry to restore it.",
-    "descriptionCancelledExplorePhrase": "Phrases were generated and saved, but showing the result was cancelled. You can retry to restore it."
+    "descriptionCancelledExplorePhrase": "Phrases were generated and saved, but showing the result was cancelled. You can retry to restore it.",
+    "generatingExploreVocabulary": "Generating words…",
+    "committingExploreVocabulary": "Saving the generated words…",
+    "descriptionFailedExploreVocabulary": "Words were generated and saved, but showing the result failed. You can retry to restore it.",
+    "descriptionCancelledExploreVocabulary": "Words were generated and saved, but showing the result was cancelled. You can retry to restore it."
   },
   "composer": {
     "vocabularyRequired": "Enter one or more English words or phrases after /vocabulary.",
@@ -35,7 +39,9 @@
     "synonymRequired": "Enter English words after /synonym, separated by commas.",
     "synonymHint": "Example: /synonym adequate, decent. Previously saved words are skipped.",
     "explorePhraseInvalid": "/explore-phrase takes no arguments. Send it as is.",
-    "explorePhraseHint": "Just send it to generate 10 common English phrases; the last 7 rounds are never repeated."
+    "explorePhraseHint": "Just send it to generate 10 common English phrases; the last 7 rounds are never repeated.",
+    "exploreVocabularyInvalid": "/explore-vocabulary takes no arguments. Send it as is.",
+    "exploreVocabularyHint": "Just send it to generate 10 common English words with meanings and examples; the last 7 rounds are never repeated."
   },
   "thinking": {
     "label": "Model thinking",
@@ -63,6 +69,10 @@
       "explorePhrase": {
         "name": "Explore phrases",
         "description": "Generate 10 common English phrases with meanings and examples. Just send it."
+      },
+      "exploreVocabulary": {
+        "name": "Explore vocabulary",
+        "description": "Generate 10 common English words with meanings and examples. Just send it."
       },
       "synonym": {
         "name": "Synonym groups",

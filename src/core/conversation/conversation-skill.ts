@@ -7,8 +7,8 @@ import type { ConversationSkillReport, RunConversationSkillInput } from '../../s
 export interface ConversationSkillRunInput {
   requestId: string
   executionId: string
-  // 会话与消息身份：explore-phrase 的批次以 userMessageId 建立稳定关联，
-  // 保存在 JSON 历史文件而非数据库执行记录中。
+  // 会话与消息身份：探索技能的批次以 userMessageId 建立稳定关联，保存在
+  // JSON 历史文件而非数据库执行记录中。
   sessionId: string
   userMessageId: string
   arguments: RunConversationSkillInput['arguments']
@@ -17,7 +17,7 @@ export interface ConversationSkillRunInput {
   signal: AbortSignal
   onPhase: (phase: 'analyzing' | 'committing' | 'summarizing') => void | Promise<void>
   // 提交前判断历史批次是否仍受保护：尚未补齐回复的批次不得被 7 批窗口淘汰。
-  // 仅文件结果存储的技能（explore-phrase）消费该回调。
+  // 仅文件结果存储的技能（explore-phrase / explore-vocabulary）消费该回调。
   isReportProtected?: (report: ConversationSkillReport) => boolean | Promise<boolean>
 }
 
@@ -25,7 +25,7 @@ export type ConversationSkillRunResult =
   { outcome: 'completed'; report: ConversationSkillReport } | { outcome: 'cancelled' }
 
 export interface ConversationSkill {
-  readonly skillId: 'vocabulary' | 'phrase' | 'synonym' | 'explore-phrase'
+  readonly skillId: 'vocabulary' | 'phrase' | 'synonym' | 'explore-phrase' | 'explore-vocabulary'
   run(input: ConversationSkillRunInput): Promise<ConversationSkillRunResult>
   // 反馈由持久化报告驱动；实现内部负责判别报告类型并拒绝不匹配的载荷。
   feedback(report: ConversationSkillReport, language: SupportedLocale): string

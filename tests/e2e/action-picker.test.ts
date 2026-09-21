@@ -21,7 +21,7 @@ test('opens the slash action picker above the composer and selects an action', a
 
     const picker = window.locator('.action-picker')
     await expect(picker).toBeVisible()
-    await expect(window.locator('.action-picker-option')).toHaveCount(5)
+    await expect(window.locator('.action-picker-option')).toHaveCount(6)
 
     // 弹层锚定输入行正上方并覆盖消息区域，不挤压消息布局
     const pickerBox = await picker.boundingBox()
