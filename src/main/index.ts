@@ -88,6 +88,11 @@ import { ExplorePhraseConversationSkill } from '../core/learning/explore-phrase/
 import { LlmExplorePhraseGenerator } from '../core/llm/llm-explore-phrase-generator'
 import { JsonFileExplorePhraseHistoryStore } from './explore-phrase-history-store'
 import { createExplorePhraseFeedbackFormatter } from './explore-phrase-feedback'
+import { ExploreVocabularyModule } from '../core/learning/explore-vocabulary/explore-vocabulary-module'
+import { ExploreVocabularyConversationSkill } from '../core/learning/explore-vocabulary/explore-vocabulary-conversation-skill'
+import { LlmExploreVocabularyGenerator } from '../core/llm/llm-explore-vocabulary-generator'
+import { JsonFileExploreVocabularyHistoryStore } from './explore-vocabulary-history-store'
+import { createExploreVocabularyFeedbackFormatter } from './explore-vocabulary-feedback'
 
 let database: Database.Database | undefined
 let conversationModule: ConversationModule | undefined
@@ -454,11 +459,30 @@ app.whenReady().then(() => {
     ),
     createExplorePhraseFeedbackFormatter()
   )
+  // /explore-vocabulary：与短语探索同构但完全独立——历史文件、去重窗口、
+  // 串行锁与稳定回复 ID 命名空间都不共享；用量登记为 vocabulary_analysis。
+  const exploreVocabularyHistoryStore = new JsonFileExploreVocabularyHistoryStore(
+    join(app.getPath('userData'), 'explore-vocabulary-history.json')
+  )
+  void exploreVocabularyHistoryStore.cleanupLeftoverTempFiles()
+  const exploreVocabularySkill = new ExploreVocabularyConversationSkill(
+    new ExploreVocabularyModule(
+      exploreVocabularyHistoryStore,
+      (timeoutMs) =>
+        new LlmExploreVocabularyGenerator(
+          modelsService.resolveSnapshot(),
+          timeoutMs,
+          createLlmClient
+        )
+    ),
+    createExploreVocabularyFeedbackFormatter()
+  )
   const conversationSkills = new Map<ConversationSkillId, ConversationSkill>([
     [vocabularySkill.skillId, vocabularySkill],
     [phraseSkill.skillId, phraseSkill],
     [synonymSkill.skillId, synonymSkill],
-    [exploreSkill.skillId, exploreSkill]
+    [exploreSkill.skillId, exploreSkill],
+    [exploreVocabularySkill.skillId, exploreVocabularySkill]
   ])
   conversationModule = new ConversationModule(
     conversationModel,

@@ -1,7 +1,7 @@
 # `/explore-vocabulary` 词汇探索实施计划
 
 - 日期：2026-09-21
-- 状态：待实施
+- 状态：已实施
 - 参考：[短语探索实施计划](./2026-09-20-explore-phrase.md)，以当前实现及其「2026-09-21 审查修复约定」为准。
 
 ## 目标与范围
@@ -141,3 +141,13 @@
 - **展示**：检查实际 table/th/td 为四列十行，字段与顺序完整、中英文资源齐全；恶意 Markdown/HTML 作为文本显示；窄窗口不撑破会话布局。
 
 实施完成后运行 `pnpm lint`、`pnpm typecheck`、`pnpm test`、`pnpm build`、`pnpm test:electron`。自动验证只用临时用户目录和可控模型服务；内容准确性与常用程度另作抽样检查，不以自动格式校验代替语义验收。
+
+## 验证结果（2026-09-21）
+
+- `pnpm lint`：通过（0 error / 0 warning）。
+- `pnpm typecheck`：node 与 web 配置均通过。
+- `pnpm test`：134 个测试文件、1538 个测试全部通过；含新增词汇协议、词形/例句规则、JSON 存储、模块编排、生成器协议、会话集成与双语资源校验，以及 explore-phrase 回归（锁/表格/存储提取后行为不变）。
+- `pnpm build`：通过。
+- `pnpm test:electron`：46 个实窗用例全部通过；含新增 `/explore-vocabulary` 全链路（表格四列十行、禁用列表、独立历史文件、重启恢复不重发模型请求）与更新后的行动选择器目录（6 项）。
+- 共享提取：串行锁（`explore-serial-lock.ts`）、JSON 历史原子写入（`main/json-history-file.ts`）与表格转义（`explore-table.ts`）由两种探索技能复用，各自 schema/校验策略注入，短语既有测试全部保持通过。
+- 内容抽样（自然程度、常用程度、释义准确性）按计划另行人工验收，未以格式校验代替。

@@ -6,6 +6,7 @@ import type { UsageApi } from './usage'
 import type { VocabularyApi, VocabularyBatch } from './vocabulary'
 import type { PhraseApi, PhraseBatch } from './phrase'
 import type { ExplorePhraseReport } from './explore-phrase'
+import type { ExploreVocabularyReport } from './explore-vocabulary'
 import type { VocabularyPracticeApi } from './vocabulary-practice'
 import type { SentencePracticeApi } from './sentence-practice'
 import type { VocabularyMistakesApi } from './vocabulary-mistakes'
@@ -62,17 +63,22 @@ export const conversationSkillIdSchema = z.enum([
   'vocabulary',
   'phrase',
   'synonym',
-  'explore-phrase'
+  'explore-phrase',
+  'explore-vocabulary'
 ])
 export type ConversationSkillId = z.infer<typeof conversationSkillIdSchema>
 
 // 会话技能参数按 skillId 判别：vocabulary/phrase/synonym 要求非空 text；
-// explore-phrase 是无参数命令，仅携带目标语言，不为支持它放宽 text 校验。
+// explore-phrase 与 explore-vocabulary 是无参数命令，仅携带目标语言，
+// 不为支持它们放宽 text 校验。
 export const conversationSkillArgumentsSchema = z.strictObject({
   text: z.string().min(1).max(4_000),
   wordLanguage: z.literal('en')
 })
 export const explorePhraseSkillArgumentsSchema = z.strictObject({
+  wordLanguage: z.literal('en')
+})
+export const exploreVocabularySkillArgumentsSchema = z.strictObject({
   wordLanguage: z.literal('en')
 })
 
@@ -104,6 +110,12 @@ export const runConversationSkillInputSchema = z.discriminatedUnion('skillId', [
     sessionId: identifierSchema,
     skillId: z.literal('explore-phrase'),
     arguments: explorePhraseSkillArgumentsSchema
+  }),
+  z.strictObject({
+    requestId: identifierSchema,
+    sessionId: identifierSchema,
+    skillId: z.literal('explore-vocabulary'),
+    arguments: exploreVocabularySkillArgumentsSchema
   })
 ])
 
@@ -235,9 +247,10 @@ export type SendMessageInput = z.infer<typeof sendMessageInputSchema>
 export type RunConversationSkillInput = z.infer<typeof runConversationSkillInputSchema>
 export type ConversationSkillArguments = z.infer<typeof conversationSkillArgumentsSchema>
 // 技能执行报告的持久化形状：按 skillId 对应各自的批次结构，读取方负责判别。
-// ExplorePhraseReport 仅存在于 JSON 历史文件与内存分派，不进入数据库报告列。
+// ExplorePhraseReport 与 ExploreVocabularyReport 仅存在于各自的 JSON 历史文件
+// 与内存分派，不进入数据库报告列。
 export type ConversationSkillReport =
-  VocabularyBatch | PhraseBatch | SynonymBatch | ExplorePhraseReport
+  VocabularyBatch | PhraseBatch | SynonymBatch | ExplorePhraseReport | ExploreVocabularyReport
 export type RetryMessageInput = z.infer<typeof retryMessageInputSchema>
 export type CancelMessageInput = z.infer<typeof cancelMessageInputSchema>
 export type SendMessageResult = z.infer<typeof sendMessageResultSchema>
