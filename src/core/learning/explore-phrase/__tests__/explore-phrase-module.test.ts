@@ -300,6 +300,46 @@ describe('ExplorePhraseModule', () => {
     expect(store.commits[0].options.isProtected).toBe(isProtected)
   })
 
+  it('waits for an in-flight commit before settling cancellation or releasing the lock', async () => {
+    const store = new MemoryStore()
+    let finishCommit!: () => void
+    const originalCommit = store.commit.bind(store)
+    vi.spyOn(store, 'commit').mockImplementationOnce(async (input, options) => {
+      await new Promise<void>((resolve) => {
+        finishCommit = resolve
+      })
+      return originalCommit(input, options)
+    })
+    const onGenerate = vi.fn()
+    const module = makeModule(
+      store,
+      [
+        Array.from({ length: 10 }, (_, i) => candidate(`first ${i}`)),
+        Array.from({ length: 10 }, (_, i) => candidate(`second ${i}`))
+      ],
+      { onGenerate }
+    )
+    const controller = new AbortController()
+    const settled = vi.fn()
+    const first = module.explore(makeOptions({ signal: controller.signal })).then((result) => {
+      settled(result)
+      return result
+    })
+    await vi.waitFor(() => expect(finishCommit).toBeDefined())
+    controller.abort()
+    const second = module.explore(makeOptions())
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(settled).not.toHaveBeenCalled()
+      expect(onGenerate).toHaveBeenCalledTimes(1)
+    } finally {
+      finishCommit()
+      await Promise.all([first, second])
+    }
+    expect(await first).toMatchObject({ outcome: 'completed' })
+    expect(store.document.batches).toHaveLength(2)
+  })
+
   it('serializes explorations across the shared lock without overlapping commits', async () => {
     const store = new MemoryStore()
     const timeline: string[] = []

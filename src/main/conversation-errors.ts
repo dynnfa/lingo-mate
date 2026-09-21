@@ -33,6 +33,7 @@ export function toSafeRequestError(error: unknown): ConversationRequestError {
   if (error instanceof ExplorePhraseError) {
     if (
       error.code === 'STORAGE_FAILED' ||
+      error.code === 'COMMIT_UNCERTAIN' ||
       error.code === 'HISTORY_UNREADABLE' ||
       error.code === 'HISTORY_MODIFIED' ||
       error.code === 'RECOVERY_PENDING'

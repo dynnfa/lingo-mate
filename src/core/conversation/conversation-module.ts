@@ -1,6 +1,6 @@
 import { noopCoreDiagnostics, type CoreDiagnostics } from '../error-diagnostics'
 import { SynonymError, parseSynonymInput } from '../learning/synonym/parse-synonym-input'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { classifyModelRequestError, ModelRequestError } from '../llm/llm-client'
 import {
   CONVERSATION_TITLE_MAX_LENGTH,
@@ -85,6 +85,14 @@ export class ConversationModule {
   private readonly drafts = new Map<string, DraftConversation>()
   private readonly activeRequests = new Map<string, ActiveExecution>()
   private readonly sessionRequests = new Map<string, string>()
+  // Runtime-only: absent entries never authorize regenerating a missing old batch.
+  private readonly uncommittedExploreExecutions = new Map<
+    string,
+    {
+      executionId: string
+      languages: ConversationLanguages
+    }
+  >()
 
   constructor(
     private readonly model: LanguageModel,
@@ -126,7 +134,28 @@ export class ConversationModule {
     }
 
     const messages = await this.withPersistence(() => this.repository.history(sessionId))
-    return { conversation: toSummary(conversation), messages: messages.map(toMessage) }
+    const exploreSkill = this.skills.get('explore-phrase')
+    const visibleMessages = await Promise.all(
+      messages.map(async (message) => {
+        if (
+          message.role !== 'user' ||
+          message.content !== '/explore-phrase' ||
+          findExplorePhraseReply(message, messages)
+        )
+          return toMessage(message)
+        if (this.uncommittedExploreExecutions.has(message.id))
+          return toMessage({ ...message, retryable: true })
+        try {
+          const report = await exploreSkill?.restoreReport?.(message.id)
+          return toMessage({ ...message, retryable: isExplorePhraseReport(report) })
+        } catch (error) {
+          // A broken history file must not hide already saved conversation messages.
+          this.reportFailure('load-explore-phrase', message.id, error)
+          return toMessage(message)
+        }
+      })
+    )
+    return { conversation: toSummary(conversation), messages: visibleMessages }
   }
 
   async sendMessage(
@@ -295,7 +324,7 @@ export class ConversationModule {
       createdAt: now
     }
     const executionId = randomUUID()
-    const assistantMessageId = randomUUID()
+    const assistantMessageId = explorePhraseReplyId(userMessage.id)
     this.registerExecution(input.requestId, {
       controller: new AbortController(),
       sessionId: input.sessionId,
@@ -343,6 +372,8 @@ export class ConversationModule {
   ): Promise<void> {
     const { requestId, sessionId, assistantMessageId } = generation
     const eventBase = { requestId, sessionId }
+    const retryIdentity = { executionId, languages: execution.languages }
+    this.uncommittedExploreExecutions.set(execution.userMessageId, retryIdentity)
     try {
       emit({ type: 'started', ...generation })
       if (execution.controller.signal.aborted) {
@@ -358,17 +389,34 @@ export class ConversationModule {
         explanationLanguage: execution.languages.outputLanguage,
         signal: execution.controller.signal,
         onPhase: async (phase) => {
+          if (phase === 'committing')
+            this.uncommittedExploreExecutions.delete(execution.userMessageId)
           emit({ ...eventBase, type: 'skillPhase', phase })
         },
         isReportProtected: (report) => this.isExplorePhraseReportProtected(report)
       } satisfies ConversationSkillRunInput)
       if (result.outcome === 'cancelled') {
+        this.uncommittedExploreExecutions.set(execution.userMessageId, retryIdentity)
         emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
         return
       }
+      this.uncommittedExploreExecutions.delete(execution.userMessageId)
       await this.persistExplorePhraseReply(generation, result.report, skill, emit)
     } catch (error) {
-      if (execution.controller.signal.aborted) {
+      // These failures guarantee that atomic replacement did not happen.
+      // COMMIT_UNCERTAIN deliberately does not authorize regeneration.
+      if (
+        error instanceof ExplorePhraseError &&
+        ['STORAGE_FAILED', 'HISTORY_UNREADABLE', 'HISTORY_MODIFIED', 'RECOVERY_PENDING'].includes(
+          error.code
+        )
+      ) {
+        this.uncommittedExploreExecutions.set(execution.userMessageId, retryIdentity)
+      }
+      if (
+        execution.controller.signal.aborted &&
+        this.uncommittedExploreExecutions.has(execution.userMessageId)
+      ) {
         emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
       } else {
         this.reportFailure('run-explore-phrase', requestId, error)
@@ -424,8 +472,7 @@ export class ConversationModule {
         (message) => message.id === report.userMessageId && message.role === 'user'
       )
       if (index === -1) return false
-      const reply = history[index + 1]
-      return !(reply !== undefined && reply.role === 'assistant')
+      return !findExplorePhraseReply(history[index], history)
     } catch {
       // 无法核实时保守保护，避免淘汰可能仍在恢复的批次。
       return true
@@ -498,9 +545,8 @@ export class ConversationModule {
       return { accepted: true, generation }
     }
 
-    // /explore-phrase 的执行身份保存在 JSON 历史文件而非数据库：恢复时先查
-    // 已有最终助手消息，再查文件批次；两者都没有时明确失败，不用同一旧身份
-    // 重新生成另一批。
+    // File-backed exploration recovery uses saved replies/batches first. Only a
+    // known uncommitted execution from this process may run the model again.
     if (userMessage.content === '/explore-phrase') {
       return this.retryExplorePhraseMessage(input, userMessage, history, emit)
     }
@@ -529,8 +575,8 @@ export class ConversationModule {
     return this.launchGeneration(generation, emit)
   }
 
-  // 探索消息的重试只做恢复：批次存在则补齐同一 Markdown 表格回复；不存在
-  // （生成未提交或历史被删除）则明确失败。需要新的一批时发送新命令。
+  // Window-retained batches may recover even after later messages. Missing results
+  // may regenerate only when this process knows the execution never committed.
   private async retryExplorePhraseMessage(
     input: RetryMessageInput,
     userMessage: StoredMessage,
@@ -541,26 +587,30 @@ export class ConversationModule {
     if (!skill?.restoreReport) {
       throw new RetryNotAllowedError('explore phrase execution cannot be retried')
     }
-    // 已完成消息不可再次当作新执行：其后存在任何消息即视为已有回复。
-    if (history.at(-1)?.id !== userMessage.id) {
-      throw new RetryNotAllowedError('only the last unanswered user message can be retried')
+    if (findExplorePhraseReply(userMessage, history)) {
+      throw new RetryNotAllowedError('explore phrase already has a reply')
     }
     const report = await skill.restoreReport(userMessage.id)
-    if (!report || !isExplorePhraseReport(report)) {
+    const pending = this.uncommittedExploreExecutions.get(userMessage.id)
+    if (report && !isExplorePhraseReport(report)) {
+      throw new RetryNotAllowedError('unexpected explore phrase report')
+    }
+    if (!report && !pending) {
       throw new RetryNotAllowedError('explore phrase result is not recoverable')
     }
-
-    const assistantMessageId = randomUUID()
-    // 恢复沿用批次的语言快照，不读取当前设置，也不重新生成。
+    const assistantMessageId = explorePhraseReplyId(userMessage.id)
+    const languages = report
+      ? {
+          outputLanguage: report.explanationLanguage,
+          targetLanguage: report.wordLanguage
+        }
+      : pending!.languages
     this.registerExecution(input.requestId, {
       controller: new AbortController(),
       sessionId: input.sessionId,
       userMessageId: userMessage.id,
       assistantMessageId,
-      languages: {
-        outputLanguage: report.explanationLanguage,
-        targetLanguage: report.wordLanguage
-      }
+      languages
     })
     const generation: GenerationStarted = {
       requestId: input.requestId,
@@ -570,7 +620,23 @@ export class ConversationModule {
     }
     const active = this.activeRequests.get(input.requestId)
     if (!active) throw new Error('Explore phrase retry is not registered')
-    void this.retryExplorePhraseReply(generation, report, skill, active, emit)
+    if (report) {
+      void this.retryExplorePhraseReply(generation, report, skill, active, emit)
+    } else {
+      void this.runExplorePhraseExecution(
+        generation,
+        pending!.executionId,
+        {
+          requestId: input.requestId,
+          sessionId: input.sessionId,
+          skillId: 'explore-phrase',
+          arguments: { wordLanguage: 'en' }
+        },
+        skill,
+        active,
+        emit
+      )
+    }
     return { accepted: true, generation }
   }
 
@@ -1010,6 +1076,7 @@ export class ConversationModule {
     if (error instanceof ExplorePhraseError) {
       if (
         error.code === 'STORAGE_FAILED' ||
+        error.code === 'COMMIT_UNCERTAIN' ||
         error.code === 'HISTORY_UNREADABLE' ||
         error.code === 'HISTORY_MODIFIED' ||
         error.code === 'RECOVERY_PENDING'
@@ -1064,4 +1131,37 @@ function byMostRecent(a: ConversationSummary, b: ConversationSummary): number {
     b.createdAt.localeCompare(a.createdAt) ||
     a.sessionId.localeCompare(b.sessionId)
   )
+}
+
+// UUIDv8 derived from the user identity: reply association survives restarts and
+// history-window eviction without adding a database column or changing JSON.
+function explorePhraseReplyId(userMessageId: string): string {
+  const bytes = createHash('sha256')
+    .update(`explore-phrase-reply:${userMessageId}`)
+    .digest()
+    .subarray(0, 16)
+  bytes[6] = (bytes[6] & 0x0f) | 0x80
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = bytes.toString('hex')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+function findExplorePhraseReply(
+  user: StoredMessage,
+  history: StoredMessage[]
+): StoredMessage | undefined {
+  const replyId = explorePhraseReplyId(user.id)
+  const reply = history.find((message) => message.role === 'assistant' && message.id === replyId)
+  if (reply) return reply
+  // Legacy replies used random IDs and were always appended directly after the
+  // command. Do not mistake another command's newly recovered reply for this one.
+  const adjacent = history[history.findIndex((message) => message.id === user.id) + 1]
+  if (adjacent?.role !== 'assistant') return undefined
+  const belongsToAnotherCommand = history.some(
+    (message) =>
+      message.role === 'user' &&
+      message.content === '/explore-phrase' &&
+      explorePhraseReplyId(message.id) === adjacent.id
+  )
+  return belongsToAnotherCommand ? undefined : adjacent
 }

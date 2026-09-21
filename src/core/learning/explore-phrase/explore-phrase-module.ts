@@ -2,6 +2,7 @@ import type { SupportedLocale } from '../../../shared/preferences'
 import {
   EXPLORE_PHRASE_ITEM_COUNT,
   type ExplorePhraseBatch,
+  type ExplorePhraseHistoryDocument,
   type ExplorePhraseHistoryItem
 } from '../../../shared/explore-phrase'
 import { submitExploredPhrasesArgumentsSchema } from '../../tools/explore-phrase-tools'
@@ -53,11 +54,35 @@ export class ExplorePhraseModule {
   async explore(options: ExplorePhraseModuleOptions): Promise<ExplorePhraseRunResult> {
     const signal = options.signal ?? new AbortController().signal
     try {
-      return await this.lock.run(signal, () =>
-        abortableExploreOperation(signal, this.timeouts.totalMs, (innerSignal) =>
-          this.runLocked(options, innerSignal)
+      return await this.lock.run(signal, async () => {
+        // Only read/generate under the interruptible deadline. Once committing,
+        // wait for the actual storage outcome before returning or releasing the lock.
+        const prepared = await abortableExploreOperation(
+          signal,
+          this.timeouts.totalMs,
+          (innerSignal) => this.prepareBatch(options, innerSignal)
         )
-      )
+        if ('existing' in prepared) return { outcome: 'completed', batch: prepared.existing }
+        await options.onPhase?.('committing')
+        if (signal.aborted) throw new ExplorePhraseError('CANCELLED')
+        const batch = await this.store.commit(
+          {
+            executionId: options.executionId,
+            sessionId: options.sessionId,
+            userMessageId: options.userMessageId,
+            committedAt: new Date().toISOString(),
+            wordLanguage: options.wordLanguage,
+            explanationLanguage: options.explanationLanguage,
+            items: prepared.items
+          } satisfies CommitExplorePhraseBatchInput,
+          {
+            base: prepared.history,
+            isProtected: options.isProtected,
+            signal
+          }
+        )
+        return { outcome: 'completed', batch }
+      })
     } catch (error) {
       if (error instanceof ExplorePhraseError && error.code === 'CANCELLED') {
         return { outcome: 'cancelled' }
@@ -66,10 +91,16 @@ export class ExplorePhraseModule {
     }
   }
 
-  private async runLocked(
+  private async prepareBatch(
     options: ExplorePhraseModuleOptions,
     signal: AbortSignal
-  ): Promise<ExplorePhraseRunResult> {
+  ): Promise<
+    | { existing: ExplorePhraseBatch }
+    | {
+        history: ExplorePhraseHistoryDocument
+        items: ExplorePhraseHistoryItem[]
+      }
+  > {
     await options.onPhase?.('analyzing')
     const history = await this.store.read()
     // 幂等：同 executionId 或稳定 userMessageId 已提交过时直接返回完整结果，
@@ -78,7 +109,7 @@ export class ExplorePhraseModule {
       (batch) =>
         batch.executionId === options.executionId || batch.userMessageId === options.userMessageId
     )
-    if (existing) return { outcome: 'completed', batch: existing }
+    if (existing) return { existing }
 
     const excluded = new Set(
       history.batches.flatMap((batch) => batch.items.map((item) => item.normalizedPhrase))
@@ -116,22 +147,7 @@ export class ExplorePhraseModule {
       }
     }
 
-    await options.onPhase?.('committing')
-    // 提交前最后检查取消信号；此后的原子替换即结果生效点。
-    if (signal.aborted) throw new ExplorePhraseError('CANCELLED')
-    const batch = await this.store.commit(
-      {
-        executionId: options.executionId,
-        sessionId: options.sessionId,
-        userMessageId: options.userMessageId,
-        committedAt: new Date().toISOString(),
-        wordLanguage: options.wordLanguage,
-        explanationLanguage: options.explanationLanguage,
-        items: accepted
-      } satisfies CommitExplorePhraseBatchInput,
-      { base: history, isProtected: options.isProtected }
-    )
-    return { outcome: 'completed', batch }
+    return { history, items: accepted }
   }
 }
 

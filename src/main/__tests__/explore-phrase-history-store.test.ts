@@ -309,6 +309,75 @@ describe('JsonFileExplorePhraseHistoryStore', () => {
     expect(names).not.toContain('explore-phrase-history.json.tmp-bbbb')
     expect(names).toContain('other.json.tmp-x')
   })
+
+  it('honors cancellation before rename and keeps the previous history', async () => {
+    const filePath = await makeStorePath()
+    const store = await createStore(filePath)
+    await store.commit(makeInput('initial'), { base: await store.read() })
+    const before = await readFile(filePath, 'utf8')
+    const controller = new AbortController()
+    const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')
+    openSpy.mockImplementationOnce(async (...args) => {
+      const handle = await actual.open(...args)
+      const close = handle.close.bind(handle)
+      vi.spyOn(handle, 'close').mockImplementation(async () => {
+        await close()
+        controller.abort()
+      })
+      return handle
+    })
+    await expect(
+      store.commit(makeInput('cancelled'), {
+        base: await store.read(),
+        signal: controller.signal
+      })
+    ).rejects.toMatchObject({ code: 'CANCELLED' })
+    expect(await readFile(filePath, 'utf8')).toBe(before)
+    expect(
+      (await readdir(filePath.slice(0, filePath.lastIndexOf('/')))).filter((name) =>
+        name.includes('.tmp-')
+      )
+    ).toEqual([])
+  })
+
+  it('returns the committed batch when cancellation arrives after rename', async () => {
+    const filePath = await makeStorePath()
+    const store = await createStore(filePath)
+    const controller = new AbortController()
+    const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')
+    renameSpy.mockImplementationOnce(async (...args) => {
+      await actual.rename(...args)
+      controller.abort()
+    })
+    const input = makeInput('saved')
+    expect(
+      await store.commit(input, { base: await store.read(), signal: controller.signal })
+    ).toEqual(input)
+    expect((await store.read()).batches).toEqual([input])
+  })
+
+  it.each([false, true])(
+    'verifies a failed directory sync without rewriting (missing=%s)',
+    async (missing) => {
+      const filePath = await makeStorePath()
+      const store = await createStore(filePath)
+      const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')
+      openSpy.mockImplementation(async (...args) => {
+        if (args[1] === 'r') throw new Error('directory sync unavailable')
+        return actual.open(...args)
+      })
+      if (missing)
+        renameSpy.mockImplementationOnce(async (...args) => {
+          await actual.rename(...args)
+          await actual.rm(filePath)
+        })
+      const input = makeInput('verify')
+      const commit = store.commit(input, { base: await store.read() })
+      if (missing) await expect(commit).rejects.toMatchObject({ code: 'COMMIT_UNCERTAIN' })
+      else expect(await commit).toEqual(input)
+      expect(renameSpy).toHaveBeenCalledOnce()
+    }
+  )
 })
 
 describe('ExplorePhraseError', () => {

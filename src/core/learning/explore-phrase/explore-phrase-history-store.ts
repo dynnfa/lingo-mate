@@ -19,6 +19,8 @@ export interface CommitExplorePhraseBatchInput {
 }
 
 export interface CommitExplorePhraseBatchOptions {
+  // Cancellation is checked immediately before atomic replacement, never after it.
+  signal?: AbortSignal
   // 生成开始时读取的文档快照：提交前核对文件未被外部编辑。
   base: ExplorePhraseHistoryDocument
   // 返回 true 的历史批次不可被 7 批窗口淘汰（尚未补齐回复的批次）。
