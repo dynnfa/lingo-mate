@@ -151,7 +151,6 @@ export class JsonFileExplorePhraseHistoryStore implements ExplorePhraseHistorySt
       document,
       signal,
       mechanics: {
-        unreadable: toUnreadable,
         cancelled: () => new ExplorePhraseError('CANCELLED'),
         storageFailed: (cause) =>
           cause === undefined

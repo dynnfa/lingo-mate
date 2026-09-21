@@ -151,7 +151,6 @@ export class JsonFileExploreVocabularyHistoryStore implements ExploreVocabularyH
       document,
       signal,
       mechanics: {
-        unreadable: toUnreadable,
         cancelled: () => new ExploreVocabularyError('CANCELLED'),
         storageFailed: (cause) =>
           cause === undefined
