@@ -45,7 +45,7 @@ describe('ConversationActionPicker rendering', () => {
 
     const listbox = screen.getByRole('listbox', { name: '可用行动' })
     const options = screen.getAllByRole('option')
-    expect(options).toHaveLength(5)
+    expect(options).toHaveLength(6)
     expect(listbox).toContainElement(options[0])
 
     expect(options[0]).toHaveTextContent('概念讲解')
@@ -55,8 +55,10 @@ describe('ConversationActionPicker rendering', () => {
     expect(options[2]).toHaveTextContent('收录短语')
     expect(options[3]).toHaveTextContent('探索短语')
     expect(options[3]).toHaveTextContent('/explore-phrase')
-    expect(options[4]).toHaveTextContent('近义词分组')
-    expect(options[4]).toHaveTextContent('/synonym')
+    expect(options[4]).toHaveTextContent('探索词汇')
+    expect(options[4]).toHaveTextContent('/explore-vocabulary')
+    expect(options[5]).toHaveTextContent('近义词分组')
+    expect(options[5]).toHaveTextContent('/synonym')
   })
 
   it('marks only the highlighted option as selected', () => {

@@ -4,6 +4,7 @@ import {
   extractSkillDraft,
   filterConversationActions,
   isExplorePhraseCommand,
+  isExploreVocabularyCommand,
   isSelectedSkillDraft,
   parseSlashTrigger,
   resolveSkillSubmission,
@@ -16,6 +17,7 @@ const zhNames: Record<string, string> = {
   vocabulary: '收藏词汇',
   phrase: '收录短语',
   'explore-phrase': '探索短语',
+  'explore-vocabulary': '探索词汇',
   synonym: '近义词分组'
 }
 
@@ -111,6 +113,7 @@ describe('CONVERSATION_ACTIONS catalog', () => {
       'vocabulary',
       'phrase',
       'explore-phrase',
+      'explore-vocabulary',
       'synonym'
     ])
     expect(new Set(CONVERSATION_ACTIONS.map((action) => action.command)).size).toBe(
@@ -165,6 +168,46 @@ describe('explore-phrase command boundary', () => {
   })
 })
 
+describe('explore-vocabulary command boundary', () => {
+  it('recognizes the exact command and trailing whitespace only', () => {
+    expect(isExploreVocabularyCommand('/explore-vocabulary')).toBe(true)
+    expect(isExploreVocabularyCommand('/explore-vocabulary ')).toBe(true)
+    expect(isExploreVocabularyCommand('/explore-vocabulary  \t ')).toBe(true)
+  })
+
+  it('rejects extra arguments, similar prefixes and other commands', () => {
+    expect(isExploreVocabularyCommand('/explore-vocabulary foo')).toBe(false)
+    expect(isExploreVocabularyCommand('/explore-vocabularyfoo')).toBe(false)
+    expect(isExploreVocabularyCommand('/explore-vocabular')).toBe(false)
+    expect(isExploreVocabularyCommand('/explore-phrase')).toBe(false)
+    expect(isExploreVocabularyCommand('/vocabulary')).toBe(false)
+    expect(isExploreVocabularyCommand('explore-vocabulary')).toBe(false)
+    expect(isExploreVocabularyCommand('')).toBe(false)
+  })
+
+  it('resolves the typed command with and without a trailing separator', () => {
+    expect(resolveSkillSubmission('/explore-vocabulary', null)).toBe('explore-vocabulary')
+    expect(resolveSkillSubmission('/explore-vocabulary ', null)).toBe('explore-vocabulary')
+    expect(resolveSkillSubmission('/explore-vocabulary foo', null)).toBe('explore-vocabulary')
+    expect(resolveSkillSubmission('/explore-vocabular', null)).toBeNull()
+  })
+
+  it('keeps the picker closed once the command is complete or has arguments', () => {
+    expect(parseSlashTrigger('/explore-vocabulary')).toBeUndefined()
+    expect(parseSlashTrigger('/explore-vocabulary ')).toBeUndefined()
+    expect(parseSlashTrigger('/explore-vocabulary foo')).toBeUndefined()
+    // 未输完的命令仍作为查询过滤候选
+    expect(parseSlashTrigger('/explore-vocab')).toBe('explore-vocab')
+  })
+
+  it('keeps the picker selection while the draft stays the bare command', () => {
+    expect(isSelectedSkillDraft('/explore-vocabulary', 'explore-vocabulary')).toBe(true)
+    expect(isSelectedSkillDraft('/explore-vocabulary ', 'explore-vocabulary')).toBe(true)
+    expect(isSelectedSkillDraft('/explore-vocabulary foo', 'explore-vocabulary')).toBe(true)
+    expect(isSelectedSkillDraft('/explore-phrase', 'explore-vocabulary')).toBe(false)
+  })
+})
+
 describe('filterConversationActions', () => {
   it('returns the whole catalog in order for an empty query', () => {
     expect(filterConversationActions(CONVERSATION_ACTIONS, '', resolveZhName)).toEqual([
@@ -187,23 +230,30 @@ describe('filterConversationActions', () => {
       CONVERSATION_ACTIONS[0]
     ])
     expect(filterConversationActions(CONVERSATION_ACTIONS, '近义', resolveZhName)).toEqual([
-      CONVERSATION_ACTIONS[4]
+      CONVERSATION_ACTIONS[5]
     ])
     // “收” 命中收藏词汇与收录短语的本地化名称，顺序沿用目录
     expect(filterConversationActions(CONVERSATION_ACTIONS, '收', resolveZhName)).toEqual([
       CONVERSATION_ACTIONS[1],
       CONVERSATION_ACTIONS[2]
     ])
-    // “探索” 命中探索短语的本地化名称
+    // “探索” 命中探索短语与探索词汇的本地化名称，顺序沿用目录
     expect(filterConversationActions(CONVERSATION_ACTIONS, '探索', resolveZhName)).toEqual([
-      CONVERSATION_ACTIONS[3]
+      CONVERSATION_ACTIONS[3],
+      CONVERSATION_ACTIONS[4]
     ])
-    // “o” 命中 concept、vocabulary、explore-phrase 与 synonym 四个命令名，顺序沿用目录
+    // “词汇” 命中收藏词汇与探索词汇的本地化名称，顺序沿用目录
+    expect(filterConversationActions(CONVERSATION_ACTIONS, '词汇', resolveZhName)).toEqual([
+      CONVERSATION_ACTIONS[1],
+      CONVERSATION_ACTIONS[4]
+    ])
+    // “o” 命中除 phrase 外全部命令名，顺序沿用目录
     expect(filterConversationActions(CONVERSATION_ACTIONS, 'o', resolveZhName)).toEqual([
       CONVERSATION_ACTIONS[0],
       CONVERSATION_ACTIONS[1],
       CONVERSATION_ACTIONS[3],
-      CONVERSATION_ACTIONS[4]
+      CONVERSATION_ACTIONS[4],
+      CONVERSATION_ACTIONS[5]
     ])
   })
 
