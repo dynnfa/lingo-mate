@@ -41,6 +41,9 @@
     "label": "Model thinking",
     "placeholder": "Thinking…"
   },
+  "message": {
+    "generatingLabel": "Generating response…"
+  },
   "actionPicker": {
     "listLabel": "Available actions",
     "empty": "No matching actions",

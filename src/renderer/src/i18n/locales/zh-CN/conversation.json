@@ -41,6 +41,9 @@
     "label": "模型思考过程",
     "placeholder": "正在思考…"
   },
+  "message": {
+    "generatingLabel": "正在生成回复…"
+  },
   "actionPicker": {
     "listLabel": "可用行动",
     "empty": "没有匹配的行动",

@@ -2,14 +2,24 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
+import { I18nextProvider } from 'react-i18next'
+import type { ReactElement } from 'react'
+import { createI18n } from '../../i18n'
 import { MarkdownMessage } from '../MarkdownMessage'
 import { formatExplorePhraseTable } from '../../../../core/learning/explore-phrase/explore-phrase-table'
+
+// 测试语言显式固定为 zh-CN，断言使用真实资源渲染的文本与可访问名称。
+const i18n = createI18n('zh-CN')
+
+function renderMessage(element: ReactElement): ReturnType<typeof render> {
+  return render(<I18nextProvider i18n={i18n}>{element}</I18nextProvider>)
+}
 
 afterEach(cleanup)
 
 describe('MarkdownMessage', () => {
   it('renders Markdown and GFM with preserved line breaks', () => {
-    const { container } = render(
+    const { container } = renderMessage(
       <MarkdownMessage
         content={
           '## Practice\n\n**Hello** and *world*\nNext line\n\n- one\n- two\n\n> quote\n\n`word`\n\n```ts\nconst x = 1\n```\n\n| Word | Meaning |\n| --- | --- |\n| hi | hello |\n\n~~old~~'
@@ -28,16 +38,41 @@ describe('MarkdownMessage', () => {
   })
 
   it('handles empty and incomplete streaming content then renders the completed content', () => {
-    const { container, rerender } = render(<MarkdownMessage content="" />)
+    const { container, rerender } = renderMessage(<MarkdownMessage content="" />)
     expect(screen.getByText('…')).toBeInTheDocument()
-    rerender(<MarkdownMessage content={'```ts\nconst'} />)
+    rerender(
+      <I18nextProvider i18n={i18n}>
+        <MarkdownMessage content={'```ts\nconst'} />
+      </I18nextProvider>
+    )
     expect(container.querySelector('pre code')).toHaveTextContent('const')
-    rerender(<MarkdownMessage content={'```ts\nconst x = 1\n```\n\n**Done**'} />)
+    rerender(
+      <I18nextProvider i18n={i18n}>
+        <MarkdownMessage content={'```ts\nconst x = 1\n```\n\n**Done**'} />
+      </I18nextProvider>
+    )
     expect(container.querySelector('strong')).toHaveTextContent('Done')
   })
 
+  it('shows a spinner instead of the ellipsis while generating has produced no content yet', () => {
+    const { container, rerender } = renderMessage(<MarkdownMessage content="" generating />)
+    const spinner = container.querySelector('.message-spinner')
+    expect(spinner).toBeInTheDocument()
+    expect(spinner).toHaveAttribute('role', 'img')
+    expect(spinner).toHaveAttribute('aria-label', '正在生成回复…')
+    expect(screen.queryByText('…')).not.toBeInTheDocument()
+
+    rerender(
+      <I18nextProvider i18n={i18n}>
+        <MarkdownMessage content="Hello" generating />
+      </I18nextProvider>
+    )
+    expect(container.querySelector('.message-spinner')).not.toBeInTheDocument()
+    expect(screen.getByText('Hello')).toBeInTheDocument()
+  })
+
   it('blocks raw HTML, unsafe links and automatic image requests', () => {
-    const { container } = render(
+    const { container } = renderMessage(
       <MarkdownMessage
         content={
           '<script>alert(1)</script>\n\n<img src="https://example.com/track">\n\n[bad](javascript:alert%281%29) [local](file:///tmp/a) [relative](/settings)\n\n![description](https://example.com/image.png)\n\n[reference](https://example.com)'
@@ -67,7 +102,7 @@ describe('MarkdownMessage', () => {
       meaning: '释义',
       example: '例句'
     })
-    const { container } = render(<MarkdownMessage content={table} />)
+    const { container } = renderMessage(<MarkdownMessage content={table} />)
 
     // 语义化表格：四列表头、10 行数据，顺序与字段一一对应。
     const rendered = screen.getByRole('table')
