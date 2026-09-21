@@ -15,6 +15,8 @@ export type ExplorePhraseErrorCode =
   | 'HISTORY_MODIFIED'
   // 写入临时文件或原子替换失败：保留旧文件。
   | 'STORAGE_FAILED'
+  // Atomic replacement happened, but its result could not be verified.
+  | 'COMMIT_UNCERTAIN'
   // 尝试耗尽仍凑不齐 10 个合格短语。
   | 'GENERATION_FAILED'
   // 未补齐回复的历史批次受保护：本次提交不得淘汰它。

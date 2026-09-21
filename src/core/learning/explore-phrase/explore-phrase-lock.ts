@@ -9,9 +9,12 @@ export class ExplorePhraseSerialLock {
   async run<T>(signal: AbortSignal, operation: () => Promise<T>): Promise<T> {
     const previous = this.tail
     let release!: () => void
-    this.tail = new Promise<void>((resolve) => {
+    const finished = new Promise<void>((resolve) => {
       release = resolve
     })
+    // A cancelled waiter can return immediately, but its successors still wait
+    // for the predecessor to finish before entering the critical section.
+    this.tail = previous.then(() => finished)
     try {
       await this.waitForSlot(previous, signal)
       return await operation()

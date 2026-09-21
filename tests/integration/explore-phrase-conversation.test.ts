@@ -434,7 +434,325 @@ describe('explore phrase conversation integration', () => {
     expect(historyAfter.batches).toHaveLength(1)
   })
 
-  it('rejects retry when the batch is not recoverable instead of regenerating', async () => {
+  it.each(['MODEL_ERROR', 'CANCELLED'] as const)(
+    'retries an uncommitted %s in the same process with the original identity and language',
+    async (failure) => {
+      const database = openDatabase(':memory:')
+      databases.push(database)
+      const historyPath = await makeHistoryPath()
+      const onGenerate = vi.fn()
+      let fail = true
+      let locale: 'zh-CN' | 'en' = 'zh-CN'
+      const repository = new SqliteConversationRepository(database)
+      const skill = new ExplorePhraseConversationSkill(
+        new ExplorePhraseModule(new JsonFileExplorePhraseHistoryStore(historyPath), () => ({
+          generate: async (input) => {
+            onGenerate(input)
+            if (fail) throw new ExplorePhraseError(failure)
+            return candidates('retried', 10)
+          }
+        })),
+        createExplorePhraseFeedbackFormatter()
+      )
+      const module = new ConversationModule(
+        unusedConversationModel,
+        repository,
+        () => ({ outputLanguage: locale, targetLanguage: 'en' }),
+        new Map([[skill.skillId, skill]]),
+        repository
+      )
+      const { sessionId } = await module.createConversation()
+      const first = await waitForTerminal((emit) =>
+        module.runSkill(
+          {
+            requestId: randomUUID(),
+            sessionId,
+            skillId: 'explore-phrase',
+            arguments: { wordLanguage: 'en' }
+          },
+          emit
+        )
+      )
+      expect(first.at(-1)).toMatchObject({ type: failure === 'CANCELLED' ? 'cancelled' : 'failed' })
+      const started = first.find((event) => event.type === 'started')!
+      fail = false
+      locale = 'en'
+      const retry = await waitForTerminal((emit) =>
+        module.retryMessage(
+          {
+            requestId: randomUUID(),
+            sessionId,
+            userMessageId: started.userMessage.messageId
+          },
+          emit
+        )
+      )
+      expect(retry.at(-1)).toMatchObject({ type: 'completed' })
+      expect(retry.find((event) => event.type === 'started')).toMatchObject({
+        assistantMessageId: started.assistantMessageId,
+        userMessage: { messageId: started.userMessage.messageId }
+      })
+      expect(onGenerate.mock.calls[1][0].explanationLanguage).toBe('zh-CN')
+      expect((await module.loadConversation(sessionId)).messages).toHaveLength(2)
+    }
+  )
+
+  it('recovers an older unreplied batch after restart and releases its eviction protection', async () => {
+    const database = openDatabase(':memory:')
+    databases.push(database)
+    const historyPath = await makeHistoryPath()
+    const onGenerate = vi.fn()
+    const firstModule = makeModule(database, historyPath, [candidates('older', 10)], {
+      repositoryOverride: new FailingAppendRepository(database),
+      onGenerate
+    }).module
+    const { sessionId } = await firstModule.createConversation()
+    await waitForTerminal((emit) =>
+      firstModule.runSkill(
+        {
+          requestId: randomUUID(),
+          sessionId,
+          skillId: 'explore-phrase',
+          arguments: { wordLanguage: 'en' }
+        },
+        emit
+      )
+    )
+    await waitForTerminal((emit) =>
+      firstModule.sendMessage(
+        {
+          requestId: randomUUID(),
+          sessionId,
+          text: 'Continue chatting'
+        },
+        emit
+      )
+    )
+    const restarted = makeModule(database, historyPath, [candidates('unused', 10)], {
+      onGenerate
+    }).module
+    const loaded = await restarted.loadConversation(sessionId)
+    const userMessageId = loaded.messages[0].messageId
+    expect(loaded.messages[0].retryable).toBe(true)
+    const restored = await waitForTerminal((emit) =>
+      restarted.retryMessage(
+        {
+          requestId: randomUUID(),
+          sessionId,
+          userMessageId
+        },
+        emit
+      )
+    )
+    expect(restored.at(-1)).toMatchObject({ type: 'completed' })
+    expect(onGenerate).toHaveBeenCalledTimes(1)
+    const again = makeModule(database, historyPath, [candidates('unused', 10)], {
+      onGenerate
+    }).module
+    expect((await again.loadConversation(sessionId)).messages[0].retryable).not.toBe(true)
+    await expect(
+      again.retryMessage({ requestId: randomUUID(), sessionId, userMessageId }, () => {})
+    ).rejects.toBeInstanceOf(RetryNotAllowedError)
+    // The recovered batch must be evictable even though its reply was appended later.
+    for (let i = 0; i < 7; i += 1) {
+      const next = makeModule(database, historyPath, [candidates(`next ${i}`, 10)]).module
+      const fresh = await next.createConversation()
+      const events = await waitForTerminal((emit) =>
+        next.runSkill(
+          {
+            requestId: randomUUID(),
+            sessionId: fresh.sessionId,
+            skillId: 'explore-phrase',
+            arguments: { wordLanguage: 'en' }
+          },
+          emit
+        )
+      )
+      expect(events.at(-1)).toMatchObject({ type: 'completed' })
+    }
+    const store = new JsonFileExplorePhraseHistoryStore(historyPath)
+    expect(await store.findBatchByUserMessage(userMessageId)).toBeUndefined()
+    await expect(
+      again.retryMessage({ requestId: randomUUID(), sessionId, userMessageId }, () => {})
+    ).rejects.toBeInstanceOf(RetryNotAllowedError)
+  })
+
+  it('retries a confirmed pre-replacement storage failure in the same process', async () => {
+    const database = openDatabase(':memory:')
+    databases.push(database)
+    const historyPath = await makeHistoryPath()
+    const { module, store } = makeModule(database, historyPath, [candidates('retry storage', 10)])
+    vi.spyOn(store, 'commit').mockRejectedValueOnce(new ExplorePhraseError('STORAGE_FAILED'))
+    const { sessionId } = await module.createConversation()
+    const first = await waitForTerminal((emit) =>
+      module.runSkill(
+        {
+          requestId: randomUUID(),
+          sessionId,
+          skillId: 'explore-phrase',
+          arguments: { wordLanguage: 'en' }
+        },
+        emit
+      )
+    )
+    expect(first.at(-1)).toMatchObject({ type: 'failed' })
+    const started = first.find((event) => event.type === 'started')!
+    const retry = await waitForTerminal((emit) =>
+      module.retryMessage(
+        {
+          requestId: randomUUID(),
+          sessionId,
+          userMessageId: started.userMessage.messageId
+        },
+        emit
+      )
+    )
+    expect(retry.at(-1)).toMatchObject({ type: 'completed' })
+    expect((await store.read()).batches).toHaveLength(1)
+  })
+
+  it('does not regenerate an uncertain commit whose batch is missing', async () => {
+    const database = openDatabase(':memory:')
+    databases.push(database)
+    const historyPath = await makeHistoryPath()
+    const onGenerate = vi.fn()
+    const { module, store } = makeModule(database, historyPath, [candidates('uncertain', 10)], {
+      onGenerate
+    })
+    vi.spyOn(store, 'commit').mockRejectedValueOnce(new ExplorePhraseError('COMMIT_UNCERTAIN'))
+    const { sessionId } = await module.createConversation()
+    const first = await waitForTerminal((emit) =>
+      module.runSkill(
+        {
+          requestId: randomUUID(),
+          sessionId,
+          skillId: 'explore-phrase',
+          arguments: { wordLanguage: 'en' }
+        },
+        emit
+      )
+    )
+    expect(first.at(-1)).toMatchObject({ type: 'failed', error: { code: 'PERSISTENCE_ERROR' } })
+    const started = first.find((event) => event.type === 'started')!
+    await expect(
+      module.retryMessage(
+        { requestId: randomUUID(), sessionId, userMessageId: started.userMessage.messageId },
+        () => {}
+      )
+    ).rejects.toBeInstanceOf(RetryNotAllowedError)
+    expect(onGenerate).toHaveBeenCalledOnce()
+  })
+
+  it('does not treat a recovered older reply as the answer to the adjacent unanswered command', async () => {
+    const database = openDatabase(':memory:')
+    databases.push(database)
+    const historyPath = await makeHistoryPath()
+    const repository = new FailingAppendRepository(database, 2)
+    const first = makeModule(database, historyPath, [candidates('one', 10)], {
+      repositoryOverride: repository
+    }).module
+    const { sessionId } = await first.createConversation()
+    await waitForTerminal((emit) =>
+      first.runSkill(
+        {
+          requestId: randomUUID(),
+          sessionId,
+          skillId: 'explore-phrase',
+          arguments: { wordLanguage: 'en' }
+        },
+        emit
+      )
+    )
+    const second = makeModule(database, historyPath, [candidates('two', 10)], {
+      repositoryOverride: repository
+    }).module
+    await waitForTerminal((emit) =>
+      second.runSkill(
+        {
+          requestId: randomUUID(),
+          sessionId,
+          skillId: 'explore-phrase',
+          arguments: { wordLanguage: 'en' }
+        },
+        emit
+      )
+    )
+    const users = (await second.loadConversation(sessionId)).messages
+    await waitForTerminal((emit) =>
+      second.retryMessage(
+        { requestId: randomUUID(), sessionId, userMessageId: users[0].messageId },
+        emit
+      )
+    )
+    const loaded = await second.loadConversation(sessionId)
+    expect(loaded.messages[1].retryable).toBe(true)
+    const restored = await waitForTerminal((emit) =>
+      second.retryMessage(
+        { requestId: randomUUID(), sessionId, userMessageId: users[1].messageId },
+        emit
+      )
+    )
+    expect(restored.at(-1)).toMatchObject({ type: 'completed' })
+    expect(
+      (await second.loadConversation(sessionId)).messages.filter(
+        (message) => message.role === 'assistant'
+      )
+    ).toHaveLength(2)
+  })
+
+  it('recognizes a legacy random-ID reply even when its batch is no longer in the history file', async () => {
+    const database = openDatabase(':memory:')
+    databases.push(database)
+    const repository = new SqliteConversationRepository(database)
+    const sessionId = randomUUID()
+    const userMessageId = randomUUID()
+    const at = '2026-09-20T09:00:00.000Z'
+    await repository.appendMessage(
+      { id: userMessageId, sessionId, role: 'user', content: '/explore-phrase', createdAt: at },
+      { id: sessionId, title: 'Legacy', createdAt: at, updatedAt: at }
+    )
+    await repository.appendMessage({
+      id: randomUUID(),
+      sessionId,
+      role: 'assistant',
+      content: '| Legacy table |',
+      createdAt: at
+    })
+    const onGenerate = vi.fn()
+    const { module } = makeModule(database, await makeHistoryPath(), [], { onGenerate })
+    expect((await module.loadConversation(sessionId)).messages[0].retryable).not.toBe(true)
+    await expect(
+      module.retryMessage({ requestId: randomUUID(), sessionId, userMessageId }, () => {})
+    ).rejects.toBeInstanceOf(RetryNotAllowedError)
+    expect(onGenerate).not.toHaveBeenCalled()
+  })
+
+  it('reports completion when cancelled after the batch has committed', async () => {
+    const database = openDatabase(':memory:')
+    databases.push(database)
+    const { module } = makeModule(database, await makeHistoryPath(), [candidates('saved', 10)])
+    const { sessionId } = await module.createConversation()
+    const requestId = randomUUID()
+    const events = await waitForTerminal((emit) =>
+      module.runSkill(
+        {
+          requestId,
+          sessionId,
+          skillId: 'explore-phrase',
+          arguments: { wordLanguage: 'en' }
+        },
+        (event) => {
+          if (event.type === 'skillPhase' && event.phase === 'summarizing')
+            module.cancelMessage(requestId)
+          emit(event)
+        }
+      )
+    )
+    expect(events.at(-1)).toMatchObject({ type: 'completed' })
+    expect((await module.loadConversation(sessionId)).messages).toHaveLength(2)
+  })
+
+  it('rejects retry after restart when the batch is not recoverable instead of regenerating', async () => {
     const database = openDatabase(':memory:')
     databases.push(database)
     const historyPath = await makeHistoryPath()
@@ -460,8 +778,11 @@ describe('explore phrase conversation integration', () => {
     expect(first.at(-1)).toMatchObject({ type: 'failed' })
 
     const conversation = await module.loadConversation(sessionId)
+    const restarted = makeModule(database, historyPath, [candidates('must not generate', 10)], {
+      onGenerate
+    }).module
     await expect(
-      module.retryMessage(
+      restarted.retryMessage(
         { requestId: randomUUID(), sessionId, userMessageId: conversation.messages[0].messageId },
         () => undefined
       )
@@ -542,7 +863,12 @@ describe('explore phrase conversation integration', () => {
 
 // 第一次 appendMessage(assistant) 失败：模拟批次已提交但回复未保存时退出应用。
 class FailingAppendRepository extends SqliteConversationRepository {
-  private failuresLeft = 1
+  constructor(
+    database: Database.Database,
+    private failuresLeft = 1
+  ) {
+    super(database)
+  }
   override async appendMessage(
     message: StoredMessage,
     conversation?: Parameters<SqliteConversationRepository['appendMessage']>[1]

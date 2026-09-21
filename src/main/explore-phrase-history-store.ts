@@ -137,7 +137,7 @@ export class JsonFileExplorePhraseHistoryStore implements ExplorePhraseHistorySt
       }
       batches.shift()
     }
-    await this.writeAtomically({ schemaVersion: 1, batches }, newBatch.executionId)
+    await this.writeAtomically({ schemaVersion: 1, batches }, newBatch.executionId, options.signal)
     return newBatch
   }
 
@@ -160,7 +160,8 @@ export class JsonFileExplorePhraseHistoryStore implements ExplorePhraseHistorySt
 
   private async writeAtomically(
     document: ExplorePhraseHistoryDocument,
-    executionId: string
+    executionId: string,
+    signal?: AbortSignal
   ): Promise<void> {
     const tempPath = `${this.filePath}.tmp-${randomUUID()}`
     let handle: FileHandle | undefined
@@ -170,22 +171,27 @@ export class JsonFileExplorePhraseHistoryStore implements ExplorePhraseHistorySt
       await handle.sync()
       await handle.close()
       handle = undefined
+      if (signal?.aborted) throw new ExplorePhraseError('CANCELLED')
       await rename(tempPath, this.filePath)
     } catch (cause) {
       if (handle) await handle.close().catch(() => undefined)
       // 写入或替换失败：保留旧文件，清理临时文件。
       await rm(tempPath, { force: true }).catch(() => undefined)
+      if (cause instanceof ExplorePhraseError && cause.code === 'CANCELLED') throw cause
       throw new ExplorePhraseError('STORAGE_FAILED', { cause })
     }
     // 替换后的目录同步失败属于提交状态不确定：重读目标文件按 executionId
     // 核实，不盲目重写、也不声称已回滚。
     try {
       await syncDirectory(dirname(this.filePath))
-    } catch {
-      const verified = await this.read()
-      if (!verified.batches.some((batch) => batch.executionId === executionId)) {
-        throw new ExplorePhraseError('STORAGE_FAILED')
+    } catch (cause) {
+      try {
+        const verified = await this.read()
+        if (verified.batches.some((batch) => batch.executionId === executionId)) return
+      } catch (verificationError) {
+        throw new ExplorePhraseError('COMMIT_UNCERTAIN', { cause: verificationError })
       }
+      throw new ExplorePhraseError('COMMIT_UNCERTAIN', { cause })
     }
   }
 }
