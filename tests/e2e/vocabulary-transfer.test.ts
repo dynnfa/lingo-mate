@@ -88,3 +88,45 @@ test('imports Excel and AI content from the recorded menu, downloads a template 
     await server.close()
   }
 })
+
+test('keeps the AI import textarea height while the import disables it', async () => {
+  const server = await startVocabularyServer()
+  try {
+    await withTempUserData(async (directory) => {
+      await writeLocalePreference(directory, 'en')
+      await writeModelsConfig(directory, server.baseUrl, 'test-model')
+      const app = await launchApp(directory)
+      try {
+        const window = await app.firstWindow()
+        await waitForReady(window)
+        await window.getByRole('button', { name: 'Recorded vocabulary', exact: true }).click()
+        await window.getByRole('button', { name: 'Import', exact: true }).click()
+        const modal = window.getByRole('dialog', { name: 'Import vocabulary' })
+        await modal.getByRole('button', { name: 'AI assisted import' }).click()
+        const textarea = modal.getByRole('textbox', { name: 'One English word per line' })
+        const initialHeight = await textarea.evaluate(
+          (element) => element.getBoundingClientRect().height
+        )
+        await textarea.fill(
+          ['slow', 'apple', 'banana', 'orange', 'pear', 'peach', 'plum', 'grape'].join('\n')
+        )
+        const enabledHeight = await textarea.evaluate(
+          (element) => element.getBoundingClientRect().height
+        )
+        expect(enabledHeight).toBeGreaterThan(initialHeight)
+
+        await modal.getByRole('button', { name: 'Start import' }).click()
+        await expect(textarea).toBeDisabled()
+        await expect
+          .poll(() => textarea.evaluate((element) => element.getBoundingClientRect().height))
+          .toBe(enabledHeight)
+
+        await modal.getByRole('button', { name: 'Cancel import' }).click()
+      } finally {
+        await app.close()
+      }
+    }, 'lingo-mate-vocabulary-textarea-height-')
+  } finally {
+    await server.close()
+  }
+})

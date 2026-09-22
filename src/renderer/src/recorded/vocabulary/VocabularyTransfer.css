@@ -45,8 +45,7 @@
   gap: 12px;
 }
 .vocabulary-import-panel textarea {
-  /* field-sizing 让高度随输入增长，行数较多时由弹窗面板统一滚动，
-     避免滚轮被 textarea 内部滚动占用导致弹窗滚不动；
+  /* 行数由 rows 显式控制，避免 field-sizing 在 disabled 状态下重新计算内在高度；
      flex: none 防止面板空间不足时把输入框压扁。 */
   flex: none;
   width: 100%;
@@ -57,7 +56,6 @@
   resize: none;
   padding: 10px;
   font: inherit;
-  field-sizing: content;
 }
 .vocabulary-import-results {
   max-height: 220px;

@@ -28,6 +28,7 @@ export function VocabularyTransfer({ onSaved }: { onSaved: () => void }): React.
     }
   }, [open])
   const inputCount = text.split(/\r?\n/).filter((line) => line.trim()).length
+  const inputRows = Math.max(4, text.split(/\r?\n/).length)
   const run = async (operation: () => Promise<void>): Promise<void> => {
     if (locked.current) return
     locked.current = true
@@ -183,7 +184,7 @@ export function VocabularyTransfer({ onSaved }: { onSaved: () => void }): React.
               <label htmlFor="vocabulary-import-text">{t('transfer.inputLabel')}</label>
               <textarea
                 id="vocabulary-import-text"
-                rows={4}
+                rows={inputRows}
                 maxLength={LIMITS.textLength}
                 value={text}
                 disabled={active || busy}
