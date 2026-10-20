@@ -8,6 +8,8 @@ import { ModelsSettings } from './models/ModelsSettings'
 import { useModelsSettings } from './models/useModelsSettings'
 import { UsageSettings } from './usage/UsageSettings'
 import { useUsageStatistics } from './usage/useUsageStatistics'
+import { ChannelsSettings } from './channels/ChannelsSettings'
+import { useChannelsSettings } from './channels/useChannelsSettings'
 
 // 设置区块注册表：新增设置时在此追加条目，左侧菜单随之扩展。
 // 详情区各区块保持挂载并用 hidden 隐藏，模型草稿在菜单切换间不丢失。
@@ -31,6 +33,11 @@ const SETTINGS_SECTIONS = [
     id: 'usage',
     labelKey: 'common:settings.sections.usage',
     titleId: 'settings-section-title-usage'
+  },
+  {
+    id: 'chatChannels',
+    labelKey: 'common:settings.sections.chatChannels',
+    titleId: 'settings-section-title-chat-channels'
   }
 ] as const
 
@@ -51,6 +58,7 @@ export function SettingsPage({ onExit }: SettingsPageProps): React.JSX.Element {
   const [activeSectionId, setActiveSectionId] = useState<SettingsSectionId>('uiLanguage')
   const modelsSettings = useModelsSettings()
   const usageStatistics = useUsageStatistics()
+  const channelsSettings = useChannelsSettings()
   const backButtonRef = useRef<HTMLButtonElement>(null)
 
   // Usage 首次激活时读取数据，再次进入时重新读取；
@@ -94,6 +102,7 @@ export function SettingsPage({ onExit }: SettingsPageProps): React.JSX.Element {
     if (sectionId === 'uiLanguage') return <UiLanguageSection />
     if (sectionId === 'targetLanguage') return <TargetLanguageSection />
     if (sectionId === 'models') return <ModelsSettings state={modelsSettings} />
+    if (sectionId === 'chatChannels') return <ChannelsSettings state={channelsSettings} />
     return <UsageSettings state={usageStatistics} />
   }
 

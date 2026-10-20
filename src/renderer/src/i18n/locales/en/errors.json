@@ -89,5 +89,19 @@
     "title": "Something went wrong",
     "description": "The interface hit an unexpected error, which has been saved to the local log.",
     "reload": "Reload"
+  },
+  "chatChannels": {
+    "readFailed": "Failed to read chat platform settings.",
+    "writeFailed": "Failed to save chat platform settings.",
+    "credentialStorageUnavailable": "System secure storage is unavailable; the token cannot be saved.",
+    "tokenInvalid": "The bot token is invalid or has been revoked.",
+    "webhookConflict": "This bot has a webhook configured; polling cannot start.",
+    "duplicatePolling": "Another consumer is already reading this bot's messages (the app may be running twice).",
+    "noConnection": "No chat platform connection is configured yet.",
+    "alreadyConnected": "A connection already exists.",
+    "notConnected": "Not connected.",
+    "noPendingBinding": "There is no pending binding request.",
+    "noActiveBinding": "There is no bound account.",
+    "networkError": "Network error; the connection is temporarily unavailable and will retry automatically."
   }
 }

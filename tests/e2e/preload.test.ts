@@ -34,6 +34,8 @@ test('exposes the conversation skill and preferences interfaces from the sandbox
         Object.keys((globalThis as typeof globalThis & { api?: object }).api ?? {}).sort()
       )
       expect(exposedApiKeys).toEqual([
+        // 聊天平台：设置与绑定的窄接口，不暴露 Token 回读或任意 IPC。
+        'chatChannels',
         'conversation',
         'models',
         'phrase',

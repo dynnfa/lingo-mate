@@ -1,0 +1,27 @@
+{
+  "replies": {
+    "help": "Lingo Mate 聊天助手支持以下操作：\n/save <词> — 收藏单词（如 /save apple）\n直接发消息 — 学习问答\n/help — 显示本帮助\n/new — 开启全新对话上下文（有任务运行时会拒绝，先 /cancel）\n/cancel — 取消当前执行与排队任务并作废待确认操作",
+    "notBound": "当前 Telegram 账号尚未绑定 Lingo Mate。请先在桌面端“设置 → 聊天平台”生成绑定码，再向本机器人发送 /start <绑定码>。",
+    "alreadyBound": "当前账号已绑定 Lingo Mate，无需重复绑定。",
+    "bindingRequested": "绑定请求已发起，请在桌面端“设置 → 聊天平台”核对账号信息并确认绑定。",
+    "bindingCodeMismatch": "绑定码不正确，请核对后重试。",
+    "bindingCodeExpired": "绑定码已过期，请在桌面端重新生成。",
+    "bindingCodeExhausted": "绑定码尝试次数过多已作废，请在桌面端重新生成。",
+    "noActiveBindingCode": "当前没有待使用的绑定码，请先在桌面端生成。",
+    "confirmationPrompt": "识别到收藏意图：将收藏 {{words}}（目标语言：{{targetLanguage}}）。回复 /confirm {{operationId}} 确认收藏，或 /cancel 取消。",
+    "confirmNoPending": "当前没有待确认的收藏操作。",
+    "confirmLanguageChanged": "目标语言设置已变化（现为 {{targetLanguage}}），请重新确认：将收藏 {{words}}。回复 /confirm {{operationId}} 确认，或 /cancel 取消。",
+    "confirmExpired": "确认已过期，请重新发送收藏请求。",
+    "intentClarify": "你想收藏某些单词吗？请直接列出要收藏的词，例如“帮我记住 apple”。如只是提问，请正常描述问题。",
+    "cancelReport": "已取消 {{cancelled}} 个任务并作废待确认操作。已提交的收藏不会被回滚。",
+    "cancelIdle": "当前没有运行中、排队或待确认的任务。",
+    "newSessionBusy": "仍有任务在运行、排队或待确认，请先发送 /cancel 再开启新上下文。",
+    "newSessionStarted": "已开启新的对话上下文。",
+    "queueBusy": "当前会话任务较多，请稍后再试。",
+    "rateLimited": "消息过于频繁，请稍后再试。",
+    "messageTooLong": "消息过长（上限 4000 字符），请分条发送。",
+    "executionFailed": "请求未能完成，请稍后重试。",
+    "needsAttention": "上次操作的结果未知，请在桌面端词库中核对；如未保存请重新发起。",
+    "offlineNotice": "应用未运行期间的消息不会自动处理，请重新发送。"
+  }
+}

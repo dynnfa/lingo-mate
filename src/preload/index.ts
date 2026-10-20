@@ -111,6 +111,19 @@ import {
   rendererErrorReportSchema,
   type RendererErrorReport
 } from '../shared/error-report'
+import {
+  CHAT_CHANNELS_IPC,
+  chatChannelsEventSchema,
+  chatChannelsStatusResultSchema,
+  configureChatChannelConnectionInputSchema,
+  configureChatChannelConnectionResultSchema,
+  connectChatChannelResultSchema,
+  confirmBindingResultSchema,
+  disconnectChatChannelResultSchema,
+  issueBindingCodeResultSchema,
+  rejectBindingResultSchema,
+  unbindChatChannelResultSchema
+} from '../shared/chat-channels'
 import type { ZodIssue } from 'zod'
 
 // preload 捕获的桥接错误：尽力上报到 Main 的公共错误日志，失败静默放弃，
@@ -128,6 +141,60 @@ const api: LingoMateApi = {
     const input = rendererErrorReportSchema.parse(rawInput)
     const result: unknown = await ipcRenderer.invoke(ERROR_LOG_CHANNELS.report, input)
     return errorReportResultSchema.parse(result)
+  },
+  chatChannels: {
+    async getStatus() {
+      const result: unknown = await ipcRenderer.invoke(CHAT_CHANNELS_IPC.getStatus)
+      return chatChannelsStatusResultSchema.parse(result)
+    },
+    async configureConnection(rawInput) {
+      const input = configureChatChannelConnectionInputSchema.parse(rawInput)
+      const result: unknown = await ipcRenderer.invoke(CHAT_CHANNELS_IPC.configureConnection, input)
+      return configureChatChannelConnectionResultSchema.parse(result)
+    },
+    async connect() {
+      const result: unknown = await ipcRenderer.invoke(CHAT_CHANNELS_IPC.connect)
+      return connectChatChannelResultSchema.parse(result)
+    },
+    async disconnect() {
+      const result: unknown = await ipcRenderer.invoke(CHAT_CHANNELS_IPC.disconnect)
+      return disconnectChatChannelResultSchema.parse(result)
+    },
+    async issueBindingCode() {
+      const result: unknown = await ipcRenderer.invoke(CHAT_CHANNELS_IPC.issueBindingCode)
+      return issueBindingCodeResultSchema.parse(result)
+    },
+    async confirmBinding() {
+      const result: unknown = await ipcRenderer.invoke(CHAT_CHANNELS_IPC.confirmBinding)
+      return confirmBindingResultSchema.parse(result)
+    },
+    async rejectBinding() {
+      const result: unknown = await ipcRenderer.invoke(CHAT_CHANNELS_IPC.rejectBinding)
+      return rejectBindingResultSchema.parse(result)
+    },
+    async unbind() {
+      const result: unknown = await ipcRenderer.invoke(CHAT_CHANNELS_IPC.unbind)
+      return unbindChatChannelResultSchema.parse(result)
+    },
+    onEvent(listener) {
+      const handler = (_event: Electron.IpcRendererEvent, rawEvent: unknown): void => {
+        const event = chatChannelsEventSchema.safeParse(rawEvent)
+        if (event.success) {
+          listener(event.data)
+        } else {
+          // 事件不符合协议：丢弃并上报安全元信息（不含事件载荷）。
+          reportBridgeError({
+            source: 'preload',
+            module: 'chat-channels',
+            operation: 'event-parse',
+            message: 'received a chat channels event that failed schema validation',
+            context: { issues: issueSummary(event.error.issues) }
+          })
+        }
+      }
+      ipcRenderer.on(CHAT_CHANNELS_IPC.event, handler)
+      return () => ipcRenderer.removeListener(CHAT_CHANNELS_IPC.event, handler)
+    }
   },
   preferences: {
     async getLanguageSettings() {

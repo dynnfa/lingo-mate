@@ -1,0 +1,27 @@
+{
+  "replies": {
+    "help": "Lingo Mate chat assistant supports:\n/save <word> — save vocabulary (e.g. /save apple)\nPlain messages — learning Q&A\n/help — show this help\n/new — start a fresh context (rejected while tasks are running; /cancel first)\n/cancel — cancel running and queued tasks and invalidate pending confirmations",
+    "notBound": "This Telegram account is not bound to Lingo Mate yet. Generate a binding code in desktop Settings → Chat Platforms, then send /start <code> to this bot.",
+    "alreadyBound": "This account is already bound to Lingo Mate.",
+    "bindingRequested": "Binding requested. Please review the account in desktop Settings → Chat Platforms and confirm.",
+    "bindingCodeMismatch": "The binding code is incorrect. Please check and retry.",
+    "bindingCodeExpired": "The binding code has expired. Please generate a new one on the desktop.",
+    "bindingCodeExhausted": "Too many failed attempts; the binding code was invalidated. Please generate a new one on the desktop.",
+    "noActiveBindingCode": "No binding code is currently active. Generate one on the desktop first.",
+    "confirmationPrompt": "Save intent recognized: {{words}} (target language: {{targetLanguage}}). Reply /confirm {{operationId}} to save, or /cancel to abort.",
+    "confirmNoPending": "There is no pending save confirmation.",
+    "confirmLanguageChanged": "The target language changed (now {{targetLanguage}}). Please re-confirm: {{words}}. Reply /confirm {{operationId}} to save, or /cancel to abort.",
+    "confirmExpired": "The confirmation expired. Please send the save request again.",
+    "intentClarify": "Do you want to save some words? List them directly, e.g. \"remember apple\". If you are just asking a question, describe it normally.",
+    "cancelReport": "Cancelled {{cancelled}} task(s) and invalidated pending confirmations. Already committed saves are not rolled back.",
+    "cancelIdle": "Nothing is running, queued or awaiting confirmation.",
+    "newSessionBusy": "Tasks are still running, queued or awaiting confirmation. Send /cancel before starting a new context.",
+    "newSessionStarted": "Started a new conversation context.",
+    "queueBusy": "This session has too many queued tasks. Please try again later.",
+    "rateLimited": "Messages are arriving too fast. Please slow down.",
+    "messageTooLong": "Message is too long (limit 4000 characters). Please split it.",
+    "executionFailed": "The request could not be completed. Please retry later.",
+    "needsAttention": "The result of the previous operation is unknown. Please verify in the desktop vocabulary; resend if it was not saved.",
+    "offlineNotice": "Messages sent while the app is not running are not processed automatically. Please resend them."
+  }
+}

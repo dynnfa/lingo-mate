@@ -89,5 +89,19 @@
     "title": "页面出现异常",
     "description": "界面遇到未处理的错误，已记录到本地日志。",
     "reload": "重新加载"
+  },
+  "chatChannels": {
+    "readFailed": "读取聊天平台设置失败。",
+    "writeFailed": "保存聊天平台设置失败。",
+    "credentialStorageUnavailable": "系统安全存储不可用，无法保存 Token。",
+    "tokenInvalid": "机器人 Token 无效或已被撤销。",
+    "webhookConflict": "该机器人已配置 Webhook，无法开始轮询。",
+    "duplicatePolling": "已有其他程序在读取该机器人的消息（可能重复运行了应用）。",
+    "noConnection": "尚未配置聊天平台连接。",
+    "alreadyConnected": "连接已存在。",
+    "notConnected": "当前未连接。",
+    "noPendingBinding": "当前没有待确认的绑定请求。",
+    "noActiveBinding": "当前没有已绑定的账号。",
+    "networkError": "网络异常，连接暂时不可用；恢复后会自动重连。"
   }
 }

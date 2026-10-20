@@ -52,7 +52,7 @@ describe('llm_request_usage migrations and repository', () => {
         migration.up(upgraded)
       upgraded.pragma('user_version = 5')
       expect(() => migrateDatabase(upgraded)).not.toThrow()
-      expect(upgraded.pragma('user_version', { simple: true })).toBe(11)
+      expect(upgraded.pragma('user_version', { simple: true })).toBe(12)
       expect(hasIndex(upgraded, 'llm_request_usage_started_at')).toBe(true)
     } finally {
       upgraded.close()
@@ -94,7 +94,7 @@ describe('llm_request_usage migrations and repository', () => {
       `)
       upgraded.pragma('user_version = 6')
       migrateDatabase(upgraded)
-      expect(upgraded.pragma('user_version', { simple: true })).toBe(11)
+      expect(upgraded.pragma('user_version', { simple: true })).toBe(12)
       expect(hasIndex(upgraded, 'llm_request_usage_started_at')).toBe(true)
       const rows = upgraded.prepare('SELECT COUNT(*) AS count FROM llm_request_usage').get() as {
         count: number

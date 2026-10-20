@@ -89,7 +89,16 @@ interface KeyIndexRow {
 }
 
 export class SqliteVocabularyRepository implements VocabularyRepository {
-  constructor(private readonly database: Database.Database) {}
+  // 技能执行批次表的耦合点：桌面会话与外部渠道会话的技能执行分表存放，
+  // 词库提交与批次落盘必须在同一事务内完成，因此表名随装配注入。
+  private readonly skillExecutionTable: string
+
+  constructor(
+    private readonly database: Database.Database,
+    options: { skillExecutionTable?: string } = {}
+  ) {
+    this.skillExecutionTable = options.skillExecutionTable ?? 'conversation_skill_executions'
+  }
 
   find(lookupKey: string): VocabularyEntry | undefined {
     return this.withStorage(() => {
@@ -137,7 +146,7 @@ export class SqliteVocabularyRepository implements VocabularyRepository {
           const batch = vocabularyBatchSchema.parse(finalize(saved))
           const updated = this.database
             .prepare(
-              `UPDATE conversation_skill_executions
+              `UPDATE ${this.skillExecutionTable}
                SET batch_json = ?, phase = 'summarizing', updated_at = ?
                WHERE id = ? AND batch_json IS NULL`
             )

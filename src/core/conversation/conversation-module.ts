@@ -143,7 +143,9 @@ export class ConversationModule {
     // 会话技能按 skillId 注册与分派；新增技能时扩展 ConversationSkill 实现。
     private readonly skills: ReadonlyMap<ConversationSkillId, ConversationSkill> = new Map(),
     private readonly skillRepository?: ConversationSkillRepository,
-    private readonly diagnostics: CoreDiagnostics = noopCoreDiagnostics
+    private readonly diagnostics: CoreDiagnostics = noopCoreDiagnostics,
+    // 外部渠道会话不展示标题，关闭后跳过标题生成的模型调用。
+    private readonly options: { generateTitles?: boolean } = {}
   ) {}
 
   async createConversation(): Promise<ConversationSummary> {
@@ -195,7 +197,8 @@ export class ConversationModule {
 
   async sendMessage(
     input: SendMessageInput,
-    emit: ConversationEventListener
+    emit: ConversationEventListener,
+    channelIds?: { userMessageId: string }
   ): Promise<GenerationAccepted> {
     const conversation =
       this.drafts.get(input.sessionId) ??
@@ -205,7 +208,7 @@ export class ConversationModule {
     }
 
     const userMessage: StoredMessage = {
-      id: randomUUID(),
+      id: channelIds?.userMessageId ?? randomUUID(),
       sessionId: input.sessionId,
       role: 'user',
       content: input.text,
@@ -236,7 +239,8 @@ export class ConversationModule {
       throw error
     }
 
-    if (titled) void this.updateTitle(input.requestId, userMessage, emit)
+    if (titled && this.options.generateTitles !== false)
+      void this.updateTitle(input.requestId, userMessage, emit)
 
     const generation: GenerationStarted = {
       requestId: input.requestId,
@@ -249,7 +253,8 @@ export class ConversationModule {
 
   async runSkill(
     input: RunConversationSkillInput,
-    emit: ConversationEventListener
+    emit: ConversationEventListener,
+    channelIds?: { userMessageId: string }
   ): Promise<GenerationAccepted> {
     runConversationSkillInputSchema.parse(input)
     if (input.skillId === 'synonym') parseSynonymInput(input.arguments.text)
@@ -279,7 +284,7 @@ export class ConversationModule {
     }
     const now = new Date().toISOString()
     const userMessage: StoredMessage = {
-      id: randomUUID(),
+      id: channelIds?.userMessageId ?? randomUUID(),
       sessionId: input.sessionId,
       role: 'user',
       content: `/${input.skillId} ${input.arguments.text}`,
@@ -328,7 +333,8 @@ export class ConversationModule {
       throw error
     }
 
-    if (titled) void this.updateTitle(input.requestId, userMessage, emit)
+    if (titled && this.options.generateTitles !== false)
+      void this.updateTitle(input.requestId, userMessage, emit)
 
     const generation: GenerationStarted = {
       requestId: input.requestId,
@@ -384,7 +390,8 @@ export class ConversationModule {
       throw error
     }
 
-    if (titled) void this.updateTitle(input.requestId, userMessage, emit)
+    if (titled && this.options.generateTitles !== false)
+      void this.updateTitle(input.requestId, userMessage, emit)
 
     const generation: GenerationStarted = {
       requestId: input.requestId,

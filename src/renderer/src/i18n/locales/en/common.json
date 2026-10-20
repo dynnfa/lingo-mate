@@ -25,7 +25,8 @@
       "uiLanguage": "Display language",
       "targetLanguage": "Target language",
       "models": "Models",
-      "usage": "Usage"
+      "usage": "Usage",
+      "chatChannels": "Chat Platforms"
     },
     "targetLanguageNote": "Only English is supported for now.",
     "models": {
@@ -137,6 +138,43 @@
       "emptyTitle": "No usage recorded yet",
       "emptyBody": "Token usage appears here after conversations, vocabulary, phrase or synonym analyses call the model.",
       "emptyTimeline": "Timeline covered: {{start}} – {{end}}"
+    },
+    "chatChannels": {
+      "description": "Use Lingo Mate via Telegram private chat: save vocabulary and ask learning questions. Chat saves share the same vocabulary as the desktop.",
+      "loading": "Loading chat platform settings…",
+      "retryLoad": "Retry",
+      "setupTitle": "Connect the bot",
+      "tokenLabel": "Bot Token",
+      "tokenPlaceholder": "e.g. 123456:ABC-DEF…",
+      "configureButton": "Connect",
+      "updateTokenButton": "Update Bot Token",
+      "configuring": "Connecting…",
+      "connectionTitle": "Connection",
+      "botLabel": "Bot",
+      "stateLabel": "State",
+      "connectButton": "Reconnect",
+      "disconnectButton": "Disconnect",
+      "webhookHint": "This bot has a webhook configured, so polling cannot receive messages. Delete the webhook via Telegram @BotFather and retry; this app never deletes it automatically.",
+      "offlineHint": "Messages sent while the app is not running are not processed automatically; simply resend them.",
+      "bindingTitle": "Account binding",
+      "boundAccount": "Bound: {{name}}",
+      "pendingRequest": "Binding request received from {{name}}. Verify it was initiated by you, then confirm.",
+      "confirmBindingButton": "Confirm binding",
+      "rejectBindingButton": "Reject",
+      "issueCodeButton": "Generate binding code",
+      "bindingCode": "Binding code: {{code}} (valid for {{minutes}} min)",
+      "bindingCodeHint": "Send /start {{code}} to this bot in Telegram, then come back here to confirm.",
+      "unbindButton": "Unbind",
+      "unbindConfirmTitle": "Unbind Telegram account",
+      "unbindConfirmBody": "After unbinding, this account can no longer use chat features and undelivered replies are dropped; saved vocabulary is unaffected.",
+      "unbindConfirm": "Unbind",
+      "unbindCancel": "Cancel",
+      "state": {
+        "connected": "Connected",
+        "connecting": "Connecting…",
+        "disconnected": "Disconnected",
+        "error": "Connection error"
+      }
     }
   },
   "recorded": {
