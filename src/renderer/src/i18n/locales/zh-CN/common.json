@@ -25,7 +25,8 @@
       "uiLanguage": "界面语言",
       "targetLanguage": "目标学习语言",
       "models": "模型",
-      "usage": "用量"
+      "usage": "用量",
+      "chatChannels": "聊天平台"
     },
     "targetLanguageNote": "目前仅支持学习英语。",
     "models": {
@@ -137,6 +138,43 @@
       "emptyTitle": "尚无用量记录",
       "emptyBody": "对话、词汇、短语或近义词分析调用模型后，这里会显示 Token 用量。",
       "emptyTimeline": "时间轴范围：{{start}} 至 {{end}}"
+    },
+    "chatChannels": {
+      "description": "通过 Telegram 私聊使用 Lingo Mate：收藏单词、学习问答。桌面词库与聊天收藏共享同一份数据。",
+      "loading": "正在加载聊天平台设置…",
+      "retryLoad": "重试",
+      "setupTitle": "连接机器人",
+      "tokenLabel": "Bot Token",
+      "tokenPlaceholder": "例如 123456:ABC-DEF…",
+      "configureButton": "连接",
+      "updateTokenButton": "更新 Bot Token / 更换机器人",
+      "configuring": "正在连接…",
+      "connectionTitle": "连接状态",
+      "botLabel": "机器人",
+      "stateLabel": "状态",
+      "connectButton": "恢复连接",
+      "disconnectButton": "断开连接",
+      "webhookHint": "该机器人已配置 Webhook，无法使用轮询接收消息。请在 Telegram @BotFather 中删除 Webhook（/deletebot 或重新创建）后重试；本应用不会自动删除它。",
+      "offlineHint": "应用未运行期间收到的消息不会自动处理；重新发送即可。",
+      "bindingTitle": "账号绑定",
+      "boundAccount": "已绑定：{{name}}",
+      "pendingRequest": "收到绑定请求：{{name}}。请核对是本人发起后确认。",
+      "confirmBindingButton": "确认绑定",
+      "rejectBindingButton": "拒绝",
+      "issueCodeButton": "生成绑定码",
+      "bindingCode": "绑定码：{{code}}（{{minutes}} 分钟内有效）",
+      "bindingCodeHint": "在 Telegram 中向本机器人发送：/start {{code}}，然后回到这里确认。",
+      "unbindButton": "解绑",
+      "unbindConfirmTitle": "解绑 Telegram 账号",
+      "unbindConfirmBody": "解绑后该账号将无法继续使用聊天功能，未发送的回复将被丢弃；已保存的词条不受影响。",
+      "unbindConfirm": "解绑",
+      "unbindCancel": "取消",
+      "state": {
+        "connected": "已连接",
+        "connecting": "连接中…",
+        "disconnected": "未连接",
+        "error": "连接异常"
+      }
     }
   },
   "recorded": {

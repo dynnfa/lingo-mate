@@ -440,6 +440,172 @@ export const MIGRATIONS: Migration[] = [
       CREATE INDEX vocabulary_practice_mistakes_recent
         ON vocabulary_practice_mistakes (created_at DESC, entry_id DESC);
     `)
+  },
+  {
+    // 聊天平台接入（首版 Telegram）：连接、绑定、外部会话映射与消息、
+    // 技能执行、入站执行记录（幂等键 platform+bot_id+event_id）、接收游标、
+    // 待发回复与收藏确认。外部会话与桌面 conversations 分表存放，桌面
+    // 会话列表无法读取外部历史；未授权或不支持的入站事件不保存正文。
+    version: 12,
+    up: (database) =>
+      database.exec(`
+      CREATE TABLE chat_channel_connections (
+        connection_id TEXT PRIMARY KEY NOT NULL,
+        platform TEXT NOT NULL CHECK (platform IN ('telegram')),
+        bot_id TEXT NOT NULL CHECK(length(bot_id) BETWEEN 1 AND 64),
+        bot_username TEXT CHECK(bot_username IS NULL OR length(trim(bot_username)) BETWEEN 1 AND 64),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (platform, bot_id)
+      );
+
+      CREATE TABLE chat_channel_bindings (
+        binding_id TEXT PRIMARY KEY NOT NULL,
+        connection_id TEXT NOT NULL,
+        platform TEXT NOT NULL CHECK (platform IN ('telegram')),
+        sender_id TEXT NOT NULL CHECK(length(sender_id) BETWEEN 1 AND 64),
+        chat_id TEXT NOT NULL CHECK(length(chat_id) BETWEEN 1 AND 64),
+        display_name TEXT CHECK(display_name IS NULL OR length(display_name) BETWEEN 1 AND 128),
+        status TEXT NOT NULL CHECK (status IN ('pending', 'active', 'rejected', 'unbound')),
+        requested_at TEXT NOT NULL,
+        confirmed_at TEXT,
+        unbound_at TEXT,
+        FOREIGN KEY (connection_id) REFERENCES chat_channel_connections (connection_id)
+      );
+      CREATE UNIQUE INDEX chat_channel_bindings_pending
+        ON chat_channel_bindings (connection_id) WHERE status = 'pending';
+      CREATE UNIQUE INDEX chat_channel_bindings_active
+        ON chat_channel_bindings (connection_id) WHERE status = 'active';
+
+      CREATE TABLE chat_channel_binding_codes (
+        connection_id TEXT PRIMARY KEY NOT NULL,
+        code TEXT NOT NULL CHECK(length(code) = 6),
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        consumed_at TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+        FOREIGN KEY (connection_id) REFERENCES chat_channel_connections (connection_id)
+      );
+
+      CREATE TABLE chat_channel_sessions (
+        session_id TEXT PRIMARY KEY NOT NULL,
+        connection_id TEXT NOT NULL,
+        session_key TEXT NOT NULL CHECK(length(session_key) BETWEEN 1 AND 512),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (connection_id) REFERENCES chat_channel_connections (connection_id)
+      );
+      CREATE INDEX chat_channel_sessions_key
+        ON chat_channel_sessions (session_key, created_at DESC, session_id DESC);
+
+      CREATE TABLE chat_channel_active_sessions (
+        session_key TEXT PRIMARY KEY NOT NULL,
+        session_id TEXT NOT NULL UNIQUE,
+        FOREIGN KEY (session_id) REFERENCES chat_channel_sessions (session_id)
+      );
+
+      CREATE TABLE chat_channel_messages (
+        id TEXT PRIMARY KEY NOT NULL,
+        session_id TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (session_id) REFERENCES chat_channel_sessions (session_id)
+      );
+      CREATE INDEX chat_channel_messages_session_created_at
+        ON chat_channel_messages (session_id, created_at);
+
+      CREATE TABLE chat_channel_skill_executions (
+        id TEXT PRIMARY KEY NOT NULL,
+        session_id TEXT NOT NULL,
+        user_message_id TEXT NOT NULL UNIQUE,
+        assistant_message_id TEXT,
+        skill_id TEXT NOT NULL CHECK(skill_id IN ('vocabulary', 'phrase', 'synonym')),
+        arguments_json TEXT NOT NULL CHECK(json_valid(arguments_json)),
+        explanation_language TEXT NOT NULL CHECK(explanation_language IN ('zh-CN', 'en')),
+        phase TEXT NOT NULL CHECK(phase IN (
+          'started', 'analyzing', 'committing', 'summarizing', 'completed',
+          'cancelled', 'failed', 'description_failed', 'description_cancelled')),
+        batch_json TEXT CHECK(batch_json IS NULL OR json_valid(batch_json)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (session_id) REFERENCES chat_channel_sessions (session_id),
+        FOREIGN KEY (user_message_id) REFERENCES chat_channel_messages (id),
+        FOREIGN KEY (assistant_message_id) REFERENCES chat_channel_messages (id)
+      );
+      CREATE INDEX chat_channel_skill_executions_session
+        ON chat_channel_skill_executions (session_id, created_at);
+
+      CREATE TABLE chat_channel_inbound (
+        inbound_id TEXT PRIMARY KEY NOT NULL,
+        connection_id TEXT NOT NULL,
+        platform TEXT NOT NULL CHECK (platform IN ('telegram')),
+        bot_id TEXT NOT NULL,
+        event_id INTEGER NOT NULL CHECK(event_id >= 0),
+        message_id INTEGER NOT NULL,
+        chat_id TEXT NOT NULL,
+        sender_id TEXT NOT NULL,
+        sent_at TEXT NOT NULL,
+        received_at TEXT NOT NULL,
+        text TEXT,
+        kind TEXT NOT NULL CHECK (kind IN ('command', 'message', 'confirmation', 'ignored')),
+        status TEXT NOT NULL CHECK (status IN (
+          'received', 'pending_confirmation', 'executing', 'succeeded', 'failed',
+          'cancelled', 'expired', 'ignored', 'needs_attention')),
+        session_id TEXT,
+        execution_ref_json TEXT CHECK(execution_ref_json IS NULL OR json_valid(execution_ref_json)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (platform, bot_id, event_id),
+        FOREIGN KEY (connection_id) REFERENCES chat_channel_connections (connection_id)
+      );
+      CREATE INDEX chat_channel_inbound_recoverable
+        ON chat_channel_inbound (connection_id, created_at);
+
+      CREATE TABLE chat_channel_cursors (
+        connection_id TEXT PRIMARY KEY NOT NULL,
+        offset INTEGER NOT NULL CHECK("offset" >= 0),
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (connection_id) REFERENCES chat_channel_connections (connection_id)
+      );
+
+      CREATE TABLE chat_channel_replies (
+        reply_id TEXT PRIMARY KEY NOT NULL,
+        connection_id TEXT NOT NULL,
+        platform TEXT NOT NULL CHECK (platform IN ('telegram')),
+        chat_id TEXT NOT NULL,
+        sender_id TEXT NOT NULL,
+        session_id TEXT,
+        inbound_id TEXT,
+        text TEXT NOT NULL CHECK(length(text) BETWEEN 1 AND 8000),
+        status TEXT NOT NULL CHECK (status IN ('pending', 'sent', 'failed')),
+        attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        sent_at TEXT,
+        FOREIGN KEY (connection_id) REFERENCES chat_channel_connections (connection_id)
+      );
+      CREATE INDEX chat_channel_replies_pending
+        ON chat_channel_replies (connection_id, status, created_at);
+
+      CREATE TABLE chat_channel_confirmations (
+        operation_id TEXT PRIMARY KEY NOT NULL,
+        connection_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        chat_id TEXT NOT NULL,
+        sender_id TEXT NOT NULL,
+        message_ref INTEGER NOT NULL,
+        words_json TEXT NOT NULL CHECK(json_valid(words_json)),
+        target_language TEXT NOT NULL CHECK (target_language IN ('en')),
+        explanation_language TEXT NOT NULL CHECK (explanation_language IN ('zh-CN', 'en')),
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        consumed_at TEXT,
+        FOREIGN KEY (connection_id) REFERENCES chat_channel_connections (connection_id)
+      );
+      CREATE INDEX chat_channel_confirmations_scope
+        ON chat_channel_confirmations (connection_id, session_id, chat_id, sender_id);
+    `)
   }
 ]
 

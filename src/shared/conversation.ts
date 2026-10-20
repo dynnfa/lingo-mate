@@ -11,6 +11,7 @@ import type { VocabularyPracticeApi } from './vocabulary-practice'
 import type { SentencePracticeApi } from './sentence-practice'
 import type { VocabularyMistakesApi } from './vocabulary-mistakes'
 import type { ErrorReportApi } from './error-report'
+import type { ChatChannelsApi } from './chat-channels'
 
 export const CONVERSATION_CHANNELS = {
   create: 'conversation:create',
@@ -292,6 +293,7 @@ export interface ConversationApi {
 
 export interface LingoMateApi {
   conversation: ConversationApi
+  chatChannels: ChatChannelsApi
   preferences: PreferencesApi
   models: ModelsApi
   usage: UsageApi

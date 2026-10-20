@@ -182,6 +182,30 @@ function modelsApiStub(): ModelsApi {
 
 function installApi(usage: UsageApi): void {
   vi.stubGlobal('api', {
+    // 聊天平台区块随设置页挂载：提供静默桩满足 hook 订阅与状态读取。
+    chatChannels: {
+      getStatus: async () => ({
+        status: 'ok',
+        connection: null,
+        binding: null,
+        pendingBindingRequest: null
+      }),
+      configureConnection: async () => ({ status: 'error', error: { code: 'NO_CONNECTION' } }),
+      connect: async () => ({ status: 'error', error: { code: 'NO_CONNECTION' } }),
+      disconnect: async () => ({ status: 'error', error: { code: 'NOT_CONNECTED' } }),
+      issueBindingCode: async () => ({ status: 'error', error: { code: 'NO_CONNECTION' } }),
+      confirmBinding: async () => ({
+        status: 'error',
+        error: { code: 'NO_PENDING_BINDING_REQUEST' }
+      }),
+      rejectBinding: async () => ({
+        status: 'error',
+        error: { code: 'NO_PENDING_BINDING_REQUEST' }
+      }),
+      unbind: async () => ({ status: 'error', error: { code: 'NO_ACTIVE_BINDING' } }),
+      onEvent: () => () => {}
+    },
+
     preferences: preferencesStub(),
     models: modelsApiStub(),
     usage
@@ -444,6 +468,30 @@ describe('UsageSettings', () => {
       return { status: 'ok' }
     }
     vi.stubGlobal('api', {
+      // 聊天平台区块随设置页挂载：提供静默桩满足 hook 订阅与状态读取。
+      chatChannels: {
+        getStatus: async () => ({
+          status: 'ok',
+          connection: null,
+          binding: null,
+          pendingBindingRequest: null
+        }),
+        configureConnection: async () => ({ status: 'error', error: { code: 'NO_CONNECTION' } }),
+        connect: async () => ({ status: 'error', error: { code: 'NO_CONNECTION' } }),
+        disconnect: async () => ({ status: 'error', error: { code: 'NOT_CONNECTED' } }),
+        issueBindingCode: async () => ({ status: 'error', error: { code: 'NO_CONNECTION' } }),
+        confirmBinding: async () => ({
+          status: 'error',
+          error: { code: 'NO_PENDING_BINDING_REQUEST' }
+        }),
+        rejectBinding: async () => ({
+          status: 'error',
+          error: { code: 'NO_PENDING_BINDING_REQUEST' }
+        }),
+        unbind: async () => ({ status: 'error', error: { code: 'NO_ACTIVE_BINDING' } }),
+        onEvent: () => () => {}
+      },
+
       preferences: preferencesStub(),
       models,
       usage: usageApiStub({ status: 'ok', overview: buildOverview() }).api

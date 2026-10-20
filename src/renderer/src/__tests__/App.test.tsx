@@ -259,6 +259,29 @@ function installApiMock(
 
   const api: LingoMateApi = {
     preferences,
+    // App 测试不覆盖聊天平台；提供静默桩满足接口形状。
+    chatChannels: {
+      getStatus: async () => ({
+        status: 'ok',
+        connection: null,
+        binding: null,
+        pendingBindingRequest: null
+      }),
+      configureConnection: async () => ({ status: 'error', error: { code: 'UNKNOWN_ERROR' } }),
+      connect: async () => ({ status: 'error', error: { code: 'NO_CONNECTION' } }),
+      disconnect: async () => ({ status: 'error', error: { code: 'NOT_CONNECTED' } }),
+      issueBindingCode: async () => ({ status: 'error', error: { code: 'NO_CONNECTION' } }),
+      confirmBinding: async () => ({
+        status: 'error',
+        error: { code: 'NO_PENDING_BINDING_REQUEST' }
+      }),
+      rejectBinding: async () => ({
+        status: 'error',
+        error: { code: 'NO_PENDING_BINDING_REQUEST' }
+      }),
+      unbind: async () => ({ status: 'error', error: { code: 'NO_ACTIVE_BINDING' } }),
+      onEvent: () => () => {}
+    },
     // App 测试不触发错误上报；提供静默桩满足接口形状。
     reportError: async () => ({ status: 'ok' }),
     // App 测试不关注模型设置；提供未配置的稳定桩供 Settings 页读取。

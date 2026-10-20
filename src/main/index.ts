@@ -93,12 +93,27 @@ import { ExploreVocabularyConversationSkill } from '../core/learning/explore-voc
 import { LlmExploreVocabularyGenerator } from '../core/llm/llm-explore-vocabulary-generator'
 import { JsonFileExploreVocabularyHistoryStore } from './explore-vocabulary-history-store'
 import { createExploreVocabularyFeedbackFormatter } from './explore-vocabulary-feedback'
+import { SqliteChannelStore } from '../database/sqlite-channel-store'
+import { SqliteChannelConversationRepository } from '../database/sqlite-channel-conversation-repository'
+import { ChannelModule } from '../core/channels/channel-module'
+import type { ChannelTransport } from '../core/channels/channel-types'
+import { LlmChannelIntentRecognizer } from '../core/llm/llm-channel-intent-recognizer'
+import { createChatChannelReplies } from './chat-channel-replies'
+import { createFileChatChannelCredentialStore } from './chat-channel-credential-store'
+import { ChatChannelsService } from './chat-channels-service'
+import {
+  broadcastChatChannelsEvent,
+  createChatChannelsStateBroadcaster,
+  registerChatChannelsIpc
+} from './chat-channels-ipc'
+import { TelegramApiClient } from './channels/telegram-api'
 
 let database: Database.Database | undefined
 let conversationModule: ConversationModule | undefined
 let disposeVocabularyTransfer: (() => void) | undefined
 let vocabularyPracticeService: VocabularyPracticeService | undefined
 let sentencePracticeService: SentencePracticeService | undefined
+let chatChannelsService: ChatChannelsService | undefined
 
 // 加载目标与 IPC 来源白名单使用同一地址，开发模式也只信任指定文档。
 const rendererUrl =
@@ -494,6 +509,80 @@ app.whenReady().then(() => {
   )
   registerConversationIpc(conversationModule, registerTrustedHandler)
 
+  // 聊天平台接入（首版 Telegram）：外部会话与桌面对话分表隔离、共享同一
+  // 词库；技能执行批次写入渠道执行表，与渠道会话仓储在同一事务耦合。
+  // Token 只经 safeStorage 加密保存在用户数据目录，不进数据库、不回读。
+  const channelVocabularyRepository = new SqliteVocabularyRepository(database, {
+    skillExecutionTable: 'chat_channel_skill_executions'
+  })
+  const channelVocabularySkill = new VocabularyConversationSkill(
+    channelVocabularyRepository,
+    () => ({
+      analyzer: new LlmVocabularyAnalyzer(modelsService.resolveSnapshot(), 30_000, createLlmClient)
+    }),
+    createVocabularyFeedbackFormatter()
+  )
+  const channelSkills = new Map<ConversationSkillId, ConversationSkill>([
+    [channelVocabularySkill.skillId, channelVocabularySkill]
+  ])
+  // 出站传输委托：服务建立连接后指向当前适配器，未连接时不投递。
+  let channelSendDelegate: ChannelTransport | null = null
+  const channelTransport: ChannelTransport = {
+    async send(target, text) {
+      if (!channelSendDelegate) return { delivered: false }
+      return channelSendDelegate.send(target, text)
+    }
+  }
+  const channelStore = new SqliteChannelStore(database)
+  const channelConversationRepository = new SqliteChannelConversationRepository(database)
+  const channelConversationModule = new ConversationModule(
+    conversationModel,
+    channelConversationRepository,
+    resolveLanguages,
+    channelSkills,
+    channelConversationRepository,
+    coreDiagnostics,
+    { generateTitles: false }
+  )
+  const channelModule = new ChannelModule({
+    store: channelStore,
+    conversations: channelConversationModule,
+    conversationStore: channelConversationRepository,
+    skills: channelSkills,
+    // 意图识别按请求解析模型快照；无写入工具，失败返回安全错误提示。
+    intentRecognizer: {
+      recognize: (input) =>
+        new LlmChannelIntentRecognizer(
+          modelsService.resolveSnapshot(),
+          30_000,
+          createLlmClient
+        ).recognize(input)
+    },
+    replies: createChatChannelReplies(),
+    transport: channelTransport,
+    resolveLanguages,
+    diagnostics: coreDiagnostics,
+    // 平台侧 /start 创建待确认绑定后推送设置页刷新。
+    onBindingRequested: () => broadcastChatChannelsEvent({ type: 'bindingRequested' })
+  })
+  chatChannelsService = new ChatChannelsService({
+    store: channelStore,
+    module: channelModule,
+    credentialStore: createFileChatChannelCredentialStore(
+      join(app.getPath('userData'), 'chat-channel-credentials.json')
+    ),
+    vault: createSafeStorageCredentialVault(),
+    createApiClient: (token: string) => new TelegramApiClient(token),
+    onStateChanged: createChatChannelsStateBroadcaster(
+      () => channelStore.findSoleConnection()?.connectionId
+    ),
+    diagnostics: coreDiagnostics
+  })
+  channelSendDelegate = chatChannelsService
+  registerChatChannelsIpc(chatChannelsService, registerTrustedHandler)
+  // 启动恢复：核对提交记录、补发待发回复，然后按需恢复连接。
+  void chatChannelsService.initialize()
+
   createWindow()
 
   app.on('activate', function () {
@@ -517,6 +606,7 @@ app.on('before-quit', () => {
   disposeVocabularyTransfer?.()
   vocabularyPracticeService?.dispose()
   sentencePracticeService?.dispose()
+  chatChannelsService?.dispose()
   database?.close()
   database = undefined
 })
