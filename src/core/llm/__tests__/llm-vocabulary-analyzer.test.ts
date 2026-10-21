@@ -4,7 +4,6 @@ import { LlmVocabularyAnalyzer } from '../llm-vocabulary-analyzer'
 import type { CreateLlmClient, LlmClient } from '../llm-client'
 import type { RuntimeModelConfig } from '../model-config'
 import { VOCABULARY_INSERT_SQL } from '../../learning/vocabulary/vocabulary-insert'
-import { vocabularySystemMessage } from '../../prompt/vocabulary-analysis'
 
 // 通过工厂注入 stub 客户端：适配器测试只验证请求参数与业务校验语义，
 // 不经过真实 SDK；通信与记账由 llm-client 测试覆盖。
@@ -21,8 +20,12 @@ const config: RuntimeModelConfig = {
 const input = (
   language: 'en' | 'zh-CN' = 'zh-CN',
   signal = new AbortController().signal
-): AnalyzeVocabularyInput => ({
+): AnalyzeVocabularyInput & { systemPrompt: string } => ({
   term: 'apple',
+  systemPrompt:
+    language === 'zh-CN'
+      ? 'Explain in Simplified Chinese (zh-CN); examples in English (en).'
+      : 'Explain in English (en); examples in English (en).',
   wordLanguage: 'en' as const,
   explanationLanguage: language,
   signal
@@ -113,7 +116,7 @@ describe('LlmVocabularyAnalyzer', () => {
       expect(insertTool.function.parameters.properties).not.toHaveProperty('sql')
       expect(JSON.stringify(body)).not.toContain(VOCABULARY_INSERT_SQL)
       expect(insertTool.function.parameters.additionalProperties).toBe(false)
-      expect(body.messages[0].content).toBe(vocabularySystemMessage(language))
+      expect(body.messages[0].content).toBe(request.systemPrompt)
       expect(body.messages[0].content).toContain(
         language === 'en' ? 'English (en)' : 'Simplified Chinese (zh-CN)'
       )
@@ -376,5 +379,5 @@ it('accepts multiple model IPA variants and advertises an array in the tool sche
     minItems: 1,
     maxItems: 10
   })
-  expect(create.mock.calls[0][0].messages[0].content).toContain('common pronunciation variants')
+  expect(create.mock.calls[0][0].messages[0].content).toBe(input().systemPrompt)
 })

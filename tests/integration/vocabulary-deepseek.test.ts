@@ -1,3 +1,4 @@
+import { createTestVocabularyRuntime } from '../fixtures/python-agent'
 import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { openDatabase } from '../../src/database/database'
@@ -119,7 +120,8 @@ describe.each(['tool', 'text', 'sql'] as const)(
                 },
                 wordMs,
                 createClient
-              )
+              ),
+            createTestVocabularyRuntime()
           )
           const result = await module.addBatch(
             { requestId: randomUUID(), text: 'apple', wordLanguage: 'en' },

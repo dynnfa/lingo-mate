@@ -1,6 +1,11 @@
+from __future__ import annotations
+
 import json
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from lingo_agent.graphs.vocabulary import VocabularyState
 
 from langgraph.graph import END, START, StateGraph
 
@@ -18,7 +23,13 @@ class LimitError(Exception):
     pass
 
 
-async def execute(run_id: str, snapshot: dict[str, Any], host: HostCall) -> LearningState:
+async def execute(
+    run_id: str, snapshot: dict[str, Any], host: HostCall
+) -> LearningState | VocabularyState:
+    if snapshot["task"] == "vocabulary":
+        from lingo_agent.graphs.vocabulary import execute_vocabulary
+
+        return await execute_vocabulary(snapshot, host)
     budget = snapshot["budget"]
 
     def chars(text: str) -> int:

@@ -1,3 +1,4 @@
+import { createTestVocabularyRuntime } from '../fixtures/python-agent'
 import { createTestConversationModule } from '../fixtures/conversation'
 import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -50,7 +51,8 @@ function makeSkill(
   return new VocabularyConversationSkill(
     repository,
     () => ({ analyzer: { analyze } }),
-    createVocabularyFeedbackFormatter()
+    createVocabularyFeedbackFormatter(),
+    createTestVocabularyRuntime()
   )
 }
 

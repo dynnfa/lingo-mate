@@ -1,16 +1,21 @@
+import { vocabularyInsertTools } from '../learning/vocabulary/vocabulary-insert'
 import type { LanguageModel, ModelStreamEvent } from '../llm/language-model'
 import {
   agentCallArgsSchema,
   agentHostResultSchema,
   agentDecisionSchema,
   agentReplyArgsSchema,
+  vocabularyModelArgsSchema,
+  vocabularyPreparedSchema,
+  vocabularyAnalysisReceiptSchema,
   type AgentDecision,
   type AgentCallArgs,
   type AgentHostResult,
   type AgentOperation,
+  type VocabularyPrepared,
   type AgentSnapshot
 } from './agent-protocol'
-import { AgentRuntimeError } from './agent-runtime'
+import { AgentRuntimeError, type VocabularyHostOperations } from './agent-runtime'
 
 export interface AgentTestOperations {
   // Installed only by controlled tests. Production registers no tool handlers.
@@ -24,6 +29,8 @@ export interface AgentTestOperations {
 }
 
 export class AgentHost {
+  private prepared?: VocabularyPrepared
+  private readonly vocabularyIndices = new Set<number>()
   private readonly calls = new Set<string>()
   private model?: LanguageModel
   private modelCalls = 0
@@ -34,7 +41,8 @@ export class AgentHost {
   constructor(
     private readonly snapshot: AgentSnapshot,
     private readonly resolveModel: () => LanguageModel,
-    private readonly testOperations?: AgentTestOperations
+    private readonly testOperations?: AgentTestOperations,
+    private readonly vocabulary?: VocabularyHostOperations
   ) {
     this.snapshot = structuredClone(snapshot)
   }
@@ -55,8 +63,52 @@ export class AgentHost {
       throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR', { cause: parsedArgs.error })
     const args = parsedArgs.data
     if (this.calls.size > this.snapshot.budget.maxSteps) throw new AgentRuntimeError('AGENT_LIMIT')
+    if (operation === 'vocabulary.prepare' && this.vocabulary) {
+      if (Object.keys(args).length || ++this.toolCalls > 1)
+        throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+      if (this.toolCalls > this.snapshot.budget.maxToolCalls)
+        throw new AgentRuntimeError('AGENT_LIMIT')
+      const result = vocabularyPreparedSchema.parse(await this.vocabulary.prepare())
+      signal.throwIfAborted()
+      this.prepared = structuredClone(result)
+      return result
+    }
+    if (operation === 'model.vocabulary' && this.vocabulary) {
+      const parsed = vocabularyModelArgsSchema.safeParse(args)
+      if (!parsed.success)
+        throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR', { cause: parsed.error })
+      const item = this.prepared?.items.find(
+        (item) => item.inputIndex === parsed.data.inputIndex && item.status === 'pending'
+      )
+      if (!item || this.vocabularyIndices.has(item.inputIndex))
+        throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+      this.vocabularyIndices.add(item.inputIndex)
+      if (++this.modelCalls > this.snapshot.budget.maxModelCalls)
+        throw new AgentRuntimeError('AGENT_LIMIT')
+      const content = JSON.stringify({
+        term: item.term,
+        wordLanguage: this.snapshot.targetLanguage
+      })
+      if (
+        parsed.data.systemPrompt.length +
+          content.length +
+          JSON.stringify(vocabularyInsertTools()).length >
+        this.snapshot.budget.maxInputChars
+      )
+        throw new AgentRuntimeError('AGENT_LIMIT')
+      const result = vocabularyAnalysisReceiptSchema.parse(
+        await this.vocabulary.analyze(parsed.data, signal)
+      )
+      signal.throwIfAborted()
+      if (result.inputIndex !== item.inputIndex) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+      this.outputChars += JSON.stringify(result).length
+      if (this.outputChars > this.snapshot.budget.maxOutputChars)
+        throw new AgentRuntimeError('AGENT_LIMIT')
+      return result
+    }
     if (operation === 'model.decide' && this.testOperations) {
       if (
+        args.inputIndex !== undefined ||
         args.systemPrompt !== undefined ||
         args.query ||
         JSON.stringify(args.results) !== JSON.stringify(this.results)
@@ -84,6 +136,7 @@ export class AgentHost {
     }
     if (operation === 'learning.lookup' && this.testOperations) {
       if (
+        args.inputIndex !== undefined ||
         args.systemPrompt !== undefined ||
         !args.query ||
         args.query !== this.query ||

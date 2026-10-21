@@ -18,3 +18,11 @@ export type VocabularyAnalysisResult =
 export interface VocabularyAnalyzer {
   analyze(input: AnalyzeVocabularyInput): Promise<VocabularyAnalysisResult>
 }
+
+// Version metadata is pinned by the application; Prompt text is owned by Python.
+export const VOCABULARY_PROMPT_VERSION = 'vocabulary-tools-v4'
+export interface VocabularyModelAnalyzer {
+  analyze(
+    input: AnalyzeVocabularyInput & { systemPrompt: string }
+  ): Promise<VocabularyAnalysisResult>
+}
