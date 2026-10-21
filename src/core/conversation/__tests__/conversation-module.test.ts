@@ -1,3 +1,4 @@
+import { createTestConversationModule } from '../../../../tests/fixtures/conversation'
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import type { ConversationEvent, ConversationSummary } from '../../../shared/conversation'
@@ -175,15 +176,7 @@ describe('ConversationModule', () => {
           throw new Error('Legacy reply path used')
         })
       }
-      const module = new ConversationModule(
-        model,
-        repository,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        runtime
-      )
+      const module = new ConversationModule(model, repository, runtime)
       const events: ConversationEvent[] = []
       const accepted = await module.sendMessage(
         { requestId: REQUEST_ID, sessionId: conversation.sessionId, text: content },
@@ -193,7 +186,7 @@ describe('ConversationModule', () => {
       expect(inputs).toHaveLength(1)
       expect(inputs[0]).toMatchObject({
         sessionId: conversation.sessionId,
-        task: content.startsWith('/concept') ? 'word-concept' : 'conversation',
+        task: 'conversation',
         outputLanguage: 'zh-CN',
         targetLanguage: 'en'
       })
@@ -212,7 +205,7 @@ describe('ConversationModule', () => {
   it('waits for cancelled conversation work before shutdown completes and rejects new work', async () => {
     const repository = new MemoryConversationRepository()
     const { sessionId } = await repository.seedConversation()
-    const module = new ConversationModule(new BlockingOnceModel(), repository)
+    const module = createTestConversationModule(new BlockingOnceModel(), repository)
     const events: ConversationEvent[] = []
     await module.sendMessage({ requestId: REQUEST_ID, sessionId, text: 'Hello' }, (e) =>
       events.push(e)
@@ -229,7 +222,7 @@ describe('ConversationModule', () => {
   describe('conversation lifecycle', () => {
     it('creates a draft without writing or listing it', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new SuccessfulModel(), repository)
+      const module = createTestConversationModule(new SuccessfulModel(), repository)
 
       const summary = await module.createConversation()
 
@@ -244,7 +237,7 @@ describe('ConversationModule', () => {
 
     it('lists conversations ordered by updatedAt, then createdAt, descending', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new SuccessfulModel(), repository)
+      const module = createTestConversationModule(new SuccessfulModel(), repository)
 
       const first = await repository.seedConversation()
       const second = await repository.seedConversation()
@@ -286,7 +279,7 @@ describe('ConversationModule', () => {
 
     it('loads a conversation with its history in stored order', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new SuccessfulModel(), repository)
+      const module = createTestConversationModule(new SuccessfulModel(), repository)
       const { sessionId } = await repository.seedConversation()
 
       repository.messages.push(
@@ -328,7 +321,7 @@ describe('ConversationModule', () => {
     })
 
     it('throws a typed error when loading an unknown conversation', async () => {
-      const module = new ConversationModule(
+      const module = createTestConversationModule(
         new SuccessfulModel(),
         new MemoryConversationRepository()
       )
@@ -349,7 +342,10 @@ describe('ConversationModule', () => {
           throw new Error('raw driver failure')
         }
       }
-      const module = new ConversationModule(new SuccessfulModel(), new FailingListRepository())
+      const module = createTestConversationModule(
+        new SuccessfulModel(),
+        new FailingListRepository()
+      )
 
       await expect(module.listConversations()).rejects.toThrow(ConversationPersistenceError)
     })
@@ -358,7 +354,7 @@ describe('ConversationModule', () => {
   describe('message generation identity', () => {
     it('uses one canonical assistant messageId across started, chunks, completion and storage', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new SuccessfulModel(), repository)
+      const module = createTestConversationModule(new SuccessfulModel(), repository)
       const { sessionId } = await repository.seedConversation()
 
       const events = await new Promise<ConversationEvent[]>((resolve) => {
@@ -394,7 +390,7 @@ describe('ConversationModule', () => {
 
     it('returns the canonical generation payload from the accepted send result', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new SuccessfulModel(), repository)
+      const module = createTestConversationModule(new SuccessfulModel(), repository)
       const { sessionId } = await repository.seedConversation()
 
       const events: ConversationEvent[] = []
@@ -415,7 +411,7 @@ describe('ConversationModule', () => {
 
     it('rejects sending to an unknown conversation without persisting anything', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new SuccessfulModel(), repository)
+      const module = createTestConversationModule(new SuccessfulModel(), repository)
 
       await expect(
         module.sendMessage(
@@ -447,7 +443,7 @@ describe('ConversationModule', () => {
         }
       }
       const repository = new FailingAppendRepository()
-      const module = new ConversationModule(new SuccessfulModel(), repository)
+      const module = createTestConversationModule(new SuccessfulModel(), repository)
       const events: ConversationEvent[] = []
 
       await expect(
@@ -486,7 +482,7 @@ describe('ConversationModule', () => {
         }
       }
       const gatedRepository = new GatedUserAppendRepository()
-      const module = new ConversationModule(new SuccessfulModel(), gatedRepository)
+      const module = createTestConversationModule(new SuccessfulModel(), gatedRepository)
       const { sessionId } = await gatedRepository.seedConversation()
 
       const events: ConversationEvent[] = []
@@ -537,7 +533,7 @@ describe('ConversationModule', () => {
         },
         () => 'test-config-id'
       )
-      const module = new ConversationModule(
+      const module = createTestConversationModule(
         new ConfiguredLanguageModel(config, unusedCreateClient),
         repository
       )
@@ -557,12 +553,12 @@ describe('ConversationModule', () => {
       const cause = new Error('title provider unavailable')
       const model: LanguageModel = {
         async *streamReply(input) {
-          if (input.promptKind === 'conversation-title') throw cause
+          if (input.purpose === 'conversation-title') throw cause
           yield textEvent('reply')
         }
       }
       const report = vi.fn()
-      const module = new ConversationModule(
+      const module = createTestConversationModule(
         model,
         new MemoryConversationRepository(),
         undefined,
@@ -595,7 +591,7 @@ describe('ConversationModule', () => {
         const report = vi.fn(() => {
           if (diagnosticsThrows) throw new Error('diagnostic unavailable')
         })
-        const module = new ConversationModule(
+        const module = createTestConversationModule(
           new ImmediateFailureModel(),
           repository,
           undefined,
@@ -638,7 +634,7 @@ describe('ConversationModule', () => {
 
     it('fails with the assistant messageId after partial chunks and keeps only the user', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new MidStreamFailureModel(), repository)
+      const module = createTestConversationModule(new MidStreamFailureModel(), repository)
       const { sessionId } = await repository.seedConversation()
 
       const events = await new Promise<ConversationEvent[]>((resolve) => {
@@ -682,7 +678,7 @@ describe('ConversationModule', () => {
       }
       const repository = new FailingAssistantAppendRepository()
       const report = vi.fn()
-      const module = new ConversationModule(
+      const module = createTestConversationModule(
         new SuccessfulModel(),
         repository,
         undefined,
@@ -719,7 +715,7 @@ describe('ConversationModule', () => {
     it('cancels an active stream without persisting a partial assistant reply', async () => {
       const repository = new MemoryConversationRepository()
       const report = vi.fn()
-      const module = new ConversationModule(
+      const module = createTestConversationModule(
         new BlockingOnceModel(),
         repository,
         undefined,
@@ -754,7 +750,7 @@ describe('ConversationModule', () => {
 
     it('cancels before model execution when requested as soon as the generation starts', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new SuccessfulModel(), repository)
+      const module = createTestConversationModule(new SuccessfulModel(), repository)
       const { sessionId } = await repository.seedConversation()
 
       const events = await new Promise<ConversationEvent[]>((resolve) => {
@@ -776,7 +772,7 @@ describe('ConversationModule', () => {
   describe('session concurrency', () => {
     it('rejects reusing an active request id across different sessions', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new BlockingOnceModel(), repository)
+      const module = createTestConversationModule(new BlockingOnceModel(), repository)
       const firstConversation = await repository.seedConversation()
       const secondConversation = await repository.seedConversation()
 
@@ -800,7 +796,7 @@ describe('ConversationModule', () => {
 
     it('rejects a second send to the same session with a typed busy error', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new BlockingOnceModel(), repository)
+      const module = createTestConversationModule(new BlockingOnceModel(), repository)
       const { sessionId } = await repository.seedConversation()
 
       const firstEvents: ConversationEvent[] = []
@@ -833,7 +829,7 @@ describe('ConversationModule', () => {
 
     it('allows parallel generations across different sessions', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new SuccessfulModel(), repository)
+      const module = createTestConversationModule(new SuccessfulModel(), repository)
       const firstConversation = await repository.seedConversation()
       const secondConversation = await repository.seedConversation()
 
@@ -866,7 +862,7 @@ describe('ConversationModule', () => {
 
     it('frees the session for a new generation after a terminal event', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new SuccessfulModel(), repository)
+      const module = createTestConversationModule(new SuccessfulModel(), repository)
       const { sessionId } = await repository.seedConversation()
 
       await new Promise<void>((resolve) => {
@@ -887,7 +883,7 @@ describe('ConversationModule', () => {
 
     it('throws a typed error when cancelling an unknown or finished request', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new SuccessfulModel(), repository)
+      const module = createTestConversationModule(new SuccessfulModel(), repository)
       const { sessionId } = await repository.seedConversation()
 
       expect(() => module.cancelMessage(REQUEST_ID)).toThrow(RequestNotFoundError)
@@ -907,7 +903,7 @@ describe('ConversationModule', () => {
   describe('reasoning stream separation', () => {
     class ReasoningModel implements LanguageModel {
       async *streamReply(input: StreamReplyInput): AsyncIterable<ModelStreamEvent> {
-        if (input.promptKind === 'conversation-title') {
+        if (input.purpose === 'conversation-title') {
           // 标题生成是纯正文消费者：即使提供方返回思考也应忽略。
           yield reasoningEvent('title thoughts must be ignored')
           yield textEvent('Coffee practice')
@@ -922,7 +918,7 @@ describe('ConversationModule', () => {
 
     it('forwards reasoning deltas separately and keeps them out of the final message', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new ReasoningModel(), repository)
+      const module = createTestConversationModule(new ReasoningModel(), repository)
       const { sessionId } = await repository.seedConversation()
 
       const events = await new Promise<ConversationEvent[]>((resolve) => {
@@ -970,7 +966,7 @@ describe('ConversationModule', () => {
           await abortOnSignal(signal)
         }
       }
-      const module = new ConversationModule(new ReasoningThenBlockModel(), repository)
+      const module = createTestConversationModule(new ReasoningThenBlockModel(), repository)
       const { sessionId } = await repository.seedConversation()
 
       const events = await new Promise<ConversationEvent[]>((resolve) => {
@@ -990,7 +986,7 @@ describe('ConversationModule', () => {
 
     it('uses only text deltas for the background title generation', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new ReasoningModel(), repository)
+      const module = createTestConversationModule(new ReasoningModel(), repository)
       const summary = await module.createConversation()
 
       await new Promise<void>((resolve) => {
@@ -1037,7 +1033,7 @@ describe('ConversationModule', () => {
 
     it('retries the last unanswered user message without duplicating it', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new BlockingOnceModel(), repository)
+      const module = createTestConversationModule(new BlockingOnceModel(), repository)
       const { sessionId } = await repository.seedConversation()
 
       await cancelAfterFirstChunk(module, sessionId)
@@ -1072,7 +1068,7 @@ describe('ConversationModule', () => {
 
     it('rejects retrying a user message that already has an assistant reply', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new SuccessfulModel(), repository)
+      const module = createTestConversationModule(new SuccessfulModel(), repository)
       const { sessionId } = await repository.seedConversation()
 
       await new Promise<void>((resolve) => {
@@ -1095,7 +1091,7 @@ describe('ConversationModule', () => {
 
     it('rejects retrying an unknown message or a non-user message', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new SuccessfulModel(), repository)
+      const module = createTestConversationModule(new SuccessfulModel(), repository)
       const { sessionId } = await repository.seedConversation()
 
       await new Promise<void>((resolve) => {
@@ -1128,7 +1124,7 @@ describe('ConversationModule', () => {
 
     it('rejects retry while another generation is active in the session', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new BlockingOnceModel(), repository)
+      const module = createTestConversationModule(new BlockingOnceModel(), repository)
       const { sessionId } = await repository.seedConversation()
 
       await module.sendMessage({ requestId: REQUEST_ID, sessionId, text: 'Hello' }, () => undefined)
@@ -1146,7 +1142,7 @@ describe('ConversationModule', () => {
 
     it('rejects retrying in an unknown conversation', async () => {
       const repository = new MemoryConversationRepository()
-      const module = new ConversationModule(new SuccessfulModel(), repository)
+      const module = createTestConversationModule(new SuccessfulModel(), repository)
 
       await expect(
         module.retryMessage(
@@ -1161,7 +1157,7 @@ describe('ConversationModule', () => {
     })
   })
 
-  describe('word concept command', () => {
+  describe('raw command delegation', () => {
     class RecordingModel implements LanguageModel {
       readonly inputs: StreamReplyInput[] = []
 
@@ -1209,35 +1205,35 @@ describe('ConversationModule', () => {
     }
 
     it.each(['/concept pursue', ' /concept pursue '])(
-      'answers %s with the word-concept prompt and the raw command text',
+      'answers %s through the runtime with the raw command text',
       async (text) => {
         const repository = new MemoryConversationRepository()
         const model = new RecordingModel()
-        const module = new ConversationModule(model, repository)
+        const module = createTestConversationModule(model, repository)
         const { sessionId } = await repository.seedConversation()
 
         await sendUntilTerminal(module, sessionId, text)
 
         expect(model.inputs).toHaveLength(1)
-        expect(model.inputs[0].promptKind).toBe('word-concept')
+        expect(model.inputs[0].purpose).toBe('conversation')
         // 原始命令消息保留在发给模型的上下文中，不额外改写或拼接
         expect(model.inputs[0].messages.at(-1)).toEqual({ role: 'user', content: text })
       }
     )
 
-    it('keeps the conversation prompt for ordinary chat and follow-up questions', async () => {
+    it('delegates ordinary chat, commands and follow-up questions to the same runtime', async () => {
       const repository = new MemoryConversationRepository()
       const model = new RecordingModel()
-      const module = new ConversationModule(model, repository)
+      const module = createTestConversationModule(model, repository)
       const { sessionId } = await repository.seedConversation()
 
       await sendUntilTerminal(module, sessionId, 'Hello')
       await sendUntilTerminal(module, sessionId, '/concept pursue')
       await sendUntilTerminal(module, sessionId, '再举个例子')
 
-      expect(model.inputs.map((input) => input.promptKind)).toEqual([
+      expect(model.inputs.map((input) => input.purpose)).toEqual([
         'conversation',
-        'word-concept',
+        'conversation',
         'conversation'
       ])
     })
@@ -1247,20 +1243,20 @@ describe('ConversationModule', () => {
       async (text) => {
         const repository = new MemoryConversationRepository()
         const model = new RecordingModel()
-        const module = new ConversationModule(model, repository)
+        const module = createTestConversationModule(model, repository)
         const { sessionId } = await repository.seedConversation()
 
         await sendUntilTerminal(module, sessionId, text)
 
         expect(model.inputs).toHaveLength(1)
-        expect(model.inputs[0].promptKind).toBe('conversation')
+        expect(model.inputs[0].purpose).toBe('conversation')
       }
     )
 
-    it('reapplies the word-concept prompt when retrying a cancelled /concept message', async () => {
+    it('resends the raw command to the runtime when retrying a cancelled /concept message', async () => {
       const repository = new MemoryConversationRepository()
       const model = new RecordingBlockingOnceModel()
-      const module = new ConversationModule(model, repository)
+      const module = createTestConversationModule(model, repository)
       const { sessionId } = await repository.seedConversation()
 
       await new Promise<void>((resolve) => {
@@ -1284,10 +1280,7 @@ describe('ConversationModule', () => {
           .then(() => undefined)
       })
 
-      expect(model.inputs.map((input) => input.promptKind)).toEqual([
-        'word-concept',
-        'word-concept'
-      ])
+      expect(model.inputs.map((input) => input.purpose)).toEqual(['conversation', 'conversation'])
     })
   })
 
@@ -1358,7 +1351,7 @@ describe('ConversationModule', () => {
         outputLanguage: 'zh-CN',
         targetLanguage: 'en'
       }
-      const module = new ConversationModule(model, repository, () => settings)
+      const module = createTestConversationModule(model, repository, () => settings)
       const { sessionId } = await repository.seedConversation()
 
       await sendUntilTerminal(module, sessionId, 'Hello')
@@ -1383,7 +1376,7 @@ describe('ConversationModule', () => {
         outputLanguage: 'zh-CN',
         targetLanguage: 'en'
       }
-      const module = new ConversationModule(model, repository, () => settings)
+      const module = createTestConversationModule(model, repository, () => settings)
       const { sessionId } = await repository.seedConversation()
 
       const terminal = new Promise<void>((resolve) => {
@@ -1418,7 +1411,7 @@ describe('ConversationModule', () => {
         outputLanguage: 'zh-CN',
         targetLanguage: 'en'
       }
-      const module = new ConversationModule(model, repository, () => settings)
+      const module = createTestConversationModule(model, repository, () => settings)
       const { sessionId } = await repository.seedConversation()
 
       await new Promise<void>((resolve) => {

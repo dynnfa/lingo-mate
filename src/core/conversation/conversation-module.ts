@@ -23,9 +23,9 @@ import type {
 } from '../../shared/conversation'
 import { runConversationSkillInputSchema } from '../../shared/conversation'
 import type { SupportedLocale, TargetLanguage } from '../../shared/preferences'
-import type { LanguageModel, ModelMessage, ReplyPromptKind } from '../llm/language-model'
+import type { LanguageModel, ModelMessage } from '../llm/language-model'
 import { ModelConfigValidationError, ModelNotConfiguredError } from '../llm/model-config'
-import { isWordConceptMessage } from '../prompt/word-concept'
+import { conversationTitleSystemMessage } from '../prompt/conversation-title'
 import { VocabularyError } from '../learning/vocabulary/parse-vocabulary-input'
 import { PhraseError } from '../learning/phrase/parse-phrase-input'
 import { ExplorePhraseError } from '../learning/explore-phrase/explore-phrase-error'
@@ -138,6 +138,7 @@ export class ConversationModule {
   constructor(
     private readonly model: LanguageModel,
     private readonly repository: ConversationRepository,
+    private readonly agentRuntime: AgentRuntime,
     // 每次生成开始时解析当前语言配置并显式传给模型，语言切换不重建本模块。
     private readonly resolveLanguages: () => ConversationLanguages = () => ({
       outputLanguage: 'zh-CN',
@@ -146,8 +147,7 @@ export class ConversationModule {
     // 会话技能按 skillId 注册与分派；新增技能时扩展 ConversationSkill 实现。
     private readonly skills: ReadonlyMap<ConversationSkillId, ConversationSkill> = new Map(),
     private readonly skillRepository?: ConversationSkillRepository,
-    private readonly diagnostics: CoreDiagnostics = noopCoreDiagnostics,
-    private readonly agentRuntime?: AgentRuntime
+    private readonly diagnostics: CoreDiagnostics = noopCoreDiagnostics
   ) {}
 
   async createConversation(): Promise<ConversationSummary> {
@@ -777,8 +777,8 @@ export class ConversationModule {
     try {
       for await (const event of this.model.streamReply({
         messages: [{ role: 'user', content: message.content }],
-        ...active.languages,
-        promptKind: 'conversation-title',
+        systemPrompt: conversationTitleSystemMessage(active.languages.outputLanguage),
+        purpose: 'conversation-title',
         signal
       })) {
         signal.throwIfAborted()
@@ -881,29 +881,14 @@ export class ConversationModule {
 
       const history = await this.withPersistence(() => this.repository.history(sessionId))
       const modelMessages: ModelMessage[] = history.map(({ role, content }) => ({ role, content }))
-      // 本次回复面向会话最后一条消息；仅当它是用户的 /concept 命令消息时
-      // 切换到概念讲解提示词。命令保留在原始消息里，重试路径据此重新应用。
-      const answered = history.at(-1)
-      const promptKind: ReplyPromptKind =
-        answered?.role === 'user' && isWordConceptMessage(answered.content)
-          ? 'word-concept'
-          : 'conversation'
       let response = ''
-
-      const stream = this.agentRuntime
-        ? this.agentRuntime.stream({
-            sessionId,
-            task: promptKind,
-            messages: modelMessages,
-            ...execution.languages,
-            signal: execution.controller.signal
-          })
-        : this.model.streamReply({
-            messages: modelMessages,
-            ...execution.languages,
-            promptKind,
-            signal: execution.controller.signal
-          })
+      const stream = this.agentRuntime.stream({
+        sessionId,
+        task: 'conversation',
+        messages: modelMessages,
+        ...execution.languages,
+        signal: execution.controller.signal
+      })
       for await (const event of stream) {
         if (execution.controller.signal.aborted) break
         if (event.type === 'reasoning') {

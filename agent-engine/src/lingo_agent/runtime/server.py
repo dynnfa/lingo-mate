@@ -8,7 +8,7 @@ from typing import Any
 from langgraph.errors import GraphRecursionError
 
 from lingo_agent.graphs.learning import LimitError, execute
-from lingo_agent.protocol import MAX_FRAME_BYTES, encode_frame, parse_frame
+from lingo_agent.protocol import MAX_FRAME_BYTES, PROTOCOL_VERSION, encode_frame, parse_frame
 
 
 class HostError(Exception):
@@ -29,7 +29,9 @@ class Server:
         self.pending_bytes = 0
 
     async def send(self, kind: str, **payload: Any) -> None:
-        data = encode_frame({"v": 1, "instanceId": self.instance, "type": kind, **payload})
+        data = encode_frame(
+            {"v": PROTOCOL_VERSION, "instanceId": self.instance, "type": kind, **payload}
+        )
         self.pending_bytes += len(data)
         try:
             if self.pending_bytes > 1_048_576:
@@ -100,7 +102,7 @@ class Server:
             if hello["type"] != "hello":
                 raise ValueError("handshake required")
             self.instance = hello["instanceId"]
-            await self.send("ready", capabilities=["conversation", "word-concept", "tool-loop"])
+            await self.send("ready", capabilities=["conversation", "tool-loop"])
             while (line := await incoming.get()) is not None:
                 frame = parse_frame(line)
                 if frame["instanceId"] != self.instance:

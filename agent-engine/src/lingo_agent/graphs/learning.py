@@ -4,6 +4,11 @@ from typing import Any, cast
 
 from langgraph.graph import END, START, StateGraph
 
+from lingo_agent.prompts import (
+    conversation_system_message,
+    is_word_concept_message,
+    word_concept_system_message,
+)
 from lingo_agent.state import LearningState
 
 HostCall = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
@@ -19,7 +24,19 @@ async def execute(run_id: str, snapshot: dict[str, Any], host: HostCall) -> Lear
     def chars(text: str) -> int:
         return len(text.encode("utf-16-le", errors="surrogatepass")) // 2
 
-    context_size = sum(chars(m["content"]) for m in snapshot["messages"]) + 4096
+    system_prompt = ""
+    if snapshot["task"] != "tool-loop":
+        latest = snapshot["messages"][-1]
+        system_prompt = (
+            word_concept_system_message
+            if latest["role"] == "user" and is_word_concept_message(latest["content"])
+            else conversation_system_message
+        )(snapshot["outputLanguage"], snapshot["targetLanguage"])
+        if chars(system_prompt) > 4096:
+            raise LimitError()
+    context_size = sum(chars(m["content"]) for m in snapshot["messages"]) + (
+        4096 if snapshot["task"] == "tool-loop" else chars(system_prompt)
+    )
     if context_size > budget["maxInputChars"]:
         raise LimitError()
 
@@ -35,7 +52,7 @@ async def execute(run_id: str, snapshot: dict[str, Any], host: HostCall) -> Lear
 
     async def reply(state: LearningState) -> dict[str, Any]:
         check(state, "model.reply")
-        result = await host("model.reply", {})
+        result = await host("model.reply", {"systemPrompt": system_prompt})
         if chars(result["text"]) > budget["maxOutputChars"]:
             raise LimitError()
         return {
