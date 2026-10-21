@@ -1,3 +1,6 @@
+import { PythonAgentProcess } from './agent/python-agent-process'
+import { PythonAgentRuntime } from './agent/python-agent-runtime'
+import { resolvePythonAgentLaunch } from './agent/python-agent-launch'
 import {
   VocabularyTransferService,
   TransferError
@@ -96,6 +99,7 @@ import { createExploreVocabularyFeedbackFormatter } from './explore-vocabulary-f
 
 let database: Database.Database | undefined
 let conversationModule: ConversationModule | undefined
+let pythonAgentRuntime: PythonAgentRuntime | undefined
 let disposeVocabularyTransfer: (() => void) | undefined
 let vocabularyPracticeService: VocabularyPracticeService | undefined
 let sentencePracticeService: SentencePracticeService | undefined
@@ -484,13 +488,39 @@ app.whenReady().then(() => {
     [exploreSkill.skillId, exploreSkill],
     [exploreVocabularySkill.skillId, exploreVocabularySkill]
   ])
+  // Internal pilot switch; no executable paths or host permissions come from Renderer.
+  if (process.env['LINGO_MATE_AGENT_RUNTIME'] === 'python') {
+    const agentProcess = new PythonAgentProcess(() => ({
+      ...resolvePythonAgentLaunch({
+        packaged: app.isPackaged,
+        appPath: app.getAppPath(),
+        resourcesPath: process.resourcesPath,
+        appVersion: app.getVersion(),
+        bundledDevelopment: process.env['LINGO_MATE_AGENT_BUNDLE'] === '1'
+      }),
+      onDiagnostic: (error) =>
+        errorLogger.log({
+          source: 'main',
+          module: 'agent',
+          operation: 'process',
+          message: 'Agent process failed',
+          error
+        })
+    }))
+    pythonAgentRuntime = new PythonAgentRuntime(agentProcess, () =>
+      conversationModel instanceof ConfiguredLanguageModel
+        ? conversationModel.snapshot()
+        : conversationModel
+    )
+  }
   conversationModule = new ConversationModule(
     conversationModel,
     conversationRepository,
     resolveLanguages,
     conversationSkills,
     conversationRepository,
-    coreDiagnostics
+    coreDiagnostics,
+    pythonAgentRuntime
   )
   registerConversationIpc(conversationModule, registerTrustedHandler)
 
@@ -512,13 +542,44 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => {
-  conversationModule?.dispose()
+let shutdownStarted = false
+let shutdownComplete = false
+app.on('before-quit', (event) => {
+  if (shutdownComplete) return
+  event.preventDefault()
+  if (shutdownStarted) return
+  shutdownStarted = true
+  const conversationsStopped = conversationModule?.shutdown()
   disposeVocabularyTransfer?.()
   vocabularyPracticeService?.dispose()
   sentencePracticeService?.dispose()
-  database?.close()
-  database = undefined
+  void (async () => {
+    // End the child and abort all host calls before closing repositories/logs.
+    await pythonAgentRuntime?.dispose()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    await Promise.race([
+      conversationsStopped,
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, 3000)
+      })
+    ])
+    clearTimeout(timer)
+  })()
+    .catch((error) => {
+      errorLogger.log({
+        source: 'main',
+        module: 'agent',
+        operation: 'shutdown',
+        message: 'Agent shutdown failed',
+        error
+      })
+    })
+    .finally(() => {
+      database?.close()
+      database = undefined
+      shutdownComplete = true
+      app.quit()
+    })
 })
 
 // 正常退出前有界等待日志队列写完。will-quit 内再次 app.quit() 不会重启

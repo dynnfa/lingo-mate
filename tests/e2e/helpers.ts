@@ -14,15 +14,45 @@ export interface LaunchOptions {
   // 默认使用显式本地模拟模型（LINGO_MATE_MODEL=local）让既有会话用例与真实配置解耦；
   // models 用例传 'remote' 走真实远程适配器。
   model?: 'local' | 'remote'
+  agentRuntime?: 'python'
+  agentBundle?: boolean
+  packaged?: boolean
 }
 
 export async function launchApp(
   userDataPath: string,
   options: LaunchOptions = {}
 ): Promise<ElectronApplication> {
+  const packagedExecutable =
+    process.platform === 'darwin'
+      ? join(
+          process.cwd(),
+          'dist',
+          process.arch === 'arm64' ? 'mac-arm64' : 'mac',
+          'Lingo Mate.app',
+          'Contents/MacOS/Lingo Mate'
+        )
+      : join(
+          process.cwd(),
+          'dist',
+          process.platform === 'win32'
+            ? process.arch === 'arm64'
+              ? 'win-arm64-unpacked'
+              : 'win-unpacked'
+            : process.arch === 'arm64'
+              ? 'linux-arm64-unpacked'
+              : 'linux-unpacked',
+          process.platform === 'win32' ? 'lingo-mate.exe' : 'lingo-mate'
+        )
   return electron.launch({
-    args: [process.cwd(), `--user-data-dir=${userDataPath}`],
-    env: { ...process.env, LINGO_MATE_MODEL: options.model ?? 'local' }
+    ...(options.packaged ? { executablePath: packagedExecutable } : {}),
+    args: [...(options.packaged ? [] : [process.cwd()]), `--user-data-dir=${userDataPath}`],
+    env: {
+      ...process.env,
+      LINGO_MATE_MODEL: options.model ?? 'local',
+      LINGO_MATE_AGENT_RUNTIME: options.agentRuntime ?? 'typescript',
+      LINGO_MATE_AGENT_BUNDLE: options.agentBundle ? '1' : '0'
+    }
   })
 }
 

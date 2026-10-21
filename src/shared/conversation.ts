@@ -191,6 +191,10 @@ export const cancelMessageResultSchema = z.discriminatedUnion('status', [
 const generationEventErrorSchema = z.object({
   code: z.enum([
     'MODEL_ERROR',
+    'AGENT_UNAVAILABLE',
+    'AGENT_PROTOCOL_ERROR',
+    'AGENT_LIMIT',
+    'AGENT_HOST_ERROR',
     'MODEL_NOT_CONFIGURED',
     'CREDENTIAL_DECRYPT_FAILED',
     'TOOL_CALL_NOT_SUPPORTED',

@@ -157,6 +157,75 @@ const unusedCreateClient: CreateLlmClient = (config) =>
   )
 
 describe('ConversationModule', () => {
+  it.each(['Hello', '/concept carry'])(
+    'delegates %s to AgentRuntime while retaining canonical persistence and terminal ownership',
+    async (content) => {
+      const repository = new MemoryConversationRepository()
+      const conversation = await repository.seedConversation()
+      const inputs: unknown[] = []
+      const runtime: import('../../agent/agent-runtime').AgentRuntime = {
+        async *stream(input) {
+          inputs.push(input)
+          yield reasoningEvent('temporary')
+          yield textEvent('graph reply')
+        }
+      }
+      const model = {
+        streamReply: vi.fn(() => {
+          throw new Error('Legacy reply path used')
+        })
+      }
+      const module = new ConversationModule(
+        model,
+        repository,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        runtime
+      )
+      const events: ConversationEvent[] = []
+      const accepted = await module.sendMessage(
+        { requestId: REQUEST_ID, sessionId: conversation.sessionId, text: content },
+        (e) => events.push(e)
+      )
+      await untilTerminal(events)
+      expect(inputs).toHaveLength(1)
+      expect(inputs[0]).toMatchObject({
+        sessionId: conversation.sessionId,
+        task: content.startsWith('/concept') ? 'word-concept' : 'conversation',
+        outputLanguage: 'zh-CN',
+        targetLanguage: 'en'
+      })
+      expect(repository.messages.map((m) => [m.role, m.content])).toEqual([
+        ['user', content],
+        ['assistant', 'graph reply']
+      ])
+      expect(repository.messages[1].id).toBe(accepted.generation.assistantMessageId)
+      expect(
+        events.filter((e) => ['completed', 'cancelled', 'failed'].includes(e.type))
+      ).toHaveLength(1)
+      expect(model.streamReply).not.toHaveBeenCalled()
+    }
+  )
+
+  it('waits for cancelled conversation work before shutdown completes and rejects new work', async () => {
+    const repository = new MemoryConversationRepository()
+    const { sessionId } = await repository.seedConversation()
+    const module = new ConversationModule(new BlockingOnceModel(), repository)
+    const events: ConversationEvent[] = []
+    await module.sendMessage({ requestId: REQUEST_ID, sessionId, text: 'Hello' }, (e) =>
+      events.push(e)
+    )
+    await vi.waitFor(() => expect(events.some((e) => e.type === 'chunk')).toBe(true))
+    await module.shutdown()
+    expect(events.at(-1)?.type).toBe('cancelled')
+    expect(repository.messages).toHaveLength(1)
+    await expect(
+      module.sendMessage({ requestId: OTHER_REQUEST_ID, sessionId, text: 'later' }, () => {})
+    ).rejects.toMatchObject({ code: 'AGENT_UNAVAILABLE' })
+  })
+
   describe('conversation lifecycle', () => {
     it('creates a draft without writing or listing it', async () => {
       const repository = new MemoryConversationRepository()
