@@ -18,6 +18,9 @@ export function createTestConversationModule(
     model,
     repository,
     {
+      runPhrase: async () => {
+        throw new Error('Unused phrase runtime')
+      },
       runVocabulary: async () => {
         throw new Error('Unused vocabulary runtime')
       },

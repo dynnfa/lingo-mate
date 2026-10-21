@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
+    from lingo_agent.graphs.phrase import PhraseState
     from lingo_agent.graphs.vocabulary import VocabularyState
 
 from langgraph.graph import END, START, StateGraph
@@ -25,7 +26,11 @@ class LimitError(Exception):
 
 async def execute(
     run_id: str, snapshot: dict[str, Any], host: HostCall
-) -> LearningState | VocabularyState:
+) -> LearningState | VocabularyState | PhraseState:
+    if snapshot["task"] == "phrase":
+        from lingo_agent.graphs.phrase import execute_phrase
+
+        return await execute_phrase(snapshot, host)
     if snapshot["task"] == "vocabulary":
         from lingo_agent.graphs.vocabulary import execute_vocabulary
 

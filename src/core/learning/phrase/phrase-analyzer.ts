@@ -5,6 +5,7 @@ export interface AnalyzePhraseInput {
   phrase: string
   wordLanguage: 'en'
   explanationLanguage: SupportedLocale
+  systemPrompt: string
   signal: AbortSignal
 }
 export type PhraseAnalysisResult =
@@ -18,3 +19,6 @@ export type PhraseAnalysisResult =
 export interface PhraseAnalyzer {
   analyze(input: AnalyzePhraseInput): Promise<PhraseAnalysisResult>
 }
+
+// Prompt text is generated exclusively by Python.
+export const PHRASE_PROMPT_VERSION = 'phrase-tools-v1' as const

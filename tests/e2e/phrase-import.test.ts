@@ -45,6 +45,37 @@ function readPhraseRows(directory: string): Array<Record<string, string>> {
   }
 }
 
+test('runs /phrase through the frozen Python bundle with localized instructions', async () => {
+  const server = await startPhraseServer()
+  try {
+    await withTempUserData(async (directory) => {
+      await writeLocalePreference(directory, 'zh-CN')
+      await writeModelsConfig(directory, server.baseUrl, 'test-model')
+      const app = await launchApp(directory, { agentBundle: true })
+      try {
+        const window = await app.firstWindow()
+        await waitForReady(window)
+        await submitTypedPhrase(window, 'look forward to\nbreak even\nlook forward to')
+        await expect.poll(() => server.phrases.length, { timeout: 40_000 }).toBe(2)
+        await expect(window.locator('.message.assistant')).toHaveCount(1, { timeout: 40_000 })
+        expect(readPhraseRows(directory).map((row) => row.phrase)).toEqual([
+          'break even',
+          'look forward to'
+        ])
+        expect(server.requests).toHaveLength(2)
+        for (const request of server.requests) {
+          expect(request.messages[0].content).toContain('Simplified Chinese (zh-CN)')
+          expect(request.messages[0].content).toContain('natural English sentence')
+        }
+      } finally {
+        await app.close()
+      }
+    })
+  } finally {
+    await server.close()
+  }
+})
+
 test('submits typed and picked /phrase commands, persists three-field rows, and restores history', async () => {
   const server = await startPhraseServer()
   try {

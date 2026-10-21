@@ -3,7 +3,7 @@
     "name": "valid hello",
     "valid": true,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "type": "hello"
     }
@@ -12,7 +12,7 @@
     "name": "valid ready",
     "valid": true,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "type": "ready",
       "capabilities": ["conversation", "tool-loop"]
@@ -22,7 +22,7 @@
     "name": "valid run",
     "valid": true,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "run",
@@ -52,7 +52,7 @@
     "name": "valid host_call",
     "valid": true,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -67,7 +67,7 @@
     "name": "valid host_result",
     "valid": true,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -81,7 +81,7 @@
     "name": "valid host_error",
     "valid": true,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -93,7 +93,7 @@
     "name": "valid host_chunk",
     "valid": true,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -109,7 +109,7 @@
     "name": "valid event",
     "valid": true,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "event",
@@ -124,7 +124,7 @@
     "name": "valid cancel",
     "valid": true,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "cancel"
@@ -134,7 +134,7 @@
     "name": "valid result",
     "valid": true,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "result",
@@ -145,7 +145,7 @@
     "name": "valid error",
     "valid": true,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "error",
@@ -156,7 +156,7 @@
     "name": "valid cancelled",
     "valid": true,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "cancelled"
@@ -166,7 +166,7 @@
     "name": "valid shutdown",
     "valid": true,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "type": "shutdown"
     }
@@ -175,7 +175,7 @@
     "name": "valid shutdown_ack",
     "valid": true,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "type": "shutdown_ack"
     }
@@ -193,7 +193,7 @@
     "name": "invalid 1",
     "valid": false,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "type": "hello",
       "apiKey": "forbidden"
@@ -203,7 +203,7 @@
     "name": "invalid 2",
     "valid": false,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "run",
@@ -233,7 +233,7 @@
     "name": "invalid 3",
     "valid": false,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -246,7 +246,7 @@
     "name": "invalid 4",
     "valid": false,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -261,7 +261,7 @@
     "name": "invalid 5",
     "valid": false,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -273,7 +273,7 @@
     "name": "invalid 6",
     "valid": false,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -289,7 +289,7 @@
     "name": "invalid 7",
     "valid": false,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "event",
@@ -304,7 +304,7 @@
     "name": "invalid 8",
     "valid": false,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "",
       "type": "cancel"
@@ -314,7 +314,7 @@
     "name": "invalid 9",
     "valid": false,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "result",
@@ -325,7 +325,7 @@
     "name": "invalid 10",
     "valid": false,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "type": "host_call"
     }
@@ -334,7 +334,7 @@
     "name": "invalid 11",
     "valid": false,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": null,
       "type": "hello"
     }
@@ -343,7 +343,7 @@
     "name": "invalid 12",
     "valid": false,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "run",
@@ -373,7 +373,7 @@
     "name": "missing prompt",
     "valid": false,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -386,7 +386,7 @@
     "name": "empty prompt",
     "valid": false,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -401,7 +401,7 @@
     "name": "oversized prompt",
     "valid": false,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -416,7 +416,7 @@
     "name": "UTF-16 oversized prompt",
     "valid": false,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -431,7 +431,7 @@
     "name": "unexpected override",
     "valid": false,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -456,7 +456,7 @@
     "name": "external word-concept task removed",
     "valid": false,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "run",
@@ -495,7 +495,7 @@
     "name": "vocabulary prepare",
     "valid": true,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -514,7 +514,7 @@
         "inputIndex": 0,
         "systemPrompt": "Explain in English."
       },
-      "v": 3,
+      "v": 4,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c"
@@ -524,7 +524,7 @@
     "name": "vocabulary prepared items",
     "valid": true,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -544,7 +544,7 @@
     "name": "vocabulary safe receipt",
     "valid": true,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -559,7 +559,7 @@
     "name": "vocabulary safe failure",
     "valid": true,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -575,7 +575,7 @@
     "name": "vocabulary completion",
     "valid": true,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "p",
       "runId": "r",
       "type": "vocabulary_result",
@@ -594,7 +594,7 @@
         "inputIndex": 20,
         "systemPrompt": "Explain in English."
       },
-      "v": 3,
+      "v": 4,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c"
@@ -611,7 +611,7 @@
         "systemPrompt": "Explain in English.",
         "term": "forged"
       },
-      "v": 3,
+      "v": 4,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c"
@@ -628,7 +628,7 @@
         "systemPrompt": "Explain in English.",
         "executionId": "outer"
       },
-      "v": 3,
+      "v": 4,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c"
@@ -644,7 +644,7 @@
         "inputIndex": 0,
         "systemPrompt": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
       },
-      "v": 3,
+      "v": 4,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c"
@@ -654,7 +654,7 @@
     "name": "vocabulary rejects private error details",
     "valid": false,
     "frame": {
-      "v": 3,
+      "v": 4,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -665,6 +665,191 @@
         "code": "UNRECOGNIZED",
         "cause": "private"
       }
+    }
+  },
+  {
+    "name": "phrase prepare",
+    "valid": true,
+    "frame": {
+      "v": 4,
+      "instanceId": "p",
+      "runId": "r",
+      "callId": "r:c",
+      "type": "host_call",
+      "operation": "phrase.prepare",
+      "args": {}
+    }
+  },
+  {
+    "name": "phrase model call",
+    "valid": true,
+    "frame": {
+      "type": "host_call",
+      "operation": "model.phrase",
+      "args": {
+        "inputIndex": 0,
+        "systemPrompt": "Explain in English."
+      },
+      "v": 4,
+      "instanceId": "p",
+      "runId": "r",
+      "callId": "r:c"
+    }
+  },
+  {
+    "name": "phrase prepared items",
+    "valid": true,
+    "frame": {
+      "v": 4,
+      "instanceId": "p",
+      "runId": "r",
+      "callId": "r:c",
+      "type": "host_result",
+      "result": {
+        "items": [
+          {
+            "inputIndex": 0,
+            "phrase": "apple",
+            "status": "pending"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "phrase safe receipt",
+    "valid": true,
+    "frame": {
+      "v": 4,
+      "instanceId": "p",
+      "runId": "r",
+      "callId": "r:c",
+      "type": "host_result",
+      "result": {
+        "inputIndex": 0,
+        "status": "staged"
+      }
+    }
+  },
+  {
+    "name": "phrase safe failure",
+    "valid": true,
+    "frame": {
+      "v": 4,
+      "instanceId": "p",
+      "runId": "r",
+      "callId": "r:c",
+      "type": "host_result",
+      "result": {
+        "inputIndex": 0,
+        "status": "failed",
+        "code": "UNRECOGNIZED"
+      }
+    }
+  },
+  {
+    "name": "phrase completion",
+    "valid": true,
+    "frame": {
+      "v": 4,
+      "instanceId": "p",
+      "runId": "r",
+      "type": "phrase_result",
+      "result": {
+        "completedIndices": [0]
+      }
+    }
+  },
+  {
+    "name": "phrase rejects out of range index",
+    "valid": false,
+    "frame": {
+      "type": "host_call",
+      "operation": "model.phrase",
+      "args": {
+        "inputIndex": 20,
+        "systemPrompt": "Explain in English."
+      },
+      "v": 4,
+      "instanceId": "p",
+      "runId": "r",
+      "callId": "r:c"
+    }
+  },
+  {
+    "name": "phrase rejects term override",
+    "valid": false,
+    "frame": {
+      "type": "host_call",
+      "operation": "model.phrase",
+      "args": {
+        "inputIndex": 0,
+        "systemPrompt": "Explain in English.",
+        "phrase": "forged"
+      },
+      "v": 4,
+      "instanceId": "p",
+      "runId": "r",
+      "callId": "r:c"
+    }
+  },
+  {
+    "name": "phrase rejects outer execution identity",
+    "valid": false,
+    "frame": {
+      "type": "host_call",
+      "operation": "model.phrase",
+      "args": {
+        "inputIndex": 0,
+        "systemPrompt": "Explain in English.",
+        "executionId": "outer"
+      },
+      "v": 4,
+      "instanceId": "p",
+      "runId": "r",
+      "callId": "r:c"
+    }
+  },
+  {
+    "name": "phrase rejects UTF16 prompt overflow",
+    "valid": false,
+    "frame": {
+      "type": "host_call",
+      "operation": "model.phrase",
+      "args": {
+        "inputIndex": 0,
+        "systemPrompt": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+      },
+      "v": 4,
+      "instanceId": "p",
+      "runId": "r",
+      "callId": "r:c"
+    }
+  },
+  {
+    "name": "phrase rejects private error details",
+    "valid": false,
+    "frame": {
+      "v": 4,
+      "instanceId": "p",
+      "runId": "r",
+      "callId": "r:c",
+      "type": "host_result",
+      "result": {
+        "inputIndex": 0,
+        "status": "failed",
+        "code": "UNRECOGNIZED",
+        "cause": "private"
+      }
+    }
+  },
+  {
+    "name": "rejects previous v3 runtime",
+    "valid": false,
+    "frame": {
+      "v": 3,
+      "instanceId": "p",
+      "type": "hello"
     }
   }
 ]

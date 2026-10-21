@@ -6,6 +6,9 @@ import {
   type VocabularyPrepared,
   type VocabularyAnalysisReceipt,
   type VocabularyCompletion,
+  type PhrasePrepared,
+  type PhraseAnalysisReceipt,
+  type PhraseCompletion,
   type AgentSnapshot
 } from './agent-protocol'
 
@@ -43,7 +46,23 @@ export interface VocabularyAgentRunInput {
 export interface VocabularyAgentRuntime {
   runVocabulary(input: VocabularyAgentRunInput, host: VocabularyHostOperations): Promise<void>
 }
-export interface AgentRuntime extends VocabularyAgentRuntime {
+export interface PhraseHostOperations {
+  prepare(): PhrasePrepared | Promise<PhrasePrepared>
+  analyze(
+    args: { inputIndex: number; systemPrompt: string },
+    signal: AbortSignal
+  ): Promise<PhraseAnalysisReceipt>
+  verifyCompletion(result: PhraseCompletion): void
+}
+export interface PhraseAgentRunInput {
+  outputLanguage: string
+  targetLanguage: string
+  signal: AbortSignal
+}
+export interface PhraseAgentRuntime {
+  runPhrase(input: PhraseAgentRunInput, host: PhraseHostOperations): Promise<void>
+}
+export interface AgentRuntime extends VocabularyAgentRuntime, PhraseAgentRuntime {
   stream(input: AgentRunInput): AsyncIterable<ModelStreamEvent>
 }
 export class AgentRuntimeError extends Error {
@@ -59,11 +78,14 @@ export class AgentRuntimeError extends Error {
 // Reserve space for the fixed host prompt/operation definitions. Persisted history
 // is never edited; only this execution's copied context is trimmed.
 export function createAgentSnapshot(input: AgentTask): AgentSnapshot {
-  if (input.task === 'vocabulary')
+  if (input.task === 'vocabulary' || input.task === 'phrase')
     return agentSnapshotSchema.parse({
       ...input,
       budget: { ...DEFAULT_AGENT_BUDGET, timeoutMs: 180_000, maxModelCalls: 20, maxSteps: 32 },
-      allowedOperations: ['vocabulary.prepare', 'model.vocabulary']
+      allowedOperations:
+        input.task === 'phrase'
+          ? ['phrase.prepare', 'model.phrase']
+          : ['vocabulary.prepare', 'model.vocabulary']
     })
   let remaining = DEFAULT_AGENT_BUDGET.maxInputChars - 4096
   const messages: ModelMessage[] = []
