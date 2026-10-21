@@ -1,5 +1,5 @@
 import { CONVERSATION_TITLE_MAX_LENGTH } from '../../shared/conversation'
-import { languageName } from './conversation-prompt'
+import { languageName } from './language-name'
 
 export function conversationTitleSystemMessage(outputLanguage: string): string {
   return [

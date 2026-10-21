@@ -4,13 +4,13 @@
 
 Lingo Mate 是一个桌面端语言学习助手 Agent。它通过对话、记忆和大语言模型能力，为用户提供持续、个性化的语言学习体验。
 
-技术栈为 Electron、React、TypeScript，以及用于可选 Agent 编排的 Python / LangGraph，并使用三层架构：
+技术栈为 Electron、React、TypeScript，以及负责 Agent 策略与编排的 Python / LangGraph，并使用三层架构：
 
 1. Electron 桌面运行层
 2. React 用户界面层
-3. Agent Engine 核心能力层（TypeScript 领域能力与可选 Python 编排）
+3. Agent Engine 核心能力层（Python 策略与编排、TypeScript 宿主能力）
 
-默认使用 TypeScript 执行路径；通过内部环境开关 `LINGO_MATE_AGENT_RUNTIME=python` 启用 Python 试点，目前仅接入普通对话与 `/concept`。启用后的启动、协议或执行故障必须明确失败，不得静默回退或重放失败请求。架构边界见 [Python Agent ADR](docs/adr/2026-10-21-python-langgraph-agent-engine.md)。
+Python 是唯一 Agent 运行时；普通对话与 `/concept` 始终经过 Python，任务识别、Prompt 与执行流程由 Python 持有。未来新增 Agent 策略和工作流统一在 `agent-engine/` 实现，TypeScript 不再维护并行 Agent 执行路径。现有显式技能、标题及练习暂沿用 TS 实现，后续迁移。启动、协议或执行故障必须明确失败，不得静默回退或重放失败请求。架构边界见 [Python Agent ADR](docs/adr/2026-10-21-python-langgraph-agent-engine.md)。
 
 ## 目录职责
 
@@ -18,12 +18,12 @@ Lingo Mate 是一个桌面端语言学习助手 Agent。它通过对话、记忆
 src/
 ├── main/           # Electron 主进程；agent/ 负责 Python 子进程与通信适配
 ├── preload/        # IPC Bridge，Renderer 与 Main 之间的安全桥接层
-├── core/           # Agent Engine 核心逻辑
-│   ├── agent/      # Agent 调度、执行循环与生命周期
+├── core/           # TypeScript 领域与可信宿主能力
+│   ├── agent/      # AgentRuntime 接口、宿主安全校验与跨语言协议
 │   ├── llm/        # 模型客户端、模型配置与流式响应
 │   ├── memory/     # 规划模块，尚未实现：长期学习记忆与检索
 │   ├── tools/      # Agent 工具定义与执行
-│   ├── prompt/     # Prompt 模板、组装与版本管理
+│   ├── prompt/     # 尚未迁移的技能、标题及练习 Prompt
 │   ├── learning/   # 语言学习领域逻辑
 │   └── conversation/ # 会话模型、消息流与上下文组装
 ├── database/       # SQLite schema、迁移、连接与数据访问
@@ -32,7 +32,7 @@ src/
 ```
 
 ```text
-agent-engine/       # Python / LangGraph 内存编排，不持有业务存储与模型凭据
+agent-engine/       # 唯一 Agent 策略、Prompt 与 LangGraph 编排，不持有业务存储与模型凭据
 ├── src/lingo_agent/ # 图、运行状态、JSONL 协议与运行服务
 └── build/          # PyInstaller 运行包构建与烟测
 ```
@@ -82,15 +82,15 @@ hook 文件统一使用 camelCase 命名，且文件名与导出的 hook 函数�
 
 ### `src/core`
 
-负责与界面无关的 Agent Engine 和语言学习业务逻辑，按以下领域拆分：
+负责与界面无关的可信宿主能力和语言学习业务逻辑，按以下领域拆分：
 
 ```text
 src/core/
 ├── agent/          # AgentRuntime、宿主能力与跨语言协议契约
-├── llm/            # 模型客户端、提示词和流式响应
+├── llm/            # 模型配置、传输适配和流式响应
 ├── memory/         # 规划模块，尚未实现：长期学习记忆与检索
 ├── tools/          # Agent 工具定义与执行
-├── prompt/         # Prompt 模板、组装与版本管理
+├── prompt/         # 尚未迁移的技能、标题及练习 Prompt
 ├── learning/       # 语言学习领域逻辑
 └── conversation/   # 会话模型、消息流和上下文组装
 ```
@@ -101,11 +101,11 @@ src/core/
 
 ### `agent-engine`
 
-负责独立 Python 子进程中的 LangGraph 图、单次运行的内存状态与有界编排。会话生命周期、学习领域规则、模型适配、凭据、供应商请求、取消、用量统计及持久化继续由 TypeScript 宿主持有；Python 通过受控宿主调用复用能力，不直接请求模型供应商或访问业务数据库，不启用 checkpoint 或跨运行 Store。
+负责独立 Python 子进程中的 Agent 任务识别、Prompt、工具决策、LangGraph 图、单次运行的内存状态与有界编排。会话生命周期、学习领域规则、模型适配、凭据、供应商请求、取消、用量统计及持久化继续由 TypeScript 宿主持有；Python 生成完整系统指令，通过受控宿主调用复用能力，不直接请求模型供应商或访问业务数据库，不启用 checkpoint 或跨运行 Store。
 
 - Main 使用固定可执行路径、`shell: false` 和环境白名单启动进程；Renderer 不得指定命令、路径或环境。生产运行包不依赖系统 Python、uv 或 PATH。
 - Main 与 Python 通过私有 UTF-8 JSONL 管道通信，stdout 专用于协议；stderr 仅由 Main 有界接收并写入本地诊断日志，不进入 Renderer 或控制台。
-- Python 不得接收 API Key、数据库连接信息或外层会话/消息 ID；宿主调用必须经过白名单、运行归属及预算校验。生产目前仅开放 `model.reply`；测试扩展不等于生产授权。
+- Python 不得接收 API Key、数据库连接信息或外层会话/消息 ID；宿主调用必须经过白名单、运行归属及预算校验。生产目前仅开放携带 `systemPrompt` 的 `model.reply`；Prompt 上限为 4096 个 UTF-16 单元，宿主与 Python 均校验实际 Prompt 加历史的输入预算。测试扩展不等于生产授权。
 - 协议唯一来源为 `src/core/agent/agent-protocol.ts` 中的 Zod schema。`agent-engine/src/lingo_agent/protocol/schema.json` 为生成物，不得手改；协议变更需同步共享契约用例，破坏性变更还需提升协议版本、同步握手与运行包 manifest 并重建运行包。
 
 开发环境、协议演进、构建与分发细节见 [Agent Engine README](agent-engine/README.md)。
@@ -134,7 +134,7 @@ React Renderer -> Preload API -> Electron Main -> TypeScript Core
 - Preload 只定义安全边界和数据传输，不实现业务逻辑。
 - Main 负责调用、生命周期和进程间编排。
 - Core 保存可复用、可测试的领域逻辑，不依赖 UI。
-- Python 仅负责受控编排，不成为模型凭据、业务事务或持久化状态的所有者。
+- Python 持有 Agent 策略、Prompt 与受控编排，不成为模型凭据、业务事务或持久化状态的所有者。
 - Database 提供 SQLite 基础设施和数据访问实现，不依赖 Renderer。
 - Shared 仅承载跨层类型与协议，不承载高权限实现或业务逻辑。
 - 跨边界传输的数据必须可序列化，并使用明确的 TypeScript 类型；外部输入应使用 Zod 等方式校验。
@@ -150,7 +150,7 @@ React Renderer -> Preload API -> Electron Main -> TypeScript Core
 - 对真实用户数据库执行迁移或变更持久化用户数据前，必须先询问用户，再根据用户意见决定是否执行。编写迁移代码、使用可丢弃的临时数据库测试本身不要求提前确认，但不得因此打开或升级真实用户数据库；开发启动或验证命令也不能绕过这一要求。
 - 流式对话需要支持完成、失败和取消状态，避免 UI 永久停留在生成中。
 - 错误应在产生处保留原因，在进程边界转换为对用户安全、可理解的错误结构。
-- 新增 Agent 能力时，领域规则、模型适配与仓储接口优先扩展 `src/core`，LangGraph 图与编排扩展 `agent-engine/`，由 Main 装配并通过 Preload 接入 UI。
+- 新增 Agent 能力时，任务识别、Prompt、工具决策及执行流程统一扩展 `agent-engine/`；领域校验、模型传输、权限与仓储接口扩展 `src/core`，由 Main 装配并通过 Preload 接入 UI。不得新增 TS Agent 直跑或回退分支。
 - 完成 `docs/plans/` 下某份 plan 文档中的全部计划工作及相关验证后，必须将该文档的状态更新为“已实施”；若文档尚无状态字段，则补充 `状态：已实施`。
 
 ### 测试驱动开发

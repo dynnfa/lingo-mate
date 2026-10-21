@@ -3,7 +3,7 @@
     "name": "valid hello",
     "valid": true,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "type": "hello"
     }
@@ -12,21 +12,17 @@
     "name": "valid ready",
     "valid": true,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "type": "ready",
-      "capabilities": [
-        "conversation",
-        "word-concept",
-        "tool-loop"
-      ]
+      "capabilities": ["conversation", "tool-loop"]
     }
   },
   {
     "name": "valid run",
     "valid": true,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "run",
@@ -40,9 +36,7 @@
         ],
         "outputLanguage": "zh-CN",
         "targetLanguage": "en",
-        "allowedOperations": [
-          "model.reply"
-        ],
+        "allowedOperations": ["model.reply"],
         "budget": {
           "timeoutMs": 1000,
           "maxModelCalls": 1,
@@ -58,20 +52,22 @@
     "name": "valid host_call",
     "valid": true,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
       "type": "host_call",
       "operation": "model.reply",
-      "args": {}
+      "args": {
+        "systemPrompt": "Reply in English."
+      }
     }
   },
   {
     "name": "valid host_result",
     "valid": true,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -85,7 +81,7 @@
     "name": "valid host_error",
     "valid": true,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -97,7 +93,7 @@
     "name": "valid host_chunk",
     "valid": true,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -113,7 +109,7 @@
     "name": "valid event",
     "valid": true,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "event",
@@ -128,7 +124,7 @@
     "name": "valid cancel",
     "valid": true,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "cancel"
@@ -138,7 +134,7 @@
     "name": "valid result",
     "valid": true,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "result",
@@ -149,7 +145,7 @@
     "name": "valid error",
     "valid": true,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "error",
@@ -160,7 +156,7 @@
     "name": "valid cancelled",
     "valid": true,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "cancelled"
@@ -170,7 +166,7 @@
     "name": "valid shutdown",
     "valid": true,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "type": "shutdown"
     }
@@ -179,7 +175,7 @@
     "name": "valid shutdown_ack",
     "valid": true,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "type": "shutdown_ack"
     }
@@ -188,7 +184,7 @@
     "name": "invalid 0",
     "valid": false,
     "frame": {
-      "v": 2,
+      "v": 99,
       "instanceId": "process-1",
       "type": "hello"
     }
@@ -197,7 +193,7 @@
     "name": "invalid 1",
     "valid": false,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "type": "hello",
       "apiKey": "forbidden"
@@ -207,7 +203,7 @@
     "name": "invalid 2",
     "valid": false,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "run",
@@ -221,9 +217,7 @@
         ],
         "outputLanguage": "zh-CN",
         "targetLanguage": "en",
-        "allowedOperations": [
-          "sendMessage"
-        ],
+        "allowedOperations": ["sendMessage"],
         "budget": {
           "timeoutMs": 1000,
           "maxModelCalls": 1,
@@ -239,7 +233,7 @@
     "name": "invalid 3",
     "valid": false,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -252,7 +246,7 @@
     "name": "invalid 4",
     "valid": false,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -267,7 +261,7 @@
     "name": "invalid 5",
     "valid": false,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -279,7 +273,7 @@
     "name": "invalid 6",
     "valid": false,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -295,7 +289,7 @@
     "name": "invalid 7",
     "valid": false,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "event",
@@ -310,7 +304,7 @@
     "name": "invalid 8",
     "valid": false,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "runId": "",
       "type": "cancel"
@@ -320,7 +314,7 @@
     "name": "invalid 9",
     "valid": false,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "result",
@@ -331,7 +325,7 @@
     "name": "invalid 10",
     "valid": false,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "type": "host_call"
     }
@@ -340,7 +334,7 @@
     "name": "invalid 11",
     "valid": false,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": null,
       "type": "hello"
     }
@@ -349,7 +343,7 @@
     "name": "invalid 12",
     "valid": false,
     "frame": {
-      "v": 1,
+      "v": 2,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "run",
@@ -363,14 +357,125 @@
         ],
         "outputLanguage": "zh-CN",
         "targetLanguage": "en",
-        "allowedOperations": [
-          "model.reply"
-        ],
+        "allowedOperations": ["model.reply"],
         "budget": {
           "timeoutMs": 1000,
           "maxModelCalls": 1,
           "maxToolCalls": 0,
           "maxSteps": 1000,
+          "maxInputChars": 4096,
+          "maxOutputChars": 100
+        }
+      }
+    }
+  },
+  {
+    "name": "missing prompt",
+    "valid": false,
+    "frame": {
+      "v": 2,
+      "instanceId": "process-1",
+      "runId": "run-1",
+      "callId": "run-1:call-1",
+      "type": "host_call",
+      "operation": "model.reply",
+      "args": {}
+    }
+  },
+  {
+    "name": "empty prompt",
+    "valid": false,
+    "frame": {
+      "v": 2,
+      "instanceId": "process-1",
+      "runId": "run-1",
+      "callId": "run-1:call-1",
+      "type": "host_call",
+      "operation": "model.reply",
+      "args": {
+        "systemPrompt": ""
+      }
+    }
+  },
+  {
+    "name": "oversized prompt",
+    "valid": false,
+    "frame": {
+      "v": 2,
+      "instanceId": "process-1",
+      "runId": "run-1",
+      "callId": "run-1:call-1",
+      "type": "host_call",
+      "operation": "model.reply",
+      "args": {
+        "systemPrompt": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+    }
+  },
+  {
+    "name": "UTF-16 oversized prompt",
+    "valid": false,
+    "frame": {
+      "v": 2,
+      "instanceId": "process-1",
+      "runId": "run-1",
+      "callId": "run-1:call-1",
+      "type": "host_call",
+      "operation": "model.reply",
+      "args": {
+        "systemPrompt": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+      }
+    }
+  },
+  {
+    "name": "unexpected override",
+    "valid": false,
+    "frame": {
+      "v": 2,
+      "instanceId": "process-1",
+      "runId": "run-1",
+      "callId": "run-1:call-1",
+      "type": "host_call",
+      "operation": "model.reply",
+      "args": {
+        "systemPrompt": "English",
+        "query": "override"
+      }
+    }
+  },
+  {
+    "name": "legacy v1 handshake",
+    "valid": false,
+    "frame": {
+      "v": 1,
+      "instanceId": "process-1",
+      "type": "hello"
+    }
+  },
+  {
+    "name": "external word-concept task removed",
+    "valid": false,
+    "frame": {
+      "v": 2,
+      "instanceId": "process-1",
+      "runId": "run-1",
+      "type": "run",
+      "snapshot": {
+        "task": "word-concept",
+        "messages": [
+          {
+            "role": "user",
+            "content": "你好"
+          }
+        ],
+        "outputLanguage": "zh-CN",
+        "targetLanguage": "en",
+        "allowedOperations": ["model.reply"],
+        "budget": {
+          "timeoutMs": 1000,
+          "maxModelCalls": 1,
+          "maxToolCalls": 0,
+          "maxSteps": 4,
           "maxInputChars": 4096,
           "maxOutputChars": 100
         }

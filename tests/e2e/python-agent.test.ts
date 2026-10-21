@@ -21,7 +21,7 @@ function childPid(parent: number): number | undefined {
 }
 
 for (const target of ['development', 'bundled', 'packaged']) {
-  test(`Python pilot ${target}: stream, concept, cancel, crash, retry and exit`, async () => {
+  test(`Python default ${target}: stream, concept, cancel, crash, retry and exit`, async () => {
     test.setTimeout(90_000)
     test.skip(
       target === 'packaged' && process.env['LINGO_MATE_TEST_PACKAGED'] !== '1',
@@ -30,7 +30,6 @@ for (const target of ['development', 'bundled', 'packaged']) {
     await withTempUserData(async (userData) => {
       await writeLocalePreference(userData, 'zh-CN')
       const app = await launchApp(userData, {
-        agentRuntime: 'python',
         agentBundle: target === 'bundled',
         packaged: target === 'packaged'
       })

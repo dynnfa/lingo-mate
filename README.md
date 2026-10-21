@@ -18,7 +18,7 @@ Lingo Mate currently supports learning English, with an interface available in S
 - **Bring your own model:** Configure OpenAI-compatible or Gemini endpoints with a Base URL, Model ID, and API key. Save and switch between multiple configurations and test their connections.
 - **Token usage statistics:** Review today's and this week's input, output, and total token usage and request counts. Charts show trends for the last 30 days and eight weeks. Completeness depends on the usage data returned by the model provider.
 
-The app is built with Electron, React, and TypeScript, and stores conversations and learning records locally in SQLite. An optional Python / LangGraph subprocess handles in-memory Agent orchestration for ordinary conversations and `/concept`; domain logic, model requests, credentials, storage, and usage accounting remain in the TypeScript host. TypeScript is the default execution path. See the [Agent architecture decision](docs/adr/2026-10-21-python-langgraph-agent-engine.md).
+The app is built with Electron, React, and TypeScript, and stores conversations and learning records locally in SQLite. Python / LangGraph is the sole Agent runtime for ordinary conversations and `/concept`, owning command routing, prompts, and in-memory orchestration. Model transport, credentials, storage, usage accounting, and trusted domain validation remain in the TypeScript host. Existing explicit skills, titles, and practice tasks remain in TypeScript pending later migration; new Agent strategies and workflows belong in Python. See the [Agent architecture decision](docs/adr/2026-10-21-python-langgraph-agent-engine.md).
 
 ## Recommended IDE Setup
 
@@ -26,7 +26,7 @@ The app is built with Electron, React, and TypeScript, and stores conversations 
 
 ## Project Setup
 
-Run the following commands from the repository root. Development and validation require pnpm, Node.js 22.6+, uv, and Python 3.13.3, as pinned in `agent-engine/.python-version`. Full tests and desktop packaging use the Python environment even when the optional runtime is disabled.
+Run the following commands from the repository root. Development and validation require pnpm, Node.js 22.6+, uv, and Python 3.13.3, as pinned in `agent-engine/.python-version`. Development, full tests, and desktop packaging require the locked Python environment.
 
 ### Install
 
@@ -41,13 +41,7 @@ $ pnpm agent:sync
 $ pnpm dev
 ```
 
-To enable the internal Python pilot on macOS or Linux:
-
-```bash
-$ LINGO_MATE_AGENT_RUNTIME=python pnpm dev
-```
-
-In PowerShell, set `$env:LINGO_MATE_AGENT_RUNTIME='python'` before running `pnpm dev`. Once enabled, startup, protocol, or execution failures return an error without silently falling back or replaying the failed request. See the [Agent Engine guide](agent-engine/README.md) for environment setup and troubleshooting.
+Ordinary conversations and `/concept` always run through Python, including when using the local development model. The subprocess starts on the first Agent request. Startup, protocol, or execution failures return an error without silently falling back or replaying the failed request. See the [Agent Engine guide](agent-engine/README.md) for setup and troubleshooting.
 
 ### Validation
 
