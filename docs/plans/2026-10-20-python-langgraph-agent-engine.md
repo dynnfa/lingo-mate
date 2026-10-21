@@ -21,19 +21,21 @@
 
 首版聚焦架构与运行链路。自然语言自动收藏、跨技能写入流程、长期学习记忆、持久化 checkpoint、多 Agent 协作和 Telegram 接入列为后续方向，不属于本文首版完成条件。现有显式学习技能和渠道能力继续走原有路径。
 
-## 当前代码基线与设计取舍
+## 实施前代码基线与设计取舍
 
-| 当前实现                                                                                                        | 本计划中的处理                                                                       |
-| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `src/core/conversation/conversation-module.ts` 管理会话、消息身份、会话互斥、流式终态和技能恢复                 | 保留其会话职责，通过依赖注入接入 Agent 执行接口；不把整个模块迁移到 Python           |
-| `src/core/conversation/conversation-skill.ts` 提供领域技能执行、报告和反馈接口                                  | 作为后续工具复用基础；不把外层会话方法当作图工具                                     |
-| `src/core/llm/llm-client.ts`、`src/main/llm-client-factory.ts` 负责模型通信、超时、取消、用量账本和密钥脱敏登记 | 继续作为实际模型请求入口，Python 不自行请求供应商                                    |
-| `src/core/llm/language-model.ts` 目前仅提供文本流 Interface                                                     | 文本生成可直接适配；模型决策与工具调用需补充独立的受控宿主操作，不能假定原接口已支持 |
-| 学习模块、工具执行器、SQLite 仓储和 JSON 历史已有校验与提交语义                                                 | 保留 TypeScript 实现与事务归属；不让 Python 直接操作业务存储                         |
-| `src/core/channels/` 已有绑定、确认、队列、幂等、outbox 和恢复政策                                              | 首版不接入，避免改变渠道的授权与恢复语义                                             |
-| `electron-builder.yml` 尚无 Python 运行包构建流程                                                               | 新增按操作系统及 CPU 架构分发的运行包与安装后验证                                    |
+下表记录本次建设的接入背景与设计取舍；当前落地情况见文末实施记录，运行及验证流程见 [Agent Engine README](../../agent-engine/README.md)。聊天平台接入仍为独立待实施计划，不代表已有渠道模块。
 
-`docs/architecture-todo.md` 曾将“不引入通用 Agent 框架”作为架构改进范围。本计划针对新增跨语言 Agent 编排模块重审该范围；实施时记录 ADR，说明采用 Python LangGraph 的目标、职责与成本，不把旧清单直接改成已完成。
+| 当前实现                                                                                                                                      | 本计划中的处理                                                                       |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `src/core/conversation/conversation-module.ts` 管理会话、消息身份、会话互斥、流式终态和技能恢复                                               | 保留其会话职责，通过依赖注入接入 Agent 执行接口；不把整个模块迁移到 Python           |
+| `src/core/conversation/conversation-skill.ts` 提供领域技能执行、报告和反馈接口                                                                | 作为后续工具复用基础；不把外层会话方法当作图工具                                     |
+| `src/core/llm/llm-client.ts`、`src/main/llm-client-factory.ts` 负责模型通信、超时、取消、用量账本和密钥脱敏登记                               | 继续作为实际模型请求入口，Python 不自行请求供应商                                    |
+| `src/core/llm/language-model.ts` 目前仅提供文本流 Interface                                                                                   | 文本生成可直接适配；模型决策与工具调用需补充独立的受控宿主操作，不能假定原接口已支持 |
+| 学习模块、工具执行器、SQLite 仓储和 JSON 历史已有校验与提交语义                                                                               | 保留 TypeScript 实现与事务归属；不让 Python 直接操作业务存储                         |
+| [聊天平台接入计划](2026-09-11-chat-platform-integration.md) 规划绑定、确认、队列、幂等、outbox 和恢复政策，当前尚无 `src/core/channels/` 实现 | 首版不接入，后续渠道实现应保持独立的授权与恢复语义                                   |
+| `electron-builder.yml` 尚无 Python 运行包构建流程                                                                                             | 新增按操作系统及 CPU 架构分发的运行包与安装后验证                                    |
+
+历史架构清单（原路径 `docs/architecture-todo.md`，当前仓库已不包含）曾将“不引入通用 Agent 框架”作为架构改进范围。本计划针对新增跨语言 Agent 编排模块重审该范围；已在 [Python Agent ADR](../adr/2026-10-21-python-langgraph-agent-engine.md) 记录采用 Python LangGraph 的目标、职责与成本。历史清单仅作为决策背景，不作为当前约定或验收入口。
 
 ## 总体架构
 
@@ -251,7 +253,7 @@ pnpm build
 pnpm test:electron
 ```
 
-Python 模块补充锁定环境下的测试、静态检查与生产包构建命令，并接入持续集成；具体工具配置在步骤 1 固定。只通过 TypeScript 测试不代表 Python 模块已通过验收。
+全量测试前先运行 `pnpm agent:sync` 准备锁定的 Python 环境。Python 检查命令已落地为 `pnpm agent:protocol`、`pnpm agent:test` 和 `pnpm agent:check`，运行包验证为 `pnpm agent:build`、`pnpm agent:smoke`；跨平台持续集成配置见 `.github/workflows/agent-engine.yml`。具体执行方式与安装布局验证见 [Agent Engine README](../../agent-engine/README.md)。只通过 TypeScript 测试不代表 Python 模块已通过验收，存在 CI 配置也不代表对应平台已经通过。
 
 ## 后续方向（不计入首版完成条件）
 
@@ -267,7 +269,7 @@ Python 模块补充锁定环境下的测试、静态检查与生产包构建命�
 - [LangGraph 持久化与记忆职责](https://docs.langchain.com/oss/python/langgraph/persistence)
 - [Node 子进程与管道](https://nodejs.org/api/child_process.html)
 - [PyInstaller 分发方式](https://pyinstaller.org/en/stable/operating-mode.html)
-- 项目约定：`AGENTS.md`、`docs/architecture-todo.md`。
+- 当前项目约定：[AGENTS.md](../../AGENTS.md)；运行边界：[Python Agent ADR](../adr/2026-10-21-python-langgraph-agent-engine.md)。历史架构清单的背景见本文“实施前代码基线与设计取舍”。
 
 ## 实施记录（2026-10-21）
 

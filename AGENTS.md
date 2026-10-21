@@ -4,22 +4,24 @@
 
 Lingo Mate 是一个桌面端语言学习助手 Agent。它通过对话、记忆和大语言模型能力，为用户提供持续、个性化的语言学习体验。
 
-技术栈为 Electron、React、TypeScript，并使用三层架构：
+技术栈为 Electron、React、TypeScript，以及用于可选 Agent 编排的 Python / LangGraph，并使用三层架构：
 
 1. Electron 桌面运行层
 2. React 用户界面层
-3. Agent Engine 核心能力层
+3. Agent Engine 核心能力层（TypeScript 领域能力与可选 Python 编排）
+
+默认使用 TypeScript 执行路径；通过内部环境开关 `LINGO_MATE_AGENT_RUNTIME=python` 启用 Python 试点，目前仅接入普通对话与 `/concept`。启用后的启动、协议或执行故障必须明确失败，不得静默回退或重放失败请求。架构边界见 [Python Agent ADR](docs/adr/2026-10-21-python-langgraph-agent-engine.md)。
 
 ## 目录职责
 
 ```text
 src/
-├── main/           # Electron 主进程
+├── main/           # Electron 主进程；agent/ 负责 Python 子进程与通信适配
 ├── preload/        # IPC Bridge，Renderer 与 Main 之间的安全桥接层
 ├── core/           # Agent Engine 核心逻辑
 │   ├── agent/      # Agent 调度、执行循环与生命周期
 │   ├── llm/        # 模型客户端、模型配置与流式响应
-│   ├── memory/     # 短期/长期记忆与检索
+│   ├── memory/     # 规划模块，尚未实现：长期学习记忆与检索
 │   ├── tools/      # Agent 工具定义与执行
 │   ├── prompt/     # Prompt 模板、组装与版本管理
 │   ├── learning/   # 语言学习领域逻辑
@@ -27,6 +29,12 @@ src/
 ├── database/       # SQLite schema、迁移、连接与数据访问
 ├── shared/         # 跨层共享的 TypeScript 类型与协议
 └── renderer/       # React 用户界面
+```
+
+```text
+agent-engine/       # Python / LangGraph 内存编排，不持有业务存储与模型凭据
+├── src/lingo_agent/ # 图、运行状态、JSONL 协议与运行服务
+└── build/          # PyInstaller 运行包构建与烟测
 ```
 
 ### `src/main`
@@ -37,6 +45,7 @@ src/
 - 注册和处理 IPC 请求
 - 调用操作系统、文件系统等 Node.js 能力
 - 创建并协调 `src/core` 中的 Agent 服务
+- 通过 `src/main/agent/` 管理 Python 子进程生命周期、JSONL 通信和宿主调用适配
 
 主进程只负责桌面应用编排，不应包含 React UI 或具体的学习业务逻辑。
 
@@ -54,7 +63,7 @@ src/
 
 负责 React 用户界面，包括：
 
-- 页面、组件和路由
+- 页面、组件和基于 React 状态的视图切换
 - UI 状态与交互逻辑
 - 展示对话、学习内容、Agent 状态与错误信息
 - 通过 `window.api` 调用 preload 提供的能力
@@ -64,6 +73,8 @@ Renderer 必须视为纯浏览器环境，不得直接导入或调用任何 Elec
 凡是需要 Electron、操作系统、文件系统、数据库或其他高权限能力的功能，都必须先在 Main 中实现受控处理，再通过 preload 使用 `contextBridge` 暴露为明确类型的 `window.api` 接口，由 Renderer 调用。不得通过开启 `nodeIntegration`、关闭 `contextIsolation` 或向 Renderer 暴露原始 IPC 对象来绕过该边界。
 
 业务规则应下沉到 Agent Engine，不要隐藏在 React 组件中。
+
+当前视图切换不使用路由库或 URL 状态；扩展时遵循 [Renderer 视图架构](docs/architecture.md)，保留对话视图隐藏时的挂载状态及进入、退出视图时的焦点管理。
 
 页面目录按 menu 组织：根目录只保留外层页面容器及其 `__tests__/`，每个 menu 使用独立子目录（如 `recorded/phrase/`、`settings/models/`），收拢该 menu 的组件、hooks 和辅助函数。menu 专属测试放在对应子目录的 `__tests__/` 中。跨 menu 或应用级公共能力按实际职责存放，不复制到各 menu，也不归入某个单独 menu。
 
@@ -75,9 +86,9 @@ hook 文件统一使用 camelCase 命名，且文件名与导出的 hook 函数�
 
 ```text
 src/core/
-├── agent/          # Agent 调度、工具调用和执行循环
+├── agent/          # AgentRuntime、宿主能力与跨语言协议契约
 ├── llm/            # 模型客户端、提示词和流式响应
-├── memory/         # 短期/长期记忆与检索
+├── memory/         # 规划模块，尚未实现：长期学习记忆与检索
 ├── tools/          # Agent 工具定义与执行
 ├── prompt/         # Prompt 模板、组装与版本管理
 ├── learning/       # 语言学习领域逻辑
@@ -85,6 +96,19 @@ src/core/
 ```
 
 核心逻辑应尽量通过明确接口与依赖注入连接 LLM、存储和系统能力，以便独立测试。不要从 `src/core` 导入 React 组件或 Renderer 状态。
+
+`memory/` 当前仅为规划职责，不代表已有记忆提取、持久化或召回实现；实施范围见 [长期学习记忆计划](docs/plans/2026-10-21-long-term-learning-memory.md)。
+
+### `agent-engine`
+
+负责独立 Python 子进程中的 LangGraph 图、单次运行的内存状态与有界编排。会话生命周期、学习领域规则、模型适配、凭据、供应商请求、取消、用量统计及持久化继续由 TypeScript 宿主持有；Python 通过受控宿主调用复用能力，不直接请求模型供应商或访问业务数据库，不启用 checkpoint 或跨运行 Store。
+
+- Main 使用固定可执行路径、`shell: false` 和环境白名单启动进程；Renderer 不得指定命令、路径或环境。生产运行包不依赖系统 Python、uv 或 PATH。
+- Main 与 Python 通过私有 UTF-8 JSONL 管道通信，stdout 专用于协议；stderr 仅由 Main 有界接收并写入本地诊断日志，不进入 Renderer 或控制台。
+- Python 不得接收 API Key、数据库连接信息或外层会话/消息 ID；宿主调用必须经过白名单、运行归属及预算校验。生产目前仅开放 `model.reply`；测试扩展不等于生产授权。
+- 协议唯一来源为 `src/core/agent/agent-protocol.ts` 中的 Zod schema。`agent-engine/src/lingo_agent/protocol/schema.json` 为生成物，不得手改；协议变更需同步共享契约用例，破坏性变更还需提升协议版本、同步握手与运行包 manifest 并重建运行包。
+
+开发环境、协议演进、构建与分发细节见 [Agent Engine README](agent-engine/README.md)。
 
 ### `src/database`
 
@@ -99,29 +123,34 @@ src/core/
 依赖应保持单向：
 
 ```text
-React Renderer -> Preload API -> Electron Main -> Agent Engine
+React Renderer -> Preload API -> Electron Main -> TypeScript Core
                                             -> Database / OS / network
+                                            <-> Python / LangGraph（私有 JSONL）
 ```
+
+图中的 Python 双向箭头表示协议通信；Python 不能绕过 Main 直接访问 TypeScript 实现或存储。宿主调用由 Main 校验并分派到 Core。
 
 - Renderer 只能通过 preload 暴露的 `window.api` 请求 Electron 及其他高权限能力，禁止直接调用 Electron API。
 - Preload 只定义安全边界和数据传输，不实现业务逻辑。
 - Main 负责调用、生命周期和进程间编排。
 - Core 保存可复用、可测试的领域逻辑，不依赖 UI。
+- Python 仅负责受控编排，不成为模型凭据、业务事务或持久化状态的所有者。
 - Database 提供 SQLite 基础设施和数据访问实现，不依赖 Renderer。
 - Shared 仅承载跨层类型与协议，不承载高权限实现或业务逻辑。
 - 跨边界传输的数据必须可序列化，并使用明确的 TypeScript 类型；外部输入应使用 Zod 等方式校验。
 
 ## 开发约定
 
-- 使用 TypeScript，避免无必要的 `any` 和 `@ts-ignore`。
+- Electron、Renderer 和宿主领域代码使用 TypeScript，避免无必要的 `any` 和 `@ts-ignore`；`agent-engine/` 使用 Python 类型标注，并通过既有 Ruff 与严格 mypy 检查。
 - 保持模块职责单一；组件、IPC handler 和 Agent 工具不应承担多个领域职责。
 - IPC channel 使用稳定、可读的领域命名，并集中定义，避免散落的字符串常量。
+- 新增 IPC handler 通过 `src/main/ipc-guard.ts` 的 `registerTrustedHandler` 注册，统一执行来源检查、输入与返回值 schema 校验及安全错误映射；取消等具有请求归属的操作还必须校验 owner，不得绕过公共守卫另建裸 handler。
 - LLM API Key 不得发送到 Renderer 或写入日志；错误诊断日志在写入前必须对可能出现的密钥脱敏。
-- 用户数据和学习记忆不得发送到 Renderer。仅限错误诊断场景，可将失败请求的用户数据与模型原始响应写入由 Main 维护的本地日志；该日志不得转发到 Renderer 或控制台。
-- 如果涉及数据库迁移或持久化数据变更，必须先询问用户，再根据用户意见决定是否执行迁移或变更操作。
+- Renderer 仅接收业务展示所需、经明确协议校验的最小数据，例如会话消息、已记录词条和练习结果；不得接收学习记忆正文与证据、完整 Agent 内部状态、内部工具载荷或失败请求诊断原文。仅限错误诊断场景，可将失败请求的必要用户数据与模型原始响应写入由 Main 维护的本地日志，写入前必须脱敏；该日志不得转发到 Renderer 或控制台。
+- 对真实用户数据库执行迁移或变更持久化用户数据前，必须先询问用户，再根据用户意见决定是否执行。编写迁移代码、使用可丢弃的临时数据库测试本身不要求提前确认，但不得因此打开或升级真实用户数据库；开发启动或验证命令也不能绕过这一要求。
 - 流式对话需要支持完成、失败和取消状态，避免 UI 永久停留在生成中。
 - 错误应在产生处保留原因，在进程边界转换为对用户安全、可理解的错误结构。
-- 新增 Agent 能力时，优先扩展 `src/core`，再通过 Main 和 Preload 接入 UI。
+- 新增 Agent 能力时，领域规则、模型适配与仓储接口优先扩展 `src/core`，LangGraph 图与编排扩展 `agent-engine/`，由 Main 装配并通过 Preload 接入 UI。
 - 完成 `docs/plans/` 下某份 plan 文档中的全部计划工作及相关验证后，必须将该文档的状态更新为“已实施”；若文档尚无状态字段，则补充 `状态：已实施`。
 
 ### 测试驱动开发
@@ -136,7 +165,7 @@ React Renderer -> Preload API -> Electron Main -> Agent Engine
 ### 测试文件组织
 
 - 单元测试和组件测试放在被测模块下的 `__tests__/` 目录中，不与生产源码文件平铺在同一目录。
-- 测试文件统一使用 `*.test.ts` 或 `*.test.tsx` 命名。
+- TypeScript 测试文件统一使用 `*.test.ts` 或 `*.test.tsx` 命名；Python 测试放在 `agent-engine/src/lingo_agent/__tests__/`，使用 `test_*.py` 命名，遵循 `agent-engine/pyproject.toml` 的 pytest 发现规则。
 - 跨模块集成测试放在根目录 `tests/integration/`，端到端测试放在 `tests/e2e/`。
 - 测试专用 fixtures、mocks 和辅助函数放在对应测试目录内；生产代码不得依赖测试目录中的内容。
 - 移动测试文件时，同步更新导入路径和相关测试配置，确保测试仍能被发现并执行。
@@ -152,12 +181,33 @@ React Renderer -> Preload API -> Electron Main -> Agent Engine
 
 完成修改后，根据改动范围运行：
 
+首次准备环境或 Python 锁文件变更后先运行 `pnpm agent:sync`。TypeScript 全量测试包含启动真实 Python 管道的集成测试，执行 `pnpm test` 前也必须确保锁定的 Python 环境已同步，不能因缺少环境而跳过这些测试。
+
 ```bash
 pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build
 ```
+
+涉及 Python、跨语言协议或宿主集成变更时，额外运行：
+
+```bash
+pnpm agent:protocol
+pnpm agent:test
+pnpm agent:check
+```
+
+修改 Zod 协议后，先运行 `node --experimental-strip-types scripts/agent-protocol-schema.mjs` 更新生成的 JSON Schema，再执行 `pnpm agent:protocol` 检查同步状态，并运行相关 TypeScript 与真实 Python 管道集成测试。
+
+涉及 Python 运行包、启动或分发变更时，还需运行：
+
+```bash
+pnpm agent:build
+pnpm agent:smoke
+```
+
+PyInstaller 运行包必须在目标 OS/CPU 原生构建；安装布局验证及跨平台验收步骤见 `agent-engine/README.md`，不能以单机检查通过代替其他平台验收。
 
 涉及 Electron 端到端行为时运行：
 
