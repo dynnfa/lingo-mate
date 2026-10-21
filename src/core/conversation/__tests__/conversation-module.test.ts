@@ -1,4 +1,7 @@
-import { createTestConversationModule } from '../../../../tests/fixtures/conversation'
+import {
+  createTestConversationModule,
+  testSystemPrompt
+} from '../../../../tests/fixtures/conversation'
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import type { ConversationEvent, ConversationSummary } from '../../../shared/conversation'
@@ -1355,18 +1358,12 @@ describe('ConversationModule', () => {
       const { sessionId } = await repository.seedConversation()
 
       await sendUntilTerminal(module, sessionId, 'Hello')
-      expect(model.inputs[0]).toMatchObject({
-        outputLanguage: 'zh-CN',
-        targetLanguage: 'en'
-      })
+      expect(model.inputs[0].systemPrompt).toBe(testSystemPrompt('zh-CN', 'en'))
 
       // 界面语言变化只影响解释语言，目标语言保持来自同一份设置
       settings.outputLanguage = 'en'
       await sendUntilTerminal(module, sessionId, 'Again')
-      expect(model.inputs[1]).toMatchObject({
-        outputLanguage: 'en',
-        targetLanguage: 'en'
-      })
+      expect(model.inputs[1].systemPrompt).toBe(testSystemPrompt('en', 'en'))
     })
 
     it('keeps the snapshot for an in-flight execution when settings change', async () => {
@@ -1401,7 +1398,7 @@ describe('ConversationModule', () => {
 
       await terminal
       // 设置变更不影响在途请求：模型仍收到执行开始时的语言快照
-      expect(model.inputs[0]).toMatchObject({ outputLanguage: 'zh-CN' })
+      expect(model.inputs[0].systemPrompt).toBe(testSystemPrompt('zh-CN', 'en'))
     })
 
     it('re-reads the current settings when an ordinary reply is retried', async () => {
@@ -1437,8 +1434,8 @@ describe('ConversationModule', () => {
       })
 
       // 普通回复重试作为新执行读取当前设置
-      expect(model.inputs[0]).toMatchObject({ outputLanguage: 'zh-CN' })
-      expect(model.inputs[1]).toMatchObject({ outputLanguage: 'en' })
+      expect(model.inputs[0].systemPrompt).toBe(testSystemPrompt('zh-CN', 'en'))
+      expect(model.inputs[1].systemPrompt).toBe(testSystemPrompt('en', 'en'))
     })
   })
 })

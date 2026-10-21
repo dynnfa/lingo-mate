@@ -3,6 +3,10 @@ import { languageName } from '../../src/core/prompt/language-name'
 
 type Dependencies = ConstructorParameters<typeof ConversationModule>
 
+export function testSystemPrompt(outputLanguage: string, targetLanguage: string): string {
+  return `Test fixture. Explain in ${languageName(outputLanguage)}; examples in ${languageName(targetLanguage)}.`
+}
+
 // Only a deterministic AgentRuntime test double. Real routing/Prompt behavior is
 // covered by Python tests and the real JSONL integration tests, never copied here.
 export function createTestConversationModule(
@@ -14,13 +18,13 @@ export function createTestConversationModule(
     model,
     repository,
     {
-      stream(input) {
-        return model.streamReply({
-          ...input,
+      stream: ({ messages, signal, outputLanguage, targetLanguage }) =>
+        model.streamReply({
+          messages,
+          signal,
           purpose: 'conversation',
-          systemPrompt: `Test fixture. Explain in ${languageName(input.outputLanguage)}; examples in ${languageName(input.targetLanguage)}.`
+          systemPrompt: testSystemPrompt(outputLanguage, targetLanguage)
         })
-      }
     },
     ...options
   )
