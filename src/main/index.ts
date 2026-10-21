@@ -20,6 +20,7 @@ import { SqlitePhraseRepository } from '../database/sqlite-phrase-repository'
 import { SqliteLlmUsageRepository } from '../database/sqlite-llm-usage-repository'
 import { VocabularyConversationSkill } from '../core/learning/vocabulary/vocabulary-conversation-skill'
 import { PhraseConversationSkill } from '../core/learning/phrase/phrase-conversation-skill'
+import { PythonVocabularyAnalyzer } from '../core/learning/vocabulary/python-vocabulary-analyzer'
 import { LlmVocabularyAnalyzer } from '../core/llm/llm-vocabulary-analyzer'
 import { LlmPhraseAnalyzer } from '../core/llm/llm-phrase-analyzer'
 import { createLlmClientFactory } from './llm-client-factory'
@@ -280,6 +281,30 @@ app.whenReady().then(() => {
     }
     return { outputLanguage: 'zh-CN', targetLanguage: 'en' }
   }
+  // Python owns every Agent run; process startup remains lazy on the first request.
+  const agentProcess = new PythonAgentProcess(() => ({
+    ...resolvePythonAgentLaunch({
+      packaged: app.isPackaged,
+      appPath: app.getAppPath(),
+      resourcesPath: process.resourcesPath,
+      appVersion: app.getVersion(),
+      bundledDevelopment: process.env['LINGO_MATE_AGENT_BUNDLE'] === '1'
+    }),
+    onDiagnostic: (error) =>
+      errorLogger.log({
+        source: 'main',
+        module: 'agent',
+        operation: 'process',
+        message: 'Agent process failed',
+        error
+      })
+  }))
+  const agentRuntime = new PythonAgentRuntime(agentProcess, () =>
+    conversationModel instanceof ConfiguredLanguageModel
+      ? conversationModel.snapshot()
+      : conversationModel
+  )
+  pythonAgentRuntime = agentRuntime
   const vocabularyRepository = new SqliteVocabularyRepository(database)
   // 已记录页的词汇列表与删除：复用同一仓储，经管理服务暴露窄接口；
   // 删除只作用于 vocabulary 记录，不改写历史会话与收藏批次报告。
@@ -294,8 +319,11 @@ app.whenReady().then(() => {
       () => {
         try {
           const snapshot = modelsService.resolveSnapshot()
-          return new LlmVocabularyAnalyzer(snapshot, 30_000, createLlmClient, (failure) =>
-            logAiImportFailure(failure, snapshot.configured ? snapshot.apiKey : undefined)
+          return new PythonVocabularyAnalyzer(
+            agentRuntime,
+            new LlmVocabularyAnalyzer(snapshot, 30_000, createLlmClient, (failure) =>
+              logAiImportFailure(failure, snapshot.configured ? snapshot.apiKey : undefined)
+            )
           )
         } catch (cause) {
           throw new TransferError(
@@ -407,7 +435,8 @@ app.whenReady().then(() => {
     () => ({
       analyzer: new LlmVocabularyAnalyzer(modelsService.resolveSnapshot(), 30_000, createLlmClient)
     }),
-    createVocabularyFeedbackFormatter()
+    createVocabularyFeedbackFormatter(),
+    agentRuntime
   )
   // /phrase 与 /vocabulary 共用模型配置快照解析与超时策略；用量登记为
   // phrase_analysis，由 LlmClient 按调用上下文自动记账。
@@ -488,33 +517,10 @@ app.whenReady().then(() => {
     [exploreSkill.skillId, exploreSkill],
     [exploreVocabularySkill.skillId, exploreVocabularySkill]
   ])
-  // Python owns every Agent run; process startup remains lazy on the first request.
-  const agentProcess = new PythonAgentProcess(() => ({
-    ...resolvePythonAgentLaunch({
-      packaged: app.isPackaged,
-      appPath: app.getAppPath(),
-      resourcesPath: process.resourcesPath,
-      appVersion: app.getVersion(),
-      bundledDevelopment: process.env['LINGO_MATE_AGENT_BUNDLE'] === '1'
-    }),
-    onDiagnostic: (error) =>
-      errorLogger.log({
-        source: 'main',
-        module: 'agent',
-        operation: 'process',
-        message: 'Agent process failed',
-        error
-      })
-  }))
-  pythonAgentRuntime = new PythonAgentRuntime(agentProcess, () =>
-    conversationModel instanceof ConfiguredLanguageModel
-      ? conversationModel.snapshot()
-      : conversationModel
-  )
   conversationModule = new ConversationModule(
     conversationModel,
     conversationRepository,
-    pythonAgentRuntime,
+    agentRuntime,
     resolveLanguages,
     conversationSkills,
     conversationRepository,

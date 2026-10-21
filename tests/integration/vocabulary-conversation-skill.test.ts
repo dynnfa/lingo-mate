@@ -1,8 +1,13 @@
+import { createTestVocabularyRuntime } from '../fixtures/python-agent'
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
-import { VocabularyConversationSkill } from '../vocabulary-conversation-skill'
-import { insertCommand, insertResult, memoryRepository } from './fixtures'
-import type { VocabularyBatch } from '../../../../shared/vocabulary'
+import { VocabularyConversationSkill } from '../../src/core/learning/vocabulary/vocabulary-conversation-skill'
+import {
+  insertCommand,
+  insertResult,
+  memoryRepository
+} from '../../src/core/learning/vocabulary/__tests__/fixtures'
+import type { VocabularyBatch } from '../../src/shared/vocabulary'
 
 const formatFeedback = (batch: VocabularyBatch, language: 'zh-CN' | 'en'): string =>
   language === 'zh-CN'
@@ -18,7 +23,8 @@ describe('VocabularyConversationSkill', () => {
     const skill = new VocabularyConversationSkill(
       repository,
       () => ({ analyzer: { analyze } }),
-      formatFeedback
+      formatFeedback,
+      createTestVocabularyRuntime()
     )
 
     const result = await skill.run({
@@ -61,7 +67,8 @@ describe('VocabularyConversationSkill', () => {
           analyze: () => new Promise(() => {})
         }
       }),
-      formatFeedback
+      formatFeedback,
+      createTestVocabularyRuntime()
     )
     const result = await skill.run({
       requestId: randomUUID(),

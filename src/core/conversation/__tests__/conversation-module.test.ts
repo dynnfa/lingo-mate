@@ -168,6 +168,9 @@ describe('ConversationModule', () => {
       const conversation = await repository.seedConversation()
       const inputs: unknown[] = []
       const runtime: import('../../agent/agent-runtime').AgentRuntime = {
+        runVocabulary: async () => {
+          throw new Error('Unused vocabulary runtime')
+        },
         async *stream(input) {
           inputs.push(input)
           yield reasoningEvent('temporary')

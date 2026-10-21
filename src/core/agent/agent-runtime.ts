@@ -3,6 +3,9 @@ import {
   agentSnapshotSchema,
   type AgentBudget,
   type AgentErrorCode,
+  type VocabularyPrepared,
+  type VocabularyAnalysisReceipt,
+  type VocabularyCompletion,
   type AgentSnapshot
 } from './agent-protocol'
 
@@ -24,7 +27,23 @@ export interface AgentRunInput extends AgentTask {
   sessionId: string
   signal: AbortSignal
 }
-export interface AgentRuntime {
+export interface VocabularyHostOperations {
+  prepare(): VocabularyPrepared | Promise<VocabularyPrepared>
+  analyze(
+    args: { inputIndex: number; systemPrompt: string },
+    signal: AbortSignal
+  ): Promise<VocabularyAnalysisReceipt>
+  verifyCompletion(result: VocabularyCompletion): void
+}
+export interface VocabularyAgentRunInput {
+  outputLanguage: string
+  targetLanguage: string
+  signal: AbortSignal
+}
+export interface VocabularyAgentRuntime {
+  runVocabulary(input: VocabularyAgentRunInput, host: VocabularyHostOperations): Promise<void>
+}
+export interface AgentRuntime extends VocabularyAgentRuntime {
   stream(input: AgentRunInput): AsyncIterable<ModelStreamEvent>
 }
 export class AgentRuntimeError extends Error {
@@ -40,6 +59,12 @@ export class AgentRuntimeError extends Error {
 // Reserve space for the fixed host prompt/operation definitions. Persisted history
 // is never edited; only this execution's copied context is trimmed.
 export function createAgentSnapshot(input: AgentTask): AgentSnapshot {
+  if (input.task === 'vocabulary')
+    return agentSnapshotSchema.parse({
+      ...input,
+      budget: { ...DEFAULT_AGENT_BUDGET, timeoutMs: 180_000, maxModelCalls: 20, maxSteps: 32 },
+      allowedOperations: ['vocabulary.prepare', 'model.vocabulary']
+    })
   let remaining = DEFAULT_AGENT_BUDGET.maxInputChars - 4096
   const messages: ModelMessage[] = []
   for (const message of input.messages.slice(-100).reverse()) {

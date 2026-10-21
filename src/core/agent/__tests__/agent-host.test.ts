@@ -174,3 +174,26 @@ describe('AgentHost', () => {
     ).rejects.toMatchObject({ code: 'AGENT_LIMIT' })
   })
 })
+
+it('budgets vocabulary from the bound term and tool definitions rather than a fixed guess', async () => {
+  const snapshot = createAgentSnapshot({ ...input(), task: 'vocabulary' })
+  snapshot.budget.maxInputChars = 4096
+  const analyze = vi.fn(async () => ({ inputIndex: 0, status: 'staged' as const }))
+  const host = new AgentHost(snapshot, vi.fn(), undefined, {
+    prepare: () => ({ items: [{ inputIndex: 0, term: 'apple', status: 'pending' }] }),
+    analyze,
+    verifyCompletion: () => {}
+  })
+  const signal = new AbortController().signal
+  await host.call('prepare', 'vocabulary.prepare', {}, () => {}, signal)
+  await expect(
+    host.call(
+      'analyze',
+      'model.vocabulary',
+      { inputIndex: 0, systemPrompt: 'Explain in English.' },
+      () => {},
+      signal
+    )
+  ).resolves.toEqual({ inputIndex: 0, status: 'staged' })
+  expect(analyze).toHaveBeenCalledTimes(1)
+})

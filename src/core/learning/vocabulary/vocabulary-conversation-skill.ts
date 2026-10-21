@@ -2,7 +2,8 @@ import type { SupportedLocale } from '../../../shared/preferences'
 import type { ConversationSkillReport } from '../../../shared/conversation'
 import { isVocabularyBatch } from '../../../shared/vocabulary'
 import { VocabularyModule } from './vocabulary-module'
-import type { VocabularyAnalyzer } from './vocabulary-analyzer'
+import type { VocabularyAgentRuntime } from '../../agent/agent-runtime'
+import type { VocabularyModelAnalyzer } from './vocabulary-analyzer'
 import type { VocabularyRepository } from './vocabulary-repository'
 import type { VocabularyFeedbackFormatter } from './vocabulary-feedback'
 import type {
@@ -12,7 +13,7 @@ import type {
 } from '../../conversation/conversation-skill'
 
 export interface VocabularySkillRuntime {
-  analyzer: VocabularyAnalyzer
+  analyzer: VocabularyModelAnalyzer
 }
 
 export class VocabularyConversationSkill implements ConversationSkill {
@@ -21,15 +22,19 @@ export class VocabularyConversationSkill implements ConversationSkill {
   constructor(
     private readonly repository: VocabularyRepository,
     private readonly createRuntime: () => VocabularySkillRuntime,
-    private readonly formatFeedback: VocabularyFeedbackFormatter
+    private readonly formatFeedback: VocabularyFeedbackFormatter,
+    private readonly runtime: VocabularyAgentRuntime
   ) {}
 
   async run(input: ConversationSkillRunInput): Promise<ConversationSkillRunResult> {
     // 文本技能参数：由 ConversationModule 按 skillId 分派保证带 text 分支。
     if (!('text' in input.arguments)) throw new Error('Vocabulary skill requires text arguments')
     // The whole batch shares this immutable runtime/configuration snapshot.
-    const runtime = this.createRuntime()
-    const module = new VocabularyModule(this.repository, () => runtime.analyzer)
+    const module = new VocabularyModule(
+      this.repository,
+      () => this.createRuntime().analyzer,
+      this.runtime
+    )
     const batch = await module.addBatch(
       {
         requestId: input.requestId,

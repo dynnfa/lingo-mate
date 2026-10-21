@@ -9,11 +9,11 @@ import {
 } from '../learning/vocabulary/vocabulary-insert'
 import type {
   AnalyzeVocabularyInput,
-  VocabularyAnalyzer,
+  VocabularyModelAnalyzer,
   VocabularyAnalysisResult
 } from '../learning/vocabulary/vocabulary-analyzer'
 import { abortableOperation } from '../learning/vocabulary/abortable-operation'
-import { VOCABULARY_PROMPT_VERSION, vocabularySystemMessage } from '../prompt/vocabulary-analysis'
+import { VOCABULARY_PROMPT_VERSION } from '../learning/vocabulary/vocabulary-analyzer'
 import type { RuntimeModelConfig } from './model-config'
 import { classifyModelRequestError, type CreateLlmClient } from './llm-client'
 import { isUnsupportedToolCall, parseSingleToolCallResponse } from './tool-protocol'
@@ -30,8 +30,8 @@ export interface VocabularyAnalysisFailure {
   issues: Array<{ path: PropertyKey[]; code: string; message: string }>
 }
 
-export class LlmVocabularyAnalyzer implements VocabularyAnalyzer {
-  // No default: the caller (VocabularyModule via its factory) owns the word
+export class LlmVocabularyAnalyzer implements VocabularyModelAnalyzer {
+  // No default: the trusted batch host owns the word
   // timeout policy, keeping a single source for the value.
   constructor(
     private readonly config: RuntimeModelConfig,
@@ -39,7 +39,9 @@ export class LlmVocabularyAnalyzer implements VocabularyAnalyzer {
     private readonly createClient: CreateLlmClient,
     private readonly logFailure?: (failure: VocabularyAnalysisFailure) => void
   ) {}
-  async analyze(input: AnalyzeVocabularyInput): Promise<VocabularyAnalysisResult> {
+  async analyze(
+    input: AnalyzeVocabularyInput & { systemPrompt: string }
+  ): Promise<VocabularyAnalysisResult> {
     if (!this.config.configured) throw new VocabularyError('MODEL_NOT_CONFIGURED')
     const config = this.config
     let response: unknown = null
@@ -56,7 +58,7 @@ export class LlmVocabularyAnalyzer implements VocabularyAnalyzer {
               messages: [
                 {
                   role: 'system',
-                  content: vocabularySystemMessage(input.explanationLanguage)
+                  content: input.systemPrompt
                 },
                 {
                   role: 'user',
