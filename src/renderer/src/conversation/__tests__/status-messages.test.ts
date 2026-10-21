@@ -18,6 +18,11 @@ function cases(): ConversationStatus[] {
     { kind: 'cancelled' },
     { kind: 'protocolError' },
     { kind: 'generationError', error: { code: 'MODEL_ERROR' } },
+    { kind: 'generationError', error: { code: 'AGENT_UNAVAILABLE' } },
+    { kind: 'generationError', error: { code: 'AGENT_PROTOCOL_ERROR' } },
+    { kind: 'generationError', error: { code: 'AGENT_LIMIT' } },
+    { kind: 'generationError', error: { code: 'AGENT_HOST_ERROR' } },
+
     { kind: 'generationError', error: { code: 'MODEL_NOT_CONFIGURED' } },
     { kind: 'generationError', error: { code: 'TOOL_CALL_NOT_SUPPORTED' } },
     { kind: 'generationError', error: { code: 'CREDENTIAL_DECRYPT_FAILED' } },

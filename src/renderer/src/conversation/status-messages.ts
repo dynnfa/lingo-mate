@@ -168,6 +168,14 @@ function translateRequestError(t: StatusTFunction, error: ConversationRequestErr
 
 function translateGenerationError(t: StatusTFunction, error: GenerationEventError): string {
   switch (error.code) {
+    case 'AGENT_UNAVAILABLE':
+      return t('errors:generation.agentUnavailable')
+    case 'AGENT_PROTOCOL_ERROR':
+      return t('errors:generation.agentProtocol')
+    case 'AGENT_LIMIT':
+      return t('errors:generation.agentLimit')
+    case 'AGENT_HOST_ERROR':
+      return t('errors:generation.model')
     case 'MODEL_ERROR':
       return t('errors:generation.model')
     case 'CREDENTIAL_DECRYPT_FAILED':
