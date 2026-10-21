@@ -18,6 +18,9 @@ export function createTestConversationModule(
     model,
     repository,
     {
+      runVocabulary: async () => {
+        throw new Error('Unused vocabulary runtime')
+      },
       stream: ({ messages, signal, outputLanguage, targetLanguage }) =>
         model.streamReply({
           messages,

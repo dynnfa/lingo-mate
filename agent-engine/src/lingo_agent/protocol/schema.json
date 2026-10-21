@@ -6,7 +6,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 2
+          "const": 3
         },
         "instanceId": {
           "type": "string",
@@ -30,7 +30,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 2
+          "const": 3
         },
         "instanceId": {
           "type": "string",
@@ -42,13 +42,14 @@
           "const": "ready"
         },
         "capabilities": {
-          "maxItems": 2,
+          "maxItems": 3,
           "type": "array",
           "items": {
             "type": "string",
             "enum": [
               "conversation",
-              "tool-loop"
+              "tool-loop",
+              "vocabulary"
             ]
           }
         }
@@ -66,7 +67,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 2
+          "const": 3
         },
         "instanceId": {
           "type": "string",
@@ -89,7 +90,8 @@
               "type": "string",
               "enum": [
                 "conversation",
-                "tool-loop"
+                "tool-loop",
+                "vocabulary"
               ]
             },
             "messages": {
@@ -129,14 +131,16 @@
               "maxLength": 35
             },
             "allowedOperations": {
-              "maxItems": 3,
+              "maxItems": 5,
               "type": "array",
               "items": {
                 "type": "string",
                 "enum": [
                   "model.reply",
                   "model.decide",
-                  "learning.lookup"
+                  "learning.lookup",
+                  "vocabulary.prepare",
+                  "model.vocabulary"
                 ]
               }
             },
@@ -151,7 +155,7 @@
                 "maxModelCalls": {
                   "type": "integer",
                   "minimum": 1,
-                  "maximum": 8
+                  "maximum": 20
                 },
                 "maxToolCalls": {
                   "type": "integer",
@@ -212,7 +216,116 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 2
+              "const": 3
+            },
+            "instanceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "runId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "callId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "type": {
+              "type": "string",
+              "const": "host_call"
+            },
+            "operation": {
+              "type": "string",
+              "const": "vocabulary.prepare"
+            },
+            "args": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "v",
+            "instanceId",
+            "runId",
+            "callId",
+            "type",
+            "operation",
+            "args"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 3
+            },
+            "instanceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "runId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "callId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "type": {
+              "type": "string",
+              "const": "host_call"
+            },
+            "operation": {
+              "type": "string",
+              "const": "model.vocabulary"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "inputIndex": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 19
+                },
+                "systemPrompt": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                }
+              },
+              "required": [
+                "inputIndex",
+                "systemPrompt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "v",
+            "instanceId",
+            "runId",
+            "callId",
+            "type",
+            "operation",
+            "args"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 3
             },
             "instanceId": {
               "type": "string",
@@ -268,7 +381,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 2
+              "const": 3
             },
             "instanceId": {
               "type": "string",
@@ -337,7 +450,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 2
+              "const": 3
             },
             "instanceId": {
               "type": "string",
@@ -395,7 +508,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 2
+          "const": 3
         },
         "instanceId": {
           "type": "string",
@@ -480,6 +593,159 @@
             {
               "type": "object",
               "properties": {
+                "items": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "inputIndex": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 19
+                          },
+                          "term": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4000
+                          },
+                          "status": {
+                            "type": "string",
+                            "const": "pending"
+                          }
+                        },
+                        "required": [
+                          "inputIndex",
+                          "term",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "inputIndex": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 19
+                          },
+                          "term": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4000
+                          },
+                          "status": {
+                            "type": "string",
+                            "const": "existing"
+                          }
+                        },
+                        "required": [
+                          "inputIndex",
+                          "term",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "inputIndex": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 19
+                          },
+                          "term": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4000
+                          },
+                          "status": {
+                            "type": "string",
+                            "const": "duplicate"
+                          },
+                          "sourceInputIndex": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 19
+                          }
+                        },
+                        "required": [
+                          "inputIndex",
+                          "term",
+                          "status",
+                          "sourceInputIndex"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "items"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "inputIndex": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 19
+                    },
+                    "status": {
+                      "type": "string",
+                      "const": "staged"
+                    }
+                  },
+                  "required": [
+                    "inputIndex",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "inputIndex": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 19
+                    },
+                    "status": {
+                      "type": "string",
+                      "const": "failed"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "MODEL_NOT_CONFIGURED",
+                        "CREDENTIAL_DECRYPT_FAILED",
+                        "MODEL_ERROR",
+                        "INVALID_ANALYSIS",
+                        "UNRECOGNIZED",
+                        "TIMEOUT"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "inputIndex",
+                    "status",
+                    "code"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
                 "entries": {
                   "maxItems": 10,
                   "type": "array",
@@ -512,7 +778,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 2
+          "const": 3
         },
         "instanceId": {
           "type": "string",
@@ -558,7 +824,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 2
+          "const": 3
         },
         "instanceId": {
           "type": "string",
@@ -622,7 +888,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 2
+          "const": 3
         },
         "instanceId": {
           "type": "string",
@@ -680,7 +946,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 2
+          "const": 3
         },
         "instanceId": {
           "type": "string",
@@ -710,7 +976,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 2
+          "const": 3
         },
         "instanceId": {
           "type": "string",
@@ -745,7 +1011,56 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 2
+          "const": 3
+        },
+        "instanceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "type": "string",
+          "const": "vocabulary_result"
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "completedIndices": {
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 19
+              }
+            }
+          },
+          "required": [
+            "completedIndices"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "v",
+        "instanceId",
+        "runId",
+        "type",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "number",
+          "const": 3
         },
         "instanceId": {
           "type": "string",
@@ -785,7 +1100,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 2
+          "const": 3
         },
         "instanceId": {
           "type": "string",
@@ -815,7 +1130,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 2
+          "const": 3
         },
         "instanceId": {
           "type": "string",
@@ -839,7 +1154,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 2
+          "const": 3
         },
         "instanceId": {
           "type": "string",

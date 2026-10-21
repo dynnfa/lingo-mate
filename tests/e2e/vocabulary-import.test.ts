@@ -167,3 +167,48 @@ test('cancels analysis before commit and keeps the conversation input usable', a
     await server.close()
   }
 })
+
+test('frozen LangGraph processes 20 words and discards cancelled analysis before an explicit retry', async () => {
+  test.setTimeout(90_000)
+  const server = await startVocabularyServer()
+  try {
+    await withTempUserData(async (directory) => {
+      await writeLocalePreference(directory, 'en')
+      await writeModelsConfig(directory, server.baseUrl, 'test-model')
+      const app = await launchApp(directory, { agentBundle: true })
+      try {
+        const window = await app.firstWindow()
+        await waitForReady(window)
+        const terms = Array.from({ length: 20 }, (_, i) => `word${i}`)
+        await submitVocabulary(window, terms.join(','))
+        await expect(window.locator('.message.assistant').last()).toContainText('20 added', {
+          timeout: 40_000
+        })
+        expect(server.terms.slice().sort()).toEqual(terms.slice().sort())
+        const countEntries = (): Promise<number> =>
+          window.evaluate(async () => {
+            const result = await (
+              globalThis as typeof globalThis & { api: LingoMateApi }
+            ).api.vocabulary.list({})
+            if (result.status !== 'ok') throw new Error('Vocabulary list failed')
+            return result.entries.length
+          })
+        expect(await countEntries()).toBe(20)
+        await submitVocabulary(window, 'slow,orange')
+        await expect.poll(() => server.terms.includes('slow')).toBe(true)
+        await window.getByRole('button', { name: 'Cancel', exact: true }).click()
+        await expect(window.getByText('Cancelled. You can retry.')).toBeVisible()
+        expect(await countEntries()).toBe(20)
+        await window.getByRole('button', { name: 'Retry', exact: true }).click()
+        await expect(window.locator('.message.assistant').last()).toContainText('2 added', {
+          timeout: 15_000
+        })
+        expect(await countEntries()).toBe(22)
+      } finally {
+        await app.close()
+      }
+    })
+  } finally {
+    await server.close()
+  }
+})

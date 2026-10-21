@@ -1,3 +1,4 @@
+import { createTestVocabularyRuntime } from '../fixtures/python-agent'
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { openDatabase } from '../../src/database/database'
@@ -38,7 +39,8 @@ describe('real HTTP adapter → batch → SQLite integration', () => {
             },
             wordMs,
             createClient
-          )
+          ),
+        createTestVocabularyRuntime()
       )
       const result = await module.addBatch(
         {

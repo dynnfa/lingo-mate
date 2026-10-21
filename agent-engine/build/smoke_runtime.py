@@ -44,7 +44,7 @@ class Client:
         threading.Thread(target=read, daemon=True).start()
 
     def send(self, kind, **payload):
-        data = {"v": 2, "instanceId": self.instance, "type": kind, **payload}
+        data = {"v": 3, "instanceId": self.instance, "type": kind, **payload}
         self.process.stdin.write((json.dumps(data) + "\n").encode())
         self.process.stdin.flush()
 
@@ -61,23 +61,25 @@ class Client:
         self.receive("ready")
         return (time.monotonic() - started) * 1000
 
-    def run(self, run_id):
+    def run(self, run_id, task="conversation"):
         self.send(
             "run",
             runId=run_id,
             snapshot={
-                "task": "conversation",
+                "task": task,
                 "messages": [{"role": "user", "content": "Hi"}],
                 "outputLanguage": "zh-CN",
                 "targetLanguage": "en",
-                "allowedOperations": ["model.reply"],
+                "allowedOperations": ["vocabulary.prepare", "model.vocabulary"]
+                if task == "vocabulary"
+                else ["model.reply"],
                 "budget": {
                     "timeoutMs": 5000,
-                    "maxModelCalls": 1,
-                    "maxToolCalls": 0,
-                    "maxSteps": 4,
+                    "maxModelCalls": 20 if task == "vocabulary" else 1,
+                    "maxToolCalls": 1 if task == "vocabulary" else 0,
+                    "maxSteps": 32 if task == "vocabulary" else 4,
                     "maxInputChars": 8192,
-                    "maxOutputChars": 100,
+                    "maxOutputChars": 32768 if task == "vocabulary" else 100,
                 },
             },
         )
@@ -124,6 +126,38 @@ with tempfile.TemporaryDirectory(prefix="lingo-bundle-") as cwd:
             assert client.receive("event")["event"] == event
         client.send("host_result", runId="stream", callId=call["callId"], result={"text": "你好"})
         assert client.receive("result")["text"] == "你好"
+        call = client.run("vocabulary", task="vocabulary")
+        assert call["operation"] == "vocabulary.prepare"
+        client.send(
+            "host_result",
+            runId="vocabulary",
+            callId=call["callId"],
+            result={
+                "items": [
+                    {"inputIndex": i, "term": f"word{i}", "status": "pending"} for i in range(20)
+                ]
+            },
+        )
+        pending = [client.receive("host_call"), client.receive("host_call")]
+        indices = []
+        for index in range(20):
+            call = pending.pop(0)
+            assert call["operation"] == "model.vocabulary"
+            assert "Simplified Chinese (zh-CN)" in call["args"]["systemPrompt"]
+            term_index = call["args"]["inputIndex"]
+            indices.append(term_index)
+            client.send(
+                "host_result",
+                runId="vocabulary",
+                callId=call["callId"],
+                result={"inputIndex": term_index, "status": "staged"},
+            )
+            if index < 18:
+                pending.append(client.receive("host_call"))
+        assert sorted(indices) == list(range(20))
+        assert client.receive("vocabulary_result")["result"] == {
+            "completedIndices": list(range(20))
+        }
         call = client.run("cancel")
         client.send("cancel", runId="cancel")
         client.receive("cancelled")
@@ -163,6 +197,7 @@ print(
                 "empty-PATH",
                 "handshake",
                 "stream",
+                "vocabulary-20-terms",
                 "cancel",
                 "late-result",
                 "crash",
