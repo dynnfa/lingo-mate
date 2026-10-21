@@ -8,6 +8,7 @@ from typing import Any, cast
 from langgraph.errors import GraphRecursionError
 
 from lingo_agent.graphs.learning import LimitError, execute
+from lingo_agent.graphs.phrase import PhraseState
 from lingo_agent.graphs.vocabulary import VocabularyState
 from lingo_agent.protocol import MAX_FRAME_BYTES, PROTOCOL_VERSION, encode_frame, parse_frame
 
@@ -82,6 +83,12 @@ class Server:
                         runId=run_id,
                         result=cast(VocabularyState, state)["vocabulary"],
                     )
+                elif snapshot["task"] == "phrase":
+                    await self.send(
+                        "phrase_result",
+                        runId=run_id,
+                        result=cast(PhraseState, state)["phrase"],
+                    )
                 else:
                     await self.send("result", runId=run_id, text=state["text"])
         except asyncio.CancelledError:
@@ -110,7 +117,9 @@ class Server:
             if hello["type"] != "hello":
                 raise ValueError("handshake required")
             self.instance = hello["instanceId"]
-            await self.send("ready", capabilities=["conversation", "tool-loop", "vocabulary"])
+            await self.send(
+                "ready", capabilities=["conversation", "tool-loop", "vocabulary", "phrase"]
+            )
             while (line := await incoming.get()) is not None:
                 frame = parse_frame(line)
                 if frame["instanceId"] != self.instance:

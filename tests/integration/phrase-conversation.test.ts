@@ -1,3 +1,4 @@
+import { createTestPhraseRuntime } from '../fixtures/python-agent'
 import { createTestConversationModule } from '../fixtures/conversation'
 import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -52,7 +53,8 @@ function makeModule(
   const skill = new PhraseConversationSkill(
     phraseRepository,
     () => ({ analyze }),
-    createPhraseFeedbackFormatter()
+    createPhraseFeedbackFormatter(),
+    createTestPhraseRuntime()
   )
   const module = createTestConversationModule(
     unusedConversationModel,
@@ -103,6 +105,9 @@ describe('phrase conversation integration', () => {
       expect(row.example).toBeTruthy()
     }
     expect(analyze).toHaveBeenCalledTimes(2)
+    expect(analyze).toHaveBeenCalledWith(
+      expect.objectContaining({ systemPrompt: expect.stringContaining('insert_phrase') })
+    )
 
     const loaded = await module.loadConversation(sessionId)
     expect(loaded.messages.map((message) => message.role)).toEqual(['user', 'assistant'])

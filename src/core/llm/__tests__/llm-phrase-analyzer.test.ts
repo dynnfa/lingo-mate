@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LlmPhraseAnalyzer } from '../llm-phrase-analyzer'
 import type { CreateLlmClient, LlmClient } from '../llm-client'
 import type { RuntimeModelConfig } from '../model-config'
-import { phraseSystemMessage } from '../../prompt/phrase-analysis'
 
 // 通过工厂注入 stub 客户端：适配器测试只验证请求参数与业务校验语义，
 // 不经过真实 SDK；通信与记账由 llm-client 测试覆盖。
@@ -24,6 +23,7 @@ const input = (
   phrase: 'look forward to',
   wordLanguage: 'en' as const,
   explanationLanguage: language,
+  systemPrompt: `Supplied by Python. Explain in ${language === 'en' ? 'English (en)' : 'Simplified Chinese (zh-CN)'}; examples in English.`,
   signal
 })
 const insertArguments = (phrase = 'look forward to'): Record<string, unknown> => ({
@@ -102,7 +102,7 @@ describe('LlmPhraseAnalyzer', () => {
       )
       expect(insertTool.function.parameters.properties).not.toHaveProperty('sql')
       expect(insertTool.function.parameters.additionalProperties).toBe(false)
-      expect(body.messages[0].content).toBe(phraseSystemMessage(language))
+      expect(body.messages[0].content).toBe(request.systemPrompt)
       expect(body.messages[0].content).toContain(
         language === 'en' ? 'English (en)' : 'Simplified Chinese (zh-CN)'
       )

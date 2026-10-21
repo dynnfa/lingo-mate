@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const AGENT_PROTOCOL_VERSION = 3
+export const AGENT_PROTOCOL_VERSION = 4
 export const MAX_AGENT_SYSTEM_PROMPT_CHARS = 4096
 export const MAX_AGENT_FRAME_BYTES = 262_144
 export const AGENT_OPERATIONS = [
@@ -8,7 +8,9 @@ export const AGENT_OPERATIONS = [
   'model.decide',
   'learning.lookup',
   'vocabulary.prepare',
-  'model.vocabulary'
+  'model.vocabulary',
+  'phrase.prepare',
+  'model.phrase'
 ] as const
 const identity = z.string().min(1).max(128)
 const text = z.string().max(65_536)
@@ -26,11 +28,11 @@ export const agentBudgetSchema = z.strictObject({
   maxOutputChars: z.number().int().min(1).max(65_536)
 })
 export const agentSnapshotSchema = z.strictObject({
-  task: z.enum(['conversation', 'tool-loop', 'vocabulary']),
+  task: z.enum(['conversation', 'tool-loop', 'vocabulary', 'phrase']),
   messages: z.array(agentMessageSchema).min(1).max(100),
   outputLanguage: z.string().min(2).max(35),
   targetLanguage: z.string().min(2).max(35),
-  allowedOperations: z.array(agentOperationSchema).max(5),
+  allowedOperations: z.array(agentOperationSchema).max(7),
   budget: agentBudgetSchema
 })
 export const agentDecisionSchema = z.discriminatedUnion('kind', [
@@ -84,11 +86,56 @@ export const vocabularyCompletionSchema = z.strictObject({
 export type VocabularyPrepared = z.infer<typeof vocabularyPreparedSchema>
 export type VocabularyAnalysisReceipt = z.infer<typeof vocabularyAnalysisReceiptSchema>
 export type VocabularyCompletion = z.infer<typeof vocabularyCompletionSchema>
+const phraseIndex = z.number().int().min(0).max(19)
+export const phrasePreparedItemSchema = z.discriminatedUnion('status', [
+  z.strictObject({
+    inputIndex: phraseIndex,
+    phrase: z.string().min(1).max(200),
+    status: z.literal('pending')
+  }),
+  z.strictObject({
+    inputIndex: phraseIndex,
+    phrase: z.string().min(1).max(200),
+    status: z.literal('existing')
+  }),
+  z.strictObject({
+    inputIndex: phraseIndex,
+    phrase: z.string().min(1).max(200),
+    status: z.literal('duplicate'),
+    sourceInputIndex: phraseIndex
+  })
+])
+export const phrasePreparedSchema = z.strictObject({
+  items: z.array(phrasePreparedItemSchema).min(1).max(20)
+})
+export const phraseAnalysisReceiptSchema = z.discriminatedUnion('status', [
+  z.strictObject({ inputIndex: phraseIndex, status: z.literal('staged') }),
+  z.strictObject({
+    inputIndex: phraseIndex,
+    status: z.literal('failed'),
+    code: z.enum([
+      'MODEL_NOT_CONFIGURED',
+      'CREDENTIAL_DECRYPT_FAILED',
+      'MODEL_ERROR',
+      'INVALID_ANALYSIS',
+      'UNRECOGNIZED',
+      'TIMEOUT'
+    ])
+  })
+])
+export const phraseCompletionSchema = z.strictObject({
+  completedIndices: z.array(phraseIndex).max(20)
+})
+export type PhrasePrepared = z.infer<typeof phrasePreparedSchema>
+export type PhraseAnalysisReceipt = z.infer<typeof phraseAnalysisReceiptSchema>
+export type PhraseCompletion = z.infer<typeof phraseCompletionSchema>
 export const agentHostResultSchema = z.union([
   z.strictObject({ text }),
   agentDecisionSchema,
   vocabularyPreparedSchema,
   vocabularyAnalysisReceiptSchema,
+  phrasePreparedSchema,
+  phraseAnalysisReceiptSchema,
   z.strictObject({ entries: z.array(z.string().max(1024)).max(10) })
 ])
 // Zod/JSON Schema count code points; the wire budget is measured in UTF-16 units.
@@ -113,6 +160,10 @@ export const vocabularyModelArgsSchema = z.strictObject({
   inputIndex: vocabularyIndex,
   systemPrompt: systemPromptSchema
 })
+export const phraseModelArgsSchema = z.strictObject({
+  inputIndex: phraseIndex,
+  systemPrompt: systemPromptSchema
+})
 export const agentErrorCodeSchema = z.enum([
   'AGENT_UNAVAILABLE',
   'AGENT_PROTOCOL_ERROR',
@@ -128,7 +179,7 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
   z.strictObject({
     ...base,
     type: z.literal('ready'),
-    capabilities: z.array(z.enum(['conversation', 'tool-loop', 'vocabulary'])).max(3)
+    capabilities: z.array(z.enum(['conversation', 'tool-loop', 'vocabulary', 'phrase'])).max(4)
   }),
   z.strictObject({ ...run, type: z.literal('run'), snapshot: agentSnapshotSchema }),
   z.discriminatedUnion('operation', [
@@ -143,6 +194,18 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
       type: z.literal('host_call'),
       operation: z.literal('model.vocabulary'),
       args: vocabularyModelArgsSchema
+    }),
+    z.strictObject({
+      ...call,
+      type: z.literal('host_call'),
+      operation: z.literal('phrase.prepare'),
+      args: z.strictObject({})
+    }),
+    z.strictObject({
+      ...call,
+      type: z.literal('host_call'),
+      operation: z.literal('model.phrase'),
+      args: phraseModelArgsSchema
     }),
     z.strictObject({
       ...call,
@@ -178,6 +241,11 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
     ...run,
     type: z.literal('vocabulary_result'),
     result: vocabularyCompletionSchema
+  }),
+  z.strictObject({
+    ...run,
+    type: z.literal('phrase_result'),
+    result: phraseCompletionSchema
   }),
   z.strictObject({ ...run, type: z.literal('error'), code: agentErrorCodeSchema }),
   z.strictObject({ ...run, type: z.literal('cancelled') }),

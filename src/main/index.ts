@@ -448,7 +448,8 @@ app.whenReady().then(() => {
     phraseRepository,
     (timeoutMs) =>
       new LlmPhraseAnalyzer(modelsService.resolveSnapshot(), timeoutMs, createLlmClient),
-    createPhraseFeedbackFormatter()
+    createPhraseFeedbackFormatter(),
+    agentRuntime
   )
   const synonymRepository = new SqliteSynonymRepository(database)
   // 已记录页的近义词分组列表：复用近义词收藏仓储，经管理服务暴露窄接口；

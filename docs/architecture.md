@@ -66,3 +66,7 @@ type AppView = 'conversation' | 'settings' | 'recorded' | 'practice' | 'mistakes
 - 视图数量增长到需要按路由做代码分割。
 
 在重新评估之前，本文件声明的设计是当前有效决策：**视图切换是状态，不是路由。**
+
+## 对话技能执行边界
+
+`/phrase` 与 `/vocabulary` 的显式命令入口继续使用现有会话界面和 Preload API；它们不是页面路由。两者的分析 Prompt 和批量执行由 Python / LangGraph 持有，Renderer 仅展示原有阶段、报告和安全错误。词条内容与报告在可信宿主统一提交，不把图状态或内部工具载荷暴露给界面。运行时职责与协议 v4 见 [Python Agent ADR](adr/2026-10-21-python-langgraph-agent-engine.md)。

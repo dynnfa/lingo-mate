@@ -7,6 +7,8 @@ import {
   type AgentRunInput,
   type AgentRuntime,
   type VocabularyHostOperations,
+  type PhraseAgentRunInput,
+  type PhraseHostOperations,
   type VocabularyAgentRunInput
 } from '../../core/agent/agent-runtime'
 import type { AgentFrame } from '../../core/agent/agent-protocol'
@@ -22,6 +24,7 @@ interface Run {
   cancelSent: boolean
   openCalls: Map<string, string>
   vocabulary?: VocabularyHostOperations
+  phrase?: PhraseHostOperations
   pythonDone: boolean
   error?: unknown
   seq: number
@@ -52,7 +55,8 @@ export class PythonAgentRuntime implements AgentRuntime {
   }
 
   async *stream(input: AgentRunInput): AsyncIterable<ModelStreamEvent> {
-    if (input.task === 'vocabulary') throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+    if (input.task === 'vocabulary' || input.task === 'phrase')
+      throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
     yield* this.run(input)
   }
 
@@ -72,9 +76,24 @@ export class PythonAgentRuntime implements AgentRuntime {
       void event
   }
 
+  async runPhrase(input: PhraseAgentRunInput, host: PhraseHostOperations): Promise<void> {
+    for await (const event of this.run(
+      {
+        ...input,
+        sessionId: '',
+        task: 'phrase',
+        messages: [{ role: 'user', content: 'Phrase batch' }]
+      },
+      undefined,
+      host
+    ))
+      void event
+  }
+
   private async *run(
     input: AgentRunInput,
-    vocabulary?: VocabularyHostOperations
+    vocabulary?: VocabularyHostOperations,
+    phrase?: PhraseHostOperations
   ): AsyncIterable<ModelStreamEvent> {
     input.signal.throwIfAborted()
     if (this.closed || this.runs.size >= 8) throw new AgentRuntimeError('AGENT_UNAVAILABLE')
@@ -90,7 +109,7 @@ export class PythonAgentRuntime implements AgentRuntime {
     const runId = randomUUID()
     const run: Run = {
       controller,
-      host: new AgentHost(snapshot, this.resolveModel, this.testOperations, vocabulary),
+      host: new AgentHost(snapshot, this.resolveModel, this.testOperations, vocabulary, phrase),
       queue: [],
       wake: () => {},
       done: false,
@@ -98,6 +117,7 @@ export class PythonAgentRuntime implements AgentRuntime {
       cancelSent: false,
       openCalls: new Map(),
       vocabulary,
+      phrase,
       pythonDone: false,
       seq: 0,
       text: '',
@@ -156,6 +176,7 @@ export class PythonAgentRuntime implements AgentRuntime {
     const run = this.runs.get(frame.runId)
     if (
       frame.type === 'vocabulary_result' ||
+      frame.type === 'phrase_result' ||
       frame.type === 'result' ||
       frame.type === 'error' ||
       frame.type === 'cancelled'
@@ -173,10 +194,12 @@ export class PythonAgentRuntime implements AgentRuntime {
       case 'host_call': {
         if (
           (run.openCalls.size > 0 &&
-            (!run.vocabulary ||
-              frame.operation !== 'model.vocabulary' ||
-              [...run.openCalls.values()].some((operation) => operation !== 'model.vocabulary'))) ||
-          run.openCalls.size >= (run.vocabulary ? 2 : 1) ||
+            (!(run.vocabulary || run.phrase) ||
+              frame.operation !== (run.phrase ? 'model.phrase' : 'model.vocabulary') ||
+              [...run.openCalls.values()].some(
+                (operation) => operation !== (run.phrase ? 'model.phrase' : 'model.vocabulary')
+              ))) ||
+          run.openCalls.size >= (run.vocabulary || run.phrase ? 2 : 1) ||
           !frame.callId.startsWith(`${frame.runId}:`) ||
           run.calls.has(frame.callId)
         ) {
@@ -189,7 +212,7 @@ export class PythonAgentRuntime implements AgentRuntime {
         return
       }
       case 'event':
-        if (run.vocabulary) {
+        if (run.vocabulary || run.phrase) {
           this.finish(frame.runId, run, new AgentRuntimeError('AGENT_PROTOCOL_ERROR'))
           return
         }
@@ -216,8 +239,17 @@ export class PythonAgentRuntime implements AgentRuntime {
           this.finish(frame.runId, run, error)
         }
         return
+      case 'phrase_result':
+        try {
+          if (!run.phrase) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+          run.phrase.verifyCompletion(frame.result)
+          this.finish(frame.runId, run)
+        } catch (error) {
+          this.finish(frame.runId, run, error)
+        }
+        return
       case 'result':
-        if (run.vocabulary) {
+        if (run.vocabulary || run.phrase) {
           this.finish(frame.runId, run, new AgentRuntimeError('AGENT_PROTOCOL_ERROR'))
           return
         }
