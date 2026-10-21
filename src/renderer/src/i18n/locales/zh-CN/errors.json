@@ -23,7 +23,10 @@
     "modelNotConfigured": "尚未配置模型，请先在设置 > 模型中完成配置。",
     "toolCallNotSupported": "当前模型或接口不支持词汇保存所需的工具调用，请更换模型或接口后重试。",
     "persistence": "保存会话失败，请稍后重试。",
-    "unknown": "发生未知错误，请稍后重试。"
+    "unknown": "发生未知错误，请稍后重试。",
+    "agentUnavailable": "Agent 引擎暂不可用，请重试。",
+    "agentProtocol": "Agent 引擎未能完成请求，请重试。",
+    "agentLimit": "Agent 已达到执行上限，请缩短输入后重试。"
   },
   "ipc": {
     "load": "无法加载会话，请稍后重试。",

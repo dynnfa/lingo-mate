@@ -1,0 +1,30 @@
+[project]
+name = "lingo-agent"
+version = "1.0.0"
+description = "Private LangGraph orchestration for Lingo Mate"
+requires-python = ">=3.13,<3.14"
+dependencies = ["langgraph==1.2.12", "pydantic>=2.7.4,<3", "jsonschema>=4.26,<5"]
+
+[build-system]
+requires = ["hatchling==1.32.4"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "pytest-asyncio>=1,<2", "ruff>=0.14,<1", "mypy>=1.18,<2", "pyinstaller>=6.16,<7", "types-jsonschema>=4,<5"]
+
+[tool.pytest.ini_options]
+testpaths = ["src/lingo_agent/__tests__"]
+python_files = ["test_*.py"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+exclude = ["/__tests__/"]

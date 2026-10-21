@@ -13,11 +13,14 @@ export class ConfiguredLanguageModel implements LanguageModel {
   ) {}
 
   async *streamReply(input: StreamReplyInput): AsyncIterable<ModelStreamEvent> {
+    yield* this.snapshot().streamReply(input)
+  }
+
+  snapshot(): LanguageModel {
     const config = this.configService.resolveSnapshot()
     if (!config.configured) {
       throw new ModelNotConfiguredError()
     }
-    const model = new RemoteLanguageModel(config, CHAT_REQUEST_TIMEOUT_MS, this.createClient)
-    yield* model.streamReply(input)
+    return new RemoteLanguageModel(config, CHAT_REQUEST_TIMEOUT_MS, this.createClient)
   }
 }

@@ -7,3 +7,13 @@ out
 /playwright-report/
 /test-results/
 .zcodeignore
+
+# Python agent runtime (built separately for each OS/architecture)
+agent-engine/.venv/
+agent-engine/.pytest_cache/
+agent-engine/.mypy_cache/
+agent-engine/.ruff_cache/
+agent-engine/dist/
+agent-engine/build/work/
+**/__pycache__/
+*.pyc

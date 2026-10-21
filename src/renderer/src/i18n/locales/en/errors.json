@@ -23,7 +23,10 @@
     "modelNotConfigured": "No model is configured yet. Set one up in Settings > Models first.",
     "toolCallNotSupported": "The current model or endpoint doesn't support the tool calls required to save vocabulary. Switch models or endpoints and try again.",
     "persistence": "Couldn't save the conversation. Please try again later.",
-    "unknown": "Something went wrong. Please try again later."
+    "unknown": "Something went wrong. Please try again later.",
+    "agentUnavailable": "The agent engine is unavailable. Please retry.",
+    "agentProtocol": "The agent engine could not complete this request. Please retry.",
+    "agentLimit": "The agent reached its execution limit. Please shorten the request and retry."
   },
   "ipc": {
     "load": "Couldn't load the conversation. Please try again later.",
