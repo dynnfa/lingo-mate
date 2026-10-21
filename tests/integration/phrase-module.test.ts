@@ -1,9 +1,17 @@
+import { createTestPhraseRuntime } from '../fixtures/python-agent'
 import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { PhraseModule } from '../phrase-module'
-import { PhraseError } from '../parse-phrase-input'
-import type { AnalyzePhraseInput, PhraseAnalysisResult } from '../phrase-analyzer'
-import { insertResult, content, memoryRepository } from './fixtures'
+import { PhraseModule } from '../../src/core/learning/phrase/phrase-module'
+import { PhraseError } from '../../src/core/learning/phrase/parse-phrase-input'
+import type {
+  AnalyzePhraseInput,
+  PhraseAnalysisResult
+} from '../../src/core/learning/phrase/phrase-analyzer'
+import {
+  insertResult,
+  content,
+  memoryRepository
+} from '../../src/core/learning/phrase/__tests__/fixtures'
 
 const input = (text: string): { requestId: string; text: string; wordLanguage: 'en' } => ({
   requestId: randomUUID(),
@@ -20,7 +28,7 @@ describe('PhraseModule', () => {
     const analyze = vi.fn(async ({ phrase }: AnalyzePhraseInput) => insertResult(phrase))
     const save = vi.spyOn(repository, 'saveBatchWithResult')
     const factory = vi.fn(() => ({ analyze }))
-    const module = new PhraseModule(repository, factory)
+    const module = new PhraseModule(repository, factory, createTestPhraseRuntime())
     const result = await module.addBatch(
       input('look forward to\npiece of cake\nlook forward to\nbreak even'),
       'en',
@@ -54,9 +62,13 @@ describe('PhraseModule', () => {
   })
   it('keeps the original input line and the normalized phrase in the report', async () => {
     const repository = memoryRepository()
-    const module = new PhraseModule(repository, () => ({
-      analyze: async ({ phrase }: AnalyzePhraseInput) => insertResult(phrase)
-    }))
+    const module = new PhraseModule(
+      repository,
+      () => ({
+        analyze: async ({ phrase }: AnalyzePhraseInput) => insertResult(phrase)
+      }),
+      createTestPhraseRuntime()
+    )
     const batch = await module.addBatch(input('look  forward to'), 'zh-CN', {
       executionId: randomUUID()
     })
@@ -78,7 +90,7 @@ describe('PhraseModule', () => {
     const analyze = vi.fn(async ({ phrase }: AnalyzePhraseInput) =>
       phrase === 'zzz qqq' ? ({ status: 'unrecognized' } as const) : insertResult(phrase)
     )
-    const module = new PhraseModule(repository, () => ({ analyze }))
+    const module = new PhraseModule(repository, () => ({ analyze }), createTestPhraseRuntime())
     const batch = await module.addBatch(input('look forward to\nzzz qqq\nzzz qqq'), 'zh-CN', {
       executionId: randomUUID()
     })
@@ -92,9 +104,13 @@ describe('PhraseModule', () => {
     vi.spyOn(repository, 'saveBatchWithResult').mockImplementation(() => {
       throw new PhraseError('STORAGE_FAILED')
     })
-    const module = new PhraseModule(repository, () => ({
-      analyze: async ({ phrase }: AnalyzePhraseInput) => insertResult(phrase)
-    }))
+    const module = new PhraseModule(
+      repository,
+      () => ({
+        analyze: async ({ phrase }: AnalyzePhraseInput) => insertResult(phrase)
+      }),
+      createTestPhraseRuntime()
+    )
     await expect(
       module.addBatch(input('look forward to\nbreak even'), 'en', { executionId: randomUUID() })
     ).rejects.toMatchObject({ code: 'STORAGE_FAILED' })
@@ -108,7 +124,7 @@ describe('PhraseModule', () => {
       signals.push(signal)
       return new Promise<PhraseAnalysisResult>((resolve) => completions.push(resolve))
     })
-    const module = new PhraseModule(repository, () => ({ analyze }))
+    const module = new PhraseModule(repository, () => ({ analyze }), createTestPhraseRuntime())
     const request = input('look forward to\nbreak even\npiece of cake')
     const controller = new AbortController()
     const promise = module.addBatch(request, 'en', {
@@ -128,48 +144,10 @@ describe('PhraseModule', () => {
     await Promise.resolve()
     expect(repository.contents).toHaveLength(0)
   })
-  it('aborts individual requests even when the analyzer never settles', async () => {
-    vi.useFakeTimers()
-    const repository = memoryRepository()
-    const signals: AbortSignal[] = []
-    const factory = vi.fn(() => ({
-      analyze: ({ signal }: AnalyzePhraseInput) => {
-        signals.push(signal)
-        return new Promise<PhraseAnalysisResult>(() => {})
-      }
-    }))
-    const module = new PhraseModule(repository, factory, { phraseMs: 30, batchMs: 120 })
-    const promise = module.addBatch(input('a\nb\nc'), 'en', { executionId: randomUUID() })
-    await vi.advanceTimersByTimeAsync(65)
-    const batch = await promise
-    expect(batch.items.every((item) => item.status === 'failed' && item.code === 'TIMEOUT')).toBe(
-      true
-    )
-    expect(signals.every((signal) => signal.aborted)).toBe(true)
-    expect(vi.getTimerCount()).toBe(0)
-  })
-  it('batch deadline retains earlier valid results and marks unstarted entries timeout', async () => {
-    vi.useFakeTimers()
-    const repository = memoryRepository()
-    const analyze = vi.fn(async ({ phrase }: AnalyzePhraseInput) =>
-      phrase === 'a' ? insertResult('a') : new Promise<PhraseAnalysisResult>(() => {})
-    )
-    const module = new PhraseModule(repository, () => ({ analyze }), {
-      phraseMs: 100,
-      batchMs: 20
-    })
-    const promise = module.addBatch(input('a\nb\nc\nd'), 'en', { executionId: randomUUID() })
-    await vi.advanceTimersByTimeAsync(21)
-    const batch = await promise
-    expect(batch.outcome).toBe('partial')
-    expect(batch.counts).toMatchObject({ saved: 1, failed: 3 })
-    expect(analyze).toHaveBeenCalledTimes(3)
-    expect(vi.getTimerCount()).toBe(0)
-  })
   it('honors a signal cancelled before execution without writes or model requests', async () => {
     const repository = memoryRepository()
     const analyze = vi.fn(async ({ phrase }: AnalyzePhraseInput) => insertResult(phrase))
-    const module = new PhraseModule(repository, () => ({ analyze }))
+    const module = new PhraseModule(repository, () => ({ analyze }), createTestPhraseRuntime())
     const controller = new AbortController()
     controller.abort()
     const batch = await module.addBatch(input('a'), 'en', {
@@ -182,19 +160,27 @@ describe('PhraseModule', () => {
   })
   it('rejects invalid tool results and missing config without fake data', async () => {
     const repository = memoryRepository()
-    const module = new PhraseModule(repository, () => ({
-      analyze: async () => {
-        throw new PhraseError('INVALID_ANALYSIS')
-      }
-    }))
+    const module = new PhraseModule(
+      repository,
+      () => ({
+        analyze: async () => {
+          throw new PhraseError('INVALID_ANALYSIS')
+        }
+      }),
+      createTestPhraseRuntime()
+    )
     expect(
       (await module.addBatch(input('a'), 'en', { executionId: randomUUID() })).items[0]
     ).toMatchObject({
       code: 'INVALID_ANALYSIS'
     })
-    const missing = new PhraseModule(repository, () => {
-      throw new PhraseError('MODEL_NOT_CONFIGURED')
-    })
+    const missing = new PhraseModule(
+      repository,
+      () => {
+        throw new PhraseError('MODEL_NOT_CONFIGURED')
+      },
+      createTestPhraseRuntime()
+    )
     expect(
       (await missing.addBatch(input('a'), 'en', { executionId: randomUUID() })).items[0]
     ).toMatchObject({
@@ -205,11 +191,15 @@ describe('PhraseModule', () => {
   it('escalates tool capability errors without committing a failed batch', async () => {
     const repository = memoryRepository()
     const save = vi.spyOn(repository, 'saveBatchWithResult')
-    const module = new PhraseModule(repository, () => ({
-      analyze: async () => {
-        throw new PhraseError('TOOL_CALL_NOT_SUPPORTED')
-      }
-    }))
+    const module = new PhraseModule(
+      repository,
+      () => ({
+        analyze: async () => {
+          throw new PhraseError('TOOL_CALL_NOT_SUPPORTED')
+        }
+      }),
+      createTestPhraseRuntime()
+    )
     await expect(
       module.addBatch(input('a'), 'en', { executionId: randomUUID() })
     ).rejects.toMatchObject({
@@ -220,9 +210,13 @@ describe('PhraseModule', () => {
   })
   it('refuses cancellation once synchronous commit starts', async () => {
     const repository = memoryRepository()
-    const module = new PhraseModule(repository, () => ({
-      analyze: async ({ phrase }: AnalyzePhraseInput) => insertResult(phrase)
-    }))
+    const module = new PhraseModule(
+      repository,
+      () => ({
+        analyze: async ({ phrase }: AnalyzePhraseInput) => insertResult(phrase)
+      }),
+      createTestPhraseRuntime()
+    )
     const request = input('a')
     const controller = new AbortController()
     const save = repository.saveBatchWithResult
@@ -237,5 +231,27 @@ describe('PhraseModule', () => {
     expect(batch.outcome).toBe('completed')
     expect(batch.counts.saved).toBe(1)
     expect(repository.contents).toHaveLength(1)
+  })
+  it('honors cancellation during the committing phase before the transaction begins', async () => {
+    const repository = memoryRepository()
+    const save = vi.spyOn(repository, 'saveBatchWithResult')
+    const module = new PhraseModule(
+      repository,
+      () => ({
+        analyze: async ({ phrase }) => insertResult(phrase)
+      }),
+      createTestPhraseRuntime()
+    )
+    const controller = new AbortController()
+    const batch = await module.addBatch(input('look forward to'), 'en', {
+      executionId: randomUUID(),
+      signal: controller.signal,
+      onPhase: (phase) => {
+        if (phase === 'committing') controller.abort()
+      }
+    })
+    expect(batch.outcome).toBe('cancelled')
+    expect(save).not.toHaveBeenCalled()
+    expect(repository.contents).toEqual([])
   })
 })

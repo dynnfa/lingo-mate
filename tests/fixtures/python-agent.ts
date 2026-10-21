@@ -8,7 +8,7 @@ afterEach(async () => {
   await Promise.all(runtimes.splice(0).map((runtime) => runtime.dispose()))
 })
 
-export function createTestVocabularyRuntime(): PythonAgentRuntime {
+export function createTestBatchRuntime(): PythonAgentRuntime {
   const runtime = new PythonAgentRuntime(
     new PythonAgentProcess({
       command: resolve(
@@ -18,9 +18,12 @@ export function createTestVocabularyRuntime(): PythonAgentRuntime {
       args: ['-I', '-m', 'lingo_agent']
     }),
     () => {
-      throw new Error('Vocabulary must not use the conversation model')
+      throw new Error('Batch analysis must not use the conversation model')
     }
   )
   runtimes.push(runtime)
   return runtime
 }
+
+export const createTestVocabularyRuntime = createTestBatchRuntime
+export const createTestPhraseRuntime = createTestBatchRuntime

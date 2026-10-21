@@ -2,6 +2,7 @@ import type { SupportedLocale } from '../../../shared/preferences'
 import type { ConversationSkillReport } from '../../../shared/conversation'
 import { isPhraseBatch } from '../../../shared/phrase'
 import { PhraseModule } from './phrase-module'
+import type { PhraseAgentRuntime } from '../../agent/agent-runtime'
 import type { PhraseAnalyzer } from './phrase-analyzer'
 import type { PhraseRepository } from './phrase-repository'
 import type { PhraseFeedbackFormatter } from './phrase-feedback'
@@ -17,14 +18,15 @@ export class PhraseConversationSkill implements ConversationSkill {
   constructor(
     private readonly repository: PhraseRepository,
     private readonly createAnalyzer: (timeoutMs: number) => PhraseAnalyzer,
-    private readonly formatFeedback: PhraseFeedbackFormatter
+    private readonly formatFeedback: PhraseFeedbackFormatter,
+    private readonly runtime: PhraseAgentRuntime
   ) {}
 
   async run(input: ConversationSkillRunInput): Promise<ConversationSkillRunResult> {
     // 文本技能参数：由 ConversationModule 按 skillId 分派保证带 text 分支。
     if (!('text' in input.arguments)) throw new Error('Phrase skill requires text arguments')
     // 批次按需创建一次分析器，共享模型配置快照与模块的超时策略。
-    const module = new PhraseModule(this.repository, this.createAnalyzer)
+    const module = new PhraseModule(this.repository, this.createAnalyzer, this.runtime)
     const batch = await module.addBatch(
       {
         requestId: input.requestId,

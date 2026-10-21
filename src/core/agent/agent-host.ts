@@ -1,3 +1,4 @@
+import { phraseInsertTools } from '../tools/phrase-tools'
 import { vocabularyInsertTools } from '../learning/vocabulary/vocabulary-insert'
 import type { LanguageModel, ModelStreamEvent } from '../llm/language-model'
 import {
@@ -8,14 +9,22 @@ import {
   vocabularyModelArgsSchema,
   vocabularyPreparedSchema,
   vocabularyAnalysisReceiptSchema,
+  phraseModelArgsSchema,
+  phrasePreparedSchema,
+  phraseAnalysisReceiptSchema,
   type AgentDecision,
   type AgentCallArgs,
   type AgentHostResult,
   type AgentOperation,
   type VocabularyPrepared,
+  type PhrasePrepared,
   type AgentSnapshot
 } from './agent-protocol'
-import { AgentRuntimeError, type VocabularyHostOperations } from './agent-runtime'
+import {
+  AgentRuntimeError,
+  type VocabularyHostOperations,
+  type PhraseHostOperations
+} from './agent-runtime'
 
 export interface AgentTestOperations {
   // Installed only by controlled tests. Production registers no tool handlers.
@@ -29,6 +38,8 @@ export interface AgentTestOperations {
 }
 
 export class AgentHost {
+  private phrasePrepared?: PhrasePrepared
+  private readonly phraseIndices = new Set<number>()
   private prepared?: VocabularyPrepared
   private readonly vocabularyIndices = new Set<number>()
   private readonly calls = new Set<string>()
@@ -42,7 +53,8 @@ export class AgentHost {
     private readonly snapshot: AgentSnapshot,
     private readonly resolveModel: () => LanguageModel,
     private readonly testOperations?: AgentTestOperations,
-    private readonly vocabulary?: VocabularyHostOperations
+    private readonly vocabulary?: VocabularyHostOperations,
+    private readonly phrase?: PhraseHostOperations
   ) {
     this.snapshot = structuredClone(snapshot)
   }
@@ -98,6 +110,49 @@ export class AgentHost {
         throw new AgentRuntimeError('AGENT_LIMIT')
       const result = vocabularyAnalysisReceiptSchema.parse(
         await this.vocabulary.analyze(parsed.data, signal)
+      )
+      signal.throwIfAborted()
+      if (result.inputIndex !== item.inputIndex) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+      this.outputChars += JSON.stringify(result).length
+      if (this.outputChars > this.snapshot.budget.maxOutputChars)
+        throw new AgentRuntimeError('AGENT_LIMIT')
+      return result
+    }
+    if (operation === 'phrase.prepare' && this.phrase) {
+      if (Object.keys(args).length || ++this.toolCalls > 1)
+        throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+      if (this.toolCalls > this.snapshot.budget.maxToolCalls)
+        throw new AgentRuntimeError('AGENT_LIMIT')
+      const result = phrasePreparedSchema.parse(await this.phrase.prepare())
+      signal.throwIfAborted()
+      this.phrasePrepared = structuredClone(result)
+      return result
+    }
+    if (operation === 'model.phrase' && this.phrase) {
+      const parsed = phraseModelArgsSchema.safeParse(args)
+      if (!parsed.success)
+        throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR', { cause: parsed.error })
+      const item = this.phrasePrepared?.items.find(
+        (item) => item.inputIndex === parsed.data.inputIndex && item.status === 'pending'
+      )
+      if (!item || this.phraseIndices.has(item.inputIndex))
+        throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+      this.phraseIndices.add(item.inputIndex)
+      if (++this.modelCalls > this.snapshot.budget.maxModelCalls)
+        throw new AgentRuntimeError('AGENT_LIMIT')
+      const content = JSON.stringify({
+        phrase: item.phrase,
+        wordLanguage: this.snapshot.targetLanguage
+      })
+      if (
+        parsed.data.systemPrompt.length +
+          content.length +
+          JSON.stringify(phraseInsertTools()).length >
+        this.snapshot.budget.maxInputChars
+      )
+        throw new AgentRuntimeError('AGENT_LIMIT')
+      const result = phraseAnalysisReceiptSchema.parse(
+        await this.phrase.analyze(parsed.data, signal)
       )
       signal.throwIfAborted()
       if (result.inputIndex !== item.inputIndex) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')

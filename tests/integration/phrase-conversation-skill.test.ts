@@ -1,8 +1,13 @@
+import { createTestPhraseRuntime } from '../fixtures/python-agent'
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
-import { PhraseConversationSkill } from '../phrase-conversation-skill'
-import { content, insertResult, memoryRepository } from './fixtures'
-import type { PhraseBatch } from '../../../../shared/phrase'
+import { PhraseConversationSkill } from '../../src/core/learning/phrase/phrase-conversation-skill'
+import {
+  content,
+  insertResult,
+  memoryRepository
+} from '../../src/core/learning/phrase/__tests__/fixtures'
+import type { PhraseBatch } from '../../src/shared/phrase'
 
 const formatFeedback = (batch: PhraseBatch, language: 'zh-CN' | 'en'): string =>
   language === 'zh-CN'
@@ -15,7 +20,12 @@ describe('PhraseConversationSkill', () => {
     repository.contents.push(content('piece of cake'))
     const analyze = vi.fn(async ({ phrase }: { phrase: string }) => insertResult(phrase))
     const phases: string[] = []
-    const skill = new PhraseConversationSkill(repository, () => ({ analyze }), formatFeedback)
+    const skill = new PhraseConversationSkill(
+      repository,
+      () => ({ analyze }),
+      formatFeedback,
+      createTestPhraseRuntime()
+    )
 
     const result = await skill.run({
       requestId: randomUUID(),
@@ -58,7 +68,8 @@ describe('PhraseConversationSkill', () => {
       () => ({
         analyze: () => new Promise(() => {})
       }),
-      formatFeedback
+      formatFeedback,
+      createTestPhraseRuntime()
     )
     const result = await skill.run({
       requestId: randomUUID(),
@@ -83,7 +94,8 @@ describe('PhraseConversationSkill', () => {
     const skill = new PhraseConversationSkill(
       repository,
       () => ({ analyze: async () => insertResult() }),
-      formatFeedback
+      formatFeedback,
+      createTestPhraseRuntime()
     )
     const vocabularyReport = {
       requestId: '11111111-1111-4111-8111-111111111111',

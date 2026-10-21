@@ -12,7 +12,7 @@ import type {
   PhraseAnalysisResult
 } from '../learning/phrase/phrase-analyzer'
 import { abortablePhraseOperation } from '../learning/phrase/abortable-operation'
-import { PHRASE_PROMPT_VERSION, phraseSystemMessage } from '../prompt/phrase-analysis'
+import { PHRASE_PROMPT_VERSION } from '../learning/phrase/phrase-analyzer'
 import type { RuntimeModelConfig } from './model-config'
 import { classifyModelRequestError, type CreateLlmClient } from './llm-client'
 import { isUnsupportedToolCall, parseSingleToolCallResponse } from './tool-protocol'
@@ -37,7 +37,7 @@ export class LlmPhraseAnalyzer implements PhraseAnalyzer {
             messages: [
               {
                 role: 'system',
-                content: phraseSystemMessage(input.explanationLanguage)
+                content: input.systemPrompt
               },
               {
                 role: 'user',

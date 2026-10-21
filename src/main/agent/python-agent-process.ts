@@ -123,7 +123,7 @@ export class PythonAgentProcess {
             if (this.status === 'starting') {
               if (
                 frame.type !== 'ready' ||
-                !(['conversation', 'tool-loop', 'vocabulary'] as const).every((c) =>
+                !(['conversation', 'tool-loop', 'vocabulary', 'phrase'] as const).every((c) =>
                   frame.capabilities.includes(c)
                 )
               )
