@@ -55,13 +55,19 @@ describe('Python LangGraph process', () => {
           updatedAt: now
         })
         const events: ConversationEvent[] = []
+        let resolveTerminal: () => void = () => {}
+        const terminal = new Promise<void>((resolve) => {
+          resolveTerminal = resolve
+        })
         const accepted = await module.sendMessage(
           { sessionId, requestId: randomUUID(), text },
-          (event) => events.push(event)
+          (event) => {
+            events.push(event)
+            if (event.type === 'completed' || event.type === 'failed' || event.type === 'cancelled')
+              resolveTerminal()
+          }
         )
-        await vi.waitFor(() =>
-          expect(events.some((event) => event.type === 'completed')).toBe(true)
-        )
+        await terminal
         expect(seen).toHaveLength(1)
         expect(seen[0].systemPrompt).toContain(
           text.includes('carry') ? 'the /concept command' : 'You are Lingo Mate'
