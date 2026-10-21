@@ -1,3 +1,4 @@
+import { AgentRuntimeError, type AgentRuntime } from '../agent/agent-runtime'
 import { noopCoreDiagnostics, type CoreDiagnostics } from '../error-diagnostics'
 import { SynonymError, parseSynonymInput } from '../learning/synonym/parse-synonym-input'
 import { createHash, randomUUID } from 'node:crypto'
@@ -117,6 +118,8 @@ interface ActiveExecution {
 type DraftConversation = Omit<StoredConversation, 'title'> & { title: null }
 
 export class ConversationModule {
+  private closed = false
+  private readonly idleListeners = new Set<() => void>()
   private readonly titleControllers = new Set<AbortController>()
   private readonly drafts = new Map<string, DraftConversation>()
   private readonly activeRequests = new Map<string, ActiveExecution>()
@@ -143,7 +146,8 @@ export class ConversationModule {
     // 会话技能按 skillId 注册与分派；新增技能时扩展 ConversationSkill 实现。
     private readonly skills: ReadonlyMap<ConversationSkillId, ConversationSkill> = new Map(),
     private readonly skillRepository?: ConversationSkillRepository,
-    private readonly diagnostics: CoreDiagnostics = noopCoreDiagnostics
+    private readonly diagnostics: CoreDiagnostics = noopCoreDiagnostics,
+    private readonly agentRuntime?: AgentRuntime
   ) {}
 
   async createConversation(): Promise<ConversationSummary> {
@@ -763,6 +767,7 @@ export class ConversationModule {
       // 摘要或持久化失败时，已保存的原文标题仍可使用。
     } finally {
       this.titleControllers.delete(active.controller)
+      this.notifyIdle()
     }
   }
 
@@ -809,6 +814,7 @@ export class ConversationModule {
   }
 
   private registerExecution(requestId: string, execution: ActiveExecution): void {
+    if (this.closed) throw new AgentRuntimeError('AGENT_UNAVAILABLE')
     if (this.activeRequests.has(requestId)) {
       throw new RequestBusyError(requestId)
     }
@@ -835,7 +841,20 @@ export class ConversationModule {
     return { accepted: true, generation }
   }
 
+  async shutdown(): Promise<void> {
+    this.dispose()
+    if (!this.activeRequests.size && !this.titleControllers.size) return
+    await new Promise<void>((resolve) => this.idleListeners.add(resolve))
+  }
+
+  private notifyIdle(): void {
+    if (this.activeRequests.size || this.titleControllers.size) return
+    for (const resolve of this.idleListeners) resolve()
+    this.idleListeners.clear()
+  }
+
   dispose(): void {
+    this.closed = true
     for (const controller of this.titleControllers) controller.abort()
     for (const execution of this.activeRequests.values()) execution.controller.abort()
     this.drafts.clear()
@@ -871,14 +890,21 @@ export class ConversationModule {
           : 'conversation'
       let response = ''
 
-      for await (const event of this.model.streamReply({
-        messages: modelMessages,
-        outputLanguage: execution.languages.outputLanguage,
-        // 目标语言来自执行开始时的配置快照，不随界面语言切换。
-        targetLanguage: execution.languages.targetLanguage,
-        promptKind,
-        signal: execution.controller.signal
-      })) {
+      const stream = this.agentRuntime
+        ? this.agentRuntime.stream({
+            sessionId,
+            task: promptKind,
+            messages: modelMessages,
+            ...execution.languages,
+            signal: execution.controller.signal
+          })
+        : this.model.streamReply({
+            messages: modelMessages,
+            ...execution.languages,
+            promptKind,
+            signal: execution.controller.signal
+          })
+      for await (const event of stream) {
         if (execution.controller.signal.aborted) break
         if (event.type === 'reasoning') {
           // 思考只作为本次请求的临时展示数据转发：不写入 response，
@@ -1080,6 +1106,7 @@ export class ConversationModule {
     if (execution && this.sessionRequests.get(execution.sessionId) === requestId) {
       this.sessionRequests.delete(execution.sessionId)
     }
+    this.notifyIdle()
   }
 
   private async withPersistence<T>(operation: () => Promise<T>): Promise<T> {
@@ -1100,6 +1127,7 @@ export class ConversationModule {
 
   // Core 只返回安全错误码，不负责界面翻译；内部原因留在产生处。
   private toSafeError(error: unknown): GenerationEventError {
+    if (error instanceof AgentRuntimeError) return { code: error.code }
     if (error instanceof SynonymError) {
       if (error.code === 'STORAGE_FAILED') return { code: 'PERSISTENCE_ERROR' }
       if (

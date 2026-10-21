@@ -1,3 +1,6 @@
+import { resolve } from 'node:path'
+import { PythonAgentProcess } from '../../src/main/agent/python-agent-process'
+import { PythonAgentRuntime } from '../../src/main/agent/python-agent-runtime'
 import { createServer } from 'node:http'
 import { AddressInfo } from 'node:net'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -6,7 +9,11 @@ import { SqliteLlmUsageRepository } from '../../src/database/sqlite-llm-usage-re
 import { ConfiguredLanguageModel } from '../../src/core/llm/configured-language-model'
 import { ModelConnectionTester } from '../../src/core/llm/model-connection-tester'
 import { randomUUID } from 'node:crypto'
-import { ModelConfigService, type ModelsConfigStore } from '../../src/core/llm/model-config'
+import {
+  ModelConfigService,
+  ModelNotConfiguredError,
+  type ModelsConfigStore
+} from '../../src/core/llm/model-config'
 import { LlmClient, type CreateLlmClient } from '../../src/core/llm/llm-client'
 import { LlmUsageRecorder } from '../../src/core/llm/llm-usage-recorder'
 
@@ -143,6 +150,67 @@ describe('LLM usage ledger across the unified client', () => {
     }
     return text
   }
+
+  it('records exactly one model attempt per Python conversation or concept task', async () => {
+    scenario = {
+      content: ['graph reply'],
+      tailDelayMs: 0,
+      usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+      responseModel: 'fixture'
+    }
+    const configured = configuredModel('python-pilot-usage')
+    const runtime = new PythonAgentRuntime(
+      new PythonAgentProcess({
+        command: resolve(
+          'agent-engine/.venv',
+          process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'
+        ),
+        args: ['-I', '-m', 'lingo_agent']
+      }),
+      () => configured.snapshot()
+    )
+    try {
+      for (const task of ['conversation', 'word-concept'] as const) {
+        let text = ''
+        for await (const event of runtime.stream({
+          sessionId: task,
+          task,
+          messages: [{ role: 'user', content: task === 'conversation' ? 'Hi' : '/concept carry' }],
+          outputLanguage: 'zh-CN',
+          targetLanguage: 'en',
+          signal: new AbortController().signal
+        })) {
+          if (event.type === 'text') text += event.delta
+        }
+        expect(text).toBe('graph reply')
+      }
+      const rows = usageRepository.list({ modelId: 'python-pilot-usage' })
+      expect(rows).toHaveLength(2)
+      expect(rows.every((row) => row.status === 'completed' && row.totalTokens === 12)).toBe(true)
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
+  it('keeps a resolved host model across configuration changes for multiple calls', async () => {
+    scenario = { content: ['stable'], tailDelayMs: 0, responseModel: 'fixture' }
+    const store = memoryStore()
+    const configured = configuredModel('frozen-host-model', store)
+    const frozen = configured.snapshot()
+    const service = new ModelConfigService(store, fakeVault, randomUUID)
+    service.deleteConfig(service.getList().activeConfigId!)
+    for (let call = 0; call < 2; call++) {
+      for await (const event of frozen.streamReply({
+        messages: [{ role: 'user', content: 'Hi' }],
+        outputLanguage: 'zh-CN',
+        targetLanguage: 'en',
+        signal: new AbortController().signal
+      }))
+        void event
+    }
+    expect(usageRepository.list({ modelId: 'frozen-host-model' })).toHaveLength(2)
+    expect(() => configured.snapshot()).toThrow(ModelNotConfiguredError)
+  })
 
   it('records a conversation stream with tail usage and an unpolluted reply', async () => {
     scenario = {

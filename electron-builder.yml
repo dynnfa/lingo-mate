@@ -5,10 +5,20 @@ directories:
 files:
   - '!**/.vscode/*'
   - '!src/*'
+  - '!agent-engine/**'
+  - '!tests/**'
+  - '!scripts/**'
+  - '!docs/**'
+  - '!.github/**'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+extraResources:
+  - from: agent-engine/dist/${platform}-${arch}/lingo-agent
+    to: agent-engine
+    filter:
+      - '**/*'
 asarUnpack:
   - resources/**
 win:

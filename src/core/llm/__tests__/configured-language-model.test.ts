@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { ConfiguredLanguageModel } from '../configured-language-model'
-import { ModelConfigService, type CredentialVault, type ModelsConfigStore } from '../model-config'
+import {
+  ModelConfigService,
+  ModelNotConfiguredError,
+  type CredentialVault,
+  type ModelsConfigStore
+} from '../model-config'
 import { LlmClient, type CreateLlmClient } from '../llm-client'
 import { LlmUsageRecorder } from '../llm-usage-recorder'
 
@@ -46,5 +51,12 @@ describe('ConfiguredLanguageModel', () => {
     await expect(stream[Symbol.asyncIterator]().next()).rejects.toMatchObject({
       name: 'ModelNotConfiguredError'
     })
+  })
+  it('creates a run-bound model snapshot and reports missing configuration before a host call', () => {
+    const model = new ConfiguredLanguageModel(
+      new ModelConfigService(memoryStore(), vault, randomUUID),
+      createClient
+    )
+    expect(() => model.snapshot()).toThrowError(ModelNotConfiguredError)
   })
 })
