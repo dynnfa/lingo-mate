@@ -6,7 +6,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 3
+          "const": 4
         },
         "instanceId": {
           "type": "string",
@@ -30,7 +30,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 3
+          "const": 4
         },
         "instanceId": {
           "type": "string",
@@ -42,14 +42,15 @@
           "const": "ready"
         },
         "capabilities": {
-          "maxItems": 3,
+          "maxItems": 4,
           "type": "array",
           "items": {
             "type": "string",
             "enum": [
               "conversation",
               "tool-loop",
-              "vocabulary"
+              "vocabulary",
+              "phrase"
             ]
           }
         }
@@ -67,7 +68,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 3
+          "const": 4
         },
         "instanceId": {
           "type": "string",
@@ -91,7 +92,8 @@
               "enum": [
                 "conversation",
                 "tool-loop",
-                "vocabulary"
+                "vocabulary",
+                "phrase"
               ]
             },
             "messages": {
@@ -131,7 +133,7 @@
               "maxLength": 35
             },
             "allowedOperations": {
-              "maxItems": 5,
+              "maxItems": 7,
               "type": "array",
               "items": {
                 "type": "string",
@@ -140,7 +142,9 @@
                   "model.decide",
                   "learning.lookup",
                   "vocabulary.prepare",
-                  "model.vocabulary"
+                  "model.vocabulary",
+                  "phrase.prepare",
+                  "model.phrase"
                 ]
               }
             },
@@ -216,7 +220,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 3
+              "const": 4
             },
             "instanceId": {
               "type": "string",
@@ -263,7 +267,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 3
+              "const": 4
             },
             "instanceId": {
               "type": "string",
@@ -325,7 +329,116 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 3
+              "const": 4
+            },
+            "instanceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "runId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "callId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "type": {
+              "type": "string",
+              "const": "host_call"
+            },
+            "operation": {
+              "type": "string",
+              "const": "phrase.prepare"
+            },
+            "args": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "v",
+            "instanceId",
+            "runId",
+            "callId",
+            "type",
+            "operation",
+            "args"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 4
+            },
+            "instanceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "runId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "callId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "type": {
+              "type": "string",
+              "const": "host_call"
+            },
+            "operation": {
+              "type": "string",
+              "const": "model.phrase"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "inputIndex": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 19
+                },
+                "systemPrompt": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                }
+              },
+              "required": [
+                "inputIndex",
+                "systemPrompt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "v",
+            "instanceId",
+            "runId",
+            "callId",
+            "type",
+            "operation",
+            "args"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 4
             },
             "instanceId": {
               "type": "string",
@@ -381,7 +494,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 3
+              "const": 4
             },
             "instanceId": {
               "type": "string",
@@ -450,7 +563,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 3
+              "const": 4
             },
             "instanceId": {
               "type": "string",
@@ -508,7 +621,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 3
+          "const": 4
         },
         "instanceId": {
           "type": "string",
@@ -746,6 +859,159 @@
             {
               "type": "object",
               "properties": {
+                "items": {
+                  "minItems": 1,
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "inputIndex": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 19
+                          },
+                          "phrase": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "status": {
+                            "type": "string",
+                            "const": "pending"
+                          }
+                        },
+                        "required": [
+                          "inputIndex",
+                          "phrase",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "inputIndex": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 19
+                          },
+                          "phrase": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "status": {
+                            "type": "string",
+                            "const": "existing"
+                          }
+                        },
+                        "required": [
+                          "inputIndex",
+                          "phrase",
+                          "status"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "inputIndex": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 19
+                          },
+                          "phrase": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "status": {
+                            "type": "string",
+                            "const": "duplicate"
+                          },
+                          "sourceInputIndex": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 19
+                          }
+                        },
+                        "required": [
+                          "inputIndex",
+                          "phrase",
+                          "status",
+                          "sourceInputIndex"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "items"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "inputIndex": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 19
+                    },
+                    "status": {
+                      "type": "string",
+                      "const": "staged"
+                    }
+                  },
+                  "required": [
+                    "inputIndex",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "inputIndex": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 19
+                    },
+                    "status": {
+                      "type": "string",
+                      "const": "failed"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "MODEL_NOT_CONFIGURED",
+                        "CREDENTIAL_DECRYPT_FAILED",
+                        "MODEL_ERROR",
+                        "INVALID_ANALYSIS",
+                        "UNRECOGNIZED",
+                        "TIMEOUT"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "inputIndex",
+                    "status",
+                    "code"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
                 "entries": {
                   "maxItems": 10,
                   "type": "array",
@@ -778,7 +1044,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 3
+          "const": 4
         },
         "instanceId": {
           "type": "string",
@@ -824,7 +1090,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 3
+          "const": 4
         },
         "instanceId": {
           "type": "string",
@@ -888,7 +1154,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 3
+          "const": 4
         },
         "instanceId": {
           "type": "string",
@@ -946,7 +1212,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 3
+          "const": 4
         },
         "instanceId": {
           "type": "string",
@@ -976,7 +1242,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 3
+          "const": 4
         },
         "instanceId": {
           "type": "string",
@@ -1011,7 +1277,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 3
+          "const": 4
         },
         "instanceId": {
           "type": "string",
@@ -1060,7 +1326,56 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 3
+          "const": 4
+        },
+        "instanceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "type": "string",
+          "const": "phrase_result"
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "completedIndices": {
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 19
+              }
+            }
+          },
+          "required": [
+            "completedIndices"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "v",
+        "instanceId",
+        "runId",
+        "type",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "number",
+          "const": 4
         },
         "instanceId": {
           "type": "string",
@@ -1100,7 +1415,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 3
+          "const": 4
         },
         "instanceId": {
           "type": "string",
@@ -1130,7 +1445,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 3
+          "const": 4
         },
         "instanceId": {
           "type": "string",
@@ -1154,7 +1469,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 3
+          "const": 4
         },
         "instanceId": {
           "type": "string",
