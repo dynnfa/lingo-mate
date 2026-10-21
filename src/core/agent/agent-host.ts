@@ -3,6 +3,7 @@ import {
   agentCallArgsSchema,
   agentHostResultSchema,
   agentDecisionSchema,
+  agentReplyArgsSchema,
   type AgentDecision,
   type AgentCallArgs,
   type AgentHostResult,
@@ -49,10 +50,17 @@ export class AgentHost {
     if (!this.snapshot.allowedOperations.includes(operation) || this.calls.has(callId))
       throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
     this.calls.add(callId)
-    const args = agentCallArgsSchema.parse(rawArgs)
+    const parsedArgs = agentCallArgsSchema.safeParse(rawArgs)
+    if (!parsedArgs.success)
+      throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR', { cause: parsedArgs.error })
+    const args = parsedArgs.data
     if (this.calls.size > this.snapshot.budget.maxSteps) throw new AgentRuntimeError('AGENT_LIMIT')
     if (operation === 'model.decide' && this.testOperations) {
-      if (args.query || JSON.stringify(args.results) !== JSON.stringify(this.results))
+      if (
+        args.systemPrompt !== undefined ||
+        args.query ||
+        JSON.stringify(args.results) !== JSON.stringify(this.results)
+      )
         throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
       if (++this.modelCalls > this.snapshot.budget.maxModelCalls)
         throw new AgentRuntimeError('AGENT_LIMIT')
@@ -75,7 +83,12 @@ export class AgentHost {
       return decision
     }
     if (operation === 'learning.lookup' && this.testOperations) {
-      if (!args.query || args.query !== this.query || args.results)
+      if (
+        args.systemPrompt !== undefined ||
+        !args.query ||
+        args.query !== this.query ||
+        args.results
+      )
         throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
       this.query = undefined
       if (++this.toolCalls > this.snapshot.budget.maxToolCalls)
@@ -95,17 +108,23 @@ export class AgentHost {
         throw new AgentRuntimeError('AGENT_LIMIT')
       return result
     }
-    if (operation !== 'model.reply' || Object.keys(args).length)
-      throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+    if (operation !== 'model.reply') throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+    const reply = agentReplyArgsSchema.safeParse(args)
+    if (!reply.success) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR', { cause: reply.error })
+    if (
+      reply.data.systemPrompt.length +
+        this.snapshot.messages.reduce((n, m) => n + m.content.length, 0) >
+      this.snapshot.budget.maxInputChars
+    )
+      throw new AgentRuntimeError('AGENT_LIMIT')
     if (++this.modelCalls > this.snapshot.budget.maxModelCalls)
       throw new AgentRuntimeError('AGENT_LIMIT')
     this.model ??= this.resolveModel()
     let text = ''
     for await (const event of this.model.streamReply({
       messages: this.snapshot.messages.map((m) => ({ ...m })),
-      outputLanguage: this.snapshot.outputLanguage,
-      targetLanguage: this.snapshot.targetLanguage,
-      promptKind: this.snapshot.task === 'word-concept' ? 'word-concept' : 'conversation',
+      systemPrompt: reply.data.systemPrompt,
+      purpose: 'conversation',
       signal
     })) {
       signal.throwIfAborted()

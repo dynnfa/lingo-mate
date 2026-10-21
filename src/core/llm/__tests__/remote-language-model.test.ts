@@ -1,3 +1,4 @@
+import { conversationTitleSystemMessage } from '../../prompt/conversation-title'
 import { getEventListeners } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RemoteLanguageModel } from '../remote-language-model'
@@ -39,8 +40,8 @@ function reply(
 ): AsyncGenerator<ModelStreamEvent> {
   return new RemoteLanguageModel(CONFIG, timeoutMs, createClient).streamReply({
     messages: [{ role: 'user', content: 'Help me practice English.' }],
-    outputLanguage: 'zh-CN',
-    targetLanguage: 'en',
+    systemPrompt: 'Explain in Simplified Chinese (zh-CN). Examples in English (en).',
+    purpose: 'conversation',
     signal
   })
 }
@@ -164,49 +165,22 @@ describe('RemoteLanguageModel protocol and lifecycle', () => {
     expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0)
   })
 
-  it.each(['zh-CN', 'en'])(
-    'sends separate explanation and practice languages for %s',
-    async (outputLanguage) => {
-      respond(chunk('Hello') + STOP + DONE)
-      await collect(
-        new RemoteLanguageModel(CONFIG, 1_000, createClient).streamReply({
-          messages: [{ role: 'user', content: 'Practice with me' }],
-          outputLanguage,
-          targetLanguage: 'en',
-          signal: new AbortController().signal
-        })
-      )
-      const init = vi.mocked(fetch).mock.calls[0][1]
-      const body = JSON.parse(init?.body as string) as { messages: { content: string }[] }
-      const prompt = body.messages[0].content
-      expect(prompt).toContain(
-        `Write explanations, feedback and instructions in ${outputLanguage === 'zh-CN' ? 'Simplified Chinese (zh-CN)' : 'English (en)'}.`
-      )
-      expect(prompt).toContain(
-        'Write practice dialogue, example sentences and corrected sentences in English (en).'
-      )
-      expect(prompt).not.toContain('every part')
-    }
-  )
-
-  it('sends the word-concept system prompt when promptKind is word-concept', async () => {
+  it('forwards explicit system instructions without selecting a Prompt from command text', async () => {
     respond(chunk('Hello') + STOP + DONE)
+    const systemPrompt = 'Custom instructions. Explain in English.'
     await collect(
       new RemoteLanguageModel(CONFIG, 1_000, createClient).streamReply({
         messages: [{ role: 'user', content: '/concept pursue' }],
-        outputLanguage: 'zh-CN',
-        targetLanguage: 'en',
-        promptKind: 'word-concept',
+        systemPrompt,
+        purpose: 'conversation',
         signal: new AbortController().signal
       })
     )
-    const init = vi.mocked(fetch).mock.calls[0][1]
-    const body = JSON.parse(init?.body as string) as { messages: { content: string }[] }
-    const prompt = body.messages[0].content
-    expect(prompt).toContain('the /concept command')
-    expect(prompt).toContain('commentary on examples in Simplified Chinese (zh-CN)')
-    expect(prompt).toContain('the example sentences themselves in English (en)')
-    expect(prompt).not.toContain('You are Lingo Mate')
+    const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string)
+    expect(body.messages).toEqual([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: '/concept pursue' }
+    ])
   })
 
   it.each(['zh-CN', 'en'])(
@@ -216,9 +190,8 @@ describe('RemoteLanguageModel protocol and lifecycle', () => {
       await collect(
         new RemoteLanguageModel(CONFIG, 1_000, createClient).streamReply({
           messages: [{ role: 'user', content: '/concept coffee' }],
-          outputLanguage,
-          targetLanguage: 'en',
-          promptKind: 'conversation-title',
+          systemPrompt: conversationTitleSystemMessage(outputLanguage),
+          purpose: 'conversation-title',
           signal: new AbortController().signal
         })
       )

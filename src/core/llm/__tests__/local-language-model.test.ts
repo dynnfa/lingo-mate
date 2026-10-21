@@ -4,13 +4,12 @@ import { LocalLanguageModel } from '../local-language-model'
 import type { ModelStreamEvent } from '../language-model'
 
 function input(
-  promptKind?: 'conversation-title'
+  purpose: 'conversation' | 'conversation-title' = 'conversation'
 ): Parameters<LocalLanguageModel['streamReply']>[0] {
   return {
     messages: [{ role: 'user' as const, content: 'Hello' }],
-    outputLanguage: 'zh-CN',
-    targetLanguage: 'en',
-    ...(promptKind ? { promptKind } : {}),
+    systemPrompt: 'Explain in Simplified Chinese (zh-CN). Examples in English (en).',
+    purpose,
     signal: new AbortController().signal
   }
 }

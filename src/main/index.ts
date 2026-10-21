@@ -488,39 +488,37 @@ app.whenReady().then(() => {
     [exploreSkill.skillId, exploreSkill],
     [exploreVocabularySkill.skillId, exploreVocabularySkill]
   ])
-  // Internal pilot switch; no executable paths or host permissions come from Renderer.
-  if (process.env['LINGO_MATE_AGENT_RUNTIME'] === 'python') {
-    const agentProcess = new PythonAgentProcess(() => ({
-      ...resolvePythonAgentLaunch({
-        packaged: app.isPackaged,
-        appPath: app.getAppPath(),
-        resourcesPath: process.resourcesPath,
-        appVersion: app.getVersion(),
-        bundledDevelopment: process.env['LINGO_MATE_AGENT_BUNDLE'] === '1'
-      }),
-      onDiagnostic: (error) =>
-        errorLogger.log({
-          source: 'main',
-          module: 'agent',
-          operation: 'process',
-          message: 'Agent process failed',
-          error
-        })
-    }))
-    pythonAgentRuntime = new PythonAgentRuntime(agentProcess, () =>
-      conversationModel instanceof ConfiguredLanguageModel
-        ? conversationModel.snapshot()
-        : conversationModel
-    )
-  }
+  // Python owns every Agent run; process startup remains lazy on the first request.
+  const agentProcess = new PythonAgentProcess(() => ({
+    ...resolvePythonAgentLaunch({
+      packaged: app.isPackaged,
+      appPath: app.getAppPath(),
+      resourcesPath: process.resourcesPath,
+      appVersion: app.getVersion(),
+      bundledDevelopment: process.env['LINGO_MATE_AGENT_BUNDLE'] === '1'
+    }),
+    onDiagnostic: (error) =>
+      errorLogger.log({
+        source: 'main',
+        module: 'agent',
+        operation: 'process',
+        message: 'Agent process failed',
+        error
+      })
+  }))
+  pythonAgentRuntime = new PythonAgentRuntime(agentProcess, () =>
+    conversationModel instanceof ConfiguredLanguageModel
+      ? conversationModel.snapshot()
+      : conversationModel
+  )
   conversationModule = new ConversationModule(
     conversationModel,
     conversationRepository,
+    pythonAgentRuntime,
     resolveLanguages,
     conversationSkills,
     conversationRepository,
-    coreDiagnostics,
-    pythonAgentRuntime
+    coreDiagnostics
   )
   registerConversationIpc(conversationModule, registerTrustedHandler)
 

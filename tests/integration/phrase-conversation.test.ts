@@ -1,8 +1,9 @@
+import { createTestConversationModule } from '../fixtures/conversation'
 import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ConversationEvent } from '../../src/shared/conversation'
 import type { LanguageModel } from '../../src/core/llm/language-model'
-import { ConversationModule } from '../../src/core/conversation/conversation-module'
+import type { ConversationModule } from '../../src/core/conversation/conversation-module'
 import { PhraseConversationSkill } from '../../src/core/learning/phrase/phrase-conversation-skill'
 import type { PhraseAnalyzer } from '../../src/core/learning/phrase/phrase-analyzer'
 import { insertResult } from '../../src/core/learning/phrase/__tests__/fixtures'
@@ -53,7 +54,7 @@ function makeModule(
     () => ({ analyze }),
     createPhraseFeedbackFormatter()
   )
-  const module = new ConversationModule(
+  const module = createTestConversationModule(
     unusedConversationModel,
     conversationRepository,
     () => ({ outputLanguage: 'en' as const, targetLanguage: 'en' as const }),
