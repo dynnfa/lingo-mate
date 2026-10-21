@@ -1,3 +1,4 @@
+import { createTestConversationModule } from '../fixtures/conversation'
 import { randomUUID } from 'node:crypto'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -5,7 +6,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ConversationEvent } from '../../src/shared/conversation'
 import type { LanguageModel } from '../../src/core/llm/language-model'
-import { ConversationModule } from '../../src/core/conversation/conversation-module'
+import type { ConversationModule } from '../../src/core/conversation/conversation-module'
 import { ExplorePhraseConversationSkill } from '../../src/core/learning/explore-phrase/explore-phrase-conversation-skill'
 import {
   ExplorePhraseModule,
@@ -105,7 +106,7 @@ function makeModule(
     exploreModule,
     createExplorePhraseFeedbackFormatter()
   )
-  const module = new ConversationModule(
+  const module = createTestConversationModule(
     unusedConversationModel,
     conversationRepository,
     () => ({ outputLanguage: 'zh-CN' as const, targetLanguage: 'en' as const }),
@@ -347,7 +348,7 @@ describe('explore phrase conversation integration', () => {
       exploreModule,
       createExplorePhraseFeedbackFormatter()
     )
-    const module = new ConversationModule(
+    const module = createTestConversationModule(
       unusedConversationModel,
       conversationRepository,
       () => ({ outputLanguage: 'zh-CN' as const, targetLanguage: 'en' as const }),
@@ -454,7 +455,7 @@ describe('explore phrase conversation integration', () => {
         })),
         createExplorePhraseFeedbackFormatter()
       )
-      const module = new ConversationModule(
+      const module = createTestConversationModule(
         unusedConversationModel,
         repository,
         () => ({ outputLanguage: locale, targetLanguage: 'en' }),

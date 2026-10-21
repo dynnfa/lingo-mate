@@ -1,3 +1,4 @@
+import { createTestConversationModule } from '../fixtures/conversation'
 import { randomUUID } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -8,7 +9,7 @@ import { SynonymModule } from '../../src/core/learning/synonym/synonym-module'
 import { SynonymConversationSkill } from '../../src/core/learning/synonym/synonym-conversation-skill'
 import type { SynonymAnalyzer } from '../../src/core/learning/synonym/synonym-analyzer'
 import type { SynonymGroupPage } from '../../src/core/learning/synonym/synonym-repository'
-import { ConversationModule } from '../../src/core/conversation/conversation-module'
+import type { ConversationModule } from '../../src/core/conversation/conversation-module'
 import { createSynonymFeedbackFormatter } from '../../src/main/synonym-feedback'
 import type { ConversationEvent } from '../../src/shared/conversation'
 import { SynonymError } from '../../src/core/learning/synonym/parse-synonym-input'
@@ -40,7 +41,7 @@ function setup(analyze = vi.fn(normal)): {
   const synonym = new SqliteSynonymRepository(database)
   const service = new SynonymModule(synonym, () => ({ analyze }), 30)
   const skill = new SynonymConversationSkill(service, createSynonymFeedbackFormatter())
-  const module = new ConversationModule(
+  const module = createTestConversationModule(
     {
       async *streamReply() {
         yield { type: 'text' as const, delta: 'hello' }

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
-export const AGENT_PROTOCOL_VERSION = 1
+export const AGENT_PROTOCOL_VERSION = 2
+export const MAX_AGENT_SYSTEM_PROMPT_CHARS = 4096
 export const MAX_AGENT_FRAME_BYTES = 262_144
 export const AGENT_OPERATIONS = ['model.reply', 'model.decide', 'learning.lookup'] as const
 const identity = z.string().min(1).max(128)
@@ -19,7 +20,7 @@ export const agentBudgetSchema = z.strictObject({
   maxOutputChars: z.number().int().min(1).max(65_536)
 })
 export const agentSnapshotSchema = z.strictObject({
-  task: z.enum(['conversation', 'word-concept', 'tool-loop']),
+  task: z.enum(['conversation', 'tool-loop']),
   messages: z.array(agentMessageSchema).min(1).max(100),
   outputLanguage: z.string().min(2).max(35),
   targetLanguage: z.string().min(2).max(35),
@@ -39,12 +40,22 @@ export const agentHostResultSchema = z.union([
   agentDecisionSchema,
   z.strictObject({ entries: z.array(z.string().max(1024)).max(10) })
 ])
+// Zod/JSON Schema count code points; the wire budget is measured in UTF-16 units.
+const systemPromptSchema = z
+  .string()
+  .min(1)
+  .max(MAX_AGENT_SYSTEM_PROMPT_CHARS)
+  .refine((value) => value.length <= MAX_AGENT_SYSTEM_PROMPT_CHARS)
 export const agentCallArgsSchema = z.strictObject({
+  systemPrompt: systemPromptSchema.optional(),
   query: z.string().min(1).max(256).optional(),
   results: z
     .array(z.strictObject({ entries: z.array(z.string().max(1024)).max(10) }))
     .max(8)
     .optional()
+})
+export const agentReplyArgsSchema = z.strictObject({
+  systemPrompt: systemPromptSchema
 })
 export const agentErrorCodeSchema = z.enum([
   'AGENT_UNAVAILABLE',
@@ -61,15 +72,29 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
   z.strictObject({
     ...base,
     type: z.literal('ready'),
-    capabilities: z.array(z.enum(['conversation', 'word-concept', 'tool-loop'])).max(3)
+    capabilities: z.array(z.enum(['conversation', 'tool-loop'])).max(2)
   }),
   z.strictObject({ ...run, type: z.literal('run'), snapshot: agentSnapshotSchema }),
-  z.strictObject({
-    ...call,
-    type: z.literal('host_call'),
-    operation: agentOperationSchema,
-    args: agentCallArgsSchema
-  }),
+  z.discriminatedUnion('operation', [
+    z.strictObject({
+      ...call,
+      type: z.literal('host_call'),
+      operation: z.literal('model.reply'),
+      args: agentReplyArgsSchema
+    }),
+    z.strictObject({
+      ...call,
+      type: z.literal('host_call'),
+      operation: z.literal('model.decide'),
+      args: agentCallArgsSchema.omit({ systemPrompt: true, query: true })
+    }),
+    z.strictObject({
+      ...call,
+      type: z.literal('host_call'),
+      operation: z.literal('learning.lookup'),
+      args: z.strictObject({ query: z.string().min(1).max(256) })
+    })
+  ]),
   z.strictObject({ ...call, type: z.literal('host_result'), result: agentHostResultSchema }),
   z.strictObject({ ...call, type: z.literal('host_error'), code: agentErrorCodeSchema }),
   z.strictObject({

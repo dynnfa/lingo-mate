@@ -3,6 +3,11 @@ import { resolve } from 'node:path'
 import { PythonAgentProcess } from '../../src/main/agent/python-agent-process'
 import { PythonAgentRuntime } from '../../src/main/agent/python-agent-runtime'
 import type { LanguageModel } from '../../src/core/llm/language-model'
+import { ConversationModule } from '../../src/core/conversation/conversation-module'
+import { openDatabase } from '../../src/database/database'
+import { SqliteConversationRepository } from '../../src/database/sqlite-conversation-repository'
+import type { ConversationEvent } from '../../src/shared/conversation'
+import { randomUUID } from 'node:crypto'
 
 const launch = (): PythonAgentProcess =>
   new PythonAgentProcess({
@@ -21,6 +26,66 @@ const model: LanguageModel = {
 }
 
 describe('Python LangGraph process', () => {
+  it.each(['Hello', '/concept carry', ' /concept\u3000carry ', '/conceptual drift'])(
+    'runs %s through Python-owned instructions and canonical conversation persistence',
+    async (text) => {
+      const database = openDatabase(':memory:')
+      const repository = new SqliteConversationRepository(database)
+      const seen: import('../../src/core/llm/language-model').StreamReplyInput[] = []
+      const runtime = new PythonAgentRuntime(launch(), () => ({
+        async *streamReply(input) {
+          seen.push(input)
+          yield { type: 'reasoning', delta: 'temporary' }
+          yield { type: 'text', delta: 'Python reply' }
+        }
+      }))
+      const legacyModel = {
+        streamReply: vi.fn(() => {
+          throw new Error('TS reply path used')
+        })
+      }
+      const module = new ConversationModule(legacyModel, repository, runtime)
+      try {
+        const sessionId = randomUUID()
+        const now = new Date().toISOString()
+        await repository.create({
+          id: sessionId,
+          title: 'Existing',
+          createdAt: now,
+          updatedAt: now
+        })
+        const events: ConversationEvent[] = []
+        const accepted = await module.sendMessage(
+          { sessionId, requestId: randomUUID(), text },
+          (event) => events.push(event)
+        )
+        await vi.waitFor(() =>
+          expect(events.some((event) => event.type === 'completed')).toBe(true)
+        )
+        expect(seen).toHaveLength(1)
+        expect(seen[0].systemPrompt).toContain(
+          text.includes('carry') ? 'the /concept command' : 'You are Lingo Mate'
+        )
+        expect(seen[0].systemPrompt).toContain('Simplified Chinese (zh-CN)')
+        expect(seen[0].systemPrompt).toContain('English (en)')
+        expect(seen[0].messages).toEqual([{ role: 'user', content: text }])
+        expect(legacyModel.streamReply).not.toHaveBeenCalled()
+        expect(
+          events.filter((event) => ['completed', 'failed', 'cancelled'].includes(event.type))
+        ).toHaveLength(1)
+        const stored = await repository.history(sessionId)
+        expect(stored.map(({ role, content }) => [role, content])).toEqual([
+          ['user', text],
+          ['assistant', 'Python reply']
+        ])
+        expect(stored[1].id).toBe(accepted.generation.assistantMessageId)
+      } finally {
+        await module.shutdown()
+        await runtime.dispose()
+        database.close()
+      }
+    }
+  )
   it('performs a real handshake and returns streamed graph output exactly once', async () => {
     const process = launch()
     const runtime = new PythonAgentRuntime(process, () => model)

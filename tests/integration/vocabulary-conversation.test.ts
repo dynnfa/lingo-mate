@@ -1,9 +1,9 @@
+import { createTestConversationModule } from '../fixtures/conversation'
 import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ConversationEvent } from '../../src/shared/conversation'
 import type { LanguageModel } from '../../src/core/llm/language-model'
 import {
-  ConversationModule,
   SkillLanguageMismatchError,
   type ConversationLanguages
 } from '../../src/core/conversation/conversation-module'
@@ -62,7 +62,7 @@ describe('vocabulary conversation integration', () => {
     const vocabularyRepository = new SqliteVocabularyRepository(database)
     const analyze = vi.fn(async ({ term }: { term: string }) => insertResult(term))
     const skill = makeSkill(vocabularyRepository, analyze)
-    const module = new ConversationModule(
+    const module = createTestConversationModule(
       unusedConversationModel,
       conversationRepository,
       () => ({ outputLanguage: 'en' as const, targetLanguage: 'en' as const }),
@@ -116,7 +116,7 @@ describe('vocabulary conversation integration', () => {
     const analyze = vi.fn(async () => insertResult())
     const skill = makeSkill(vocabularyRepository, analyze)
     const report = vi.fn()
-    const module = new ConversationModule(
+    const module = createTestConversationModule(
       unusedConversationModel,
       conversationRepository,
       () => ({ outputLanguage: 'en' as const, targetLanguage: 'en' as const }),
@@ -195,7 +195,7 @@ describe('vocabulary conversation integration', () => {
         throw new VocabularyError('TOOL_CALL_NOT_SUPPORTED')
       })
       const report = vi.fn()
-      const module = new ConversationModule(
+      const module = createTestConversationModule(
         unusedConversationModel,
         conversationRepository,
         () => ({ outputLanguage: 'en' as const, targetLanguage: 'en' as const }),
@@ -268,7 +268,7 @@ describe('vocabulary conversation integration', () => {
       const repository = new SqliteConversationRepository(database)
       const skill = makeSkill(new SqliteVocabularyRepository(database), async () => insertResult())
       const report = vi.fn()
-      const module = new ConversationModule(
+      const module = createTestConversationModule(
         unusedConversationModel,
         repository,
         undefined,
@@ -320,7 +320,7 @@ describe('vocabulary conversation integration', () => {
     const analyze = vi.fn(async () => insertResult())
     const skill = makeSkill(vocabularyRepository, analyze)
     // 首版 TargetLanguage 只有 'en'；用断言模拟未来扩展后客户端旧值与设置冲突的场景
-    const module = new ConversationModule(
+    const module = createTestConversationModule(
       unusedConversationModel,
       conversationRepository,
       () => ({ outputLanguage: 'en', targetLanguage: 'ja' }) as unknown as ConversationLanguages,

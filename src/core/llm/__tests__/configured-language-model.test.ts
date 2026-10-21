@@ -43,8 +43,8 @@ describe('ConfiguredLanguageModel', () => {
     )
     const stream = model.streamReply({
       messages: [{ role: 'user', content: 'Hello' }],
-      outputLanguage: 'en',
-      targetLanguage: 'en',
+      systemPrompt: 'Explain in Simplified Chinese (zh-CN). Examples in English (en).',
+      purpose: 'conversation',
       signal: new AbortController().signal
     })
 

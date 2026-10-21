@@ -1,7 +1,4 @@
 import { z } from 'zod'
-import { conversationTitleSystemMessage } from '../prompt/conversation-title'
-import { conversationSystemMessage } from '../prompt/conversation-prompt'
-import { wordConceptSystemMessage } from '../prompt/word-concept'
 import type { LanguageModel, ModelStreamEvent, StreamReplyInput } from './language-model'
 import type { RuntimeModelConfig } from './model-config'
 import { ModelRequestError, type CreateLlmClient } from './llm-client'
@@ -28,7 +25,7 @@ const chunkSchema = z.object({
 type ConfiguredModelConfig = RuntimeModelConfig & { configured: true }
 
 // 流式对话适配器：通信生命周期（截止时间、取消、流资源、用量记账）由
-// LlmClient 拥有；本层只保留 Prompt 组装、分片协议校验与业务错误映射。
+// LlmClient 拥有；本层只保留分片协议校验与业务错误映射。
 export class RemoteLanguageModel implements LanguageModel {
   constructor(
     private readonly config: ConfiguredModelConfig,
@@ -38,19 +35,13 @@ export class RemoteLanguageModel implements LanguageModel {
 
   async *streamReply(input: StreamReplyInput): AsyncGenerator<ModelStreamEvent> {
     const client = this.createClient(this.config)
-    const systemPrompt =
-      input.promptKind === 'conversation-title'
-        ? conversationTitleSystemMessage(input.outputLanguage)
-        : input.promptKind === 'word-concept'
-          ? wordConceptSystemMessage(input)
-          : conversationSystemMessage(input)
     let finished = false
     let hasText = false
     for await (const rawChunk of client.stream(
       {
         model: this.config.modelId,
         messages: [
-          { role: 'system', content: systemPrompt },
+          { role: 'system', content: input.systemPrompt },
           ...input.messages.map(({ role, content }) => ({ role, content }))
         ]
       },

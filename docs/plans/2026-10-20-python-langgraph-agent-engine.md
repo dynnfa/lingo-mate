@@ -4,6 +4,8 @@
 - 状态：实施中（功能已落地；跨平台与正式发行验收待完成）
 - 技术路线：Electron Main 管理本地 Python 子进程；LangGraph 负责工作流编排，现有 TypeScript Core 负责领域执行。
 
+> 本文保留试点时期的设计和验收记录。当前运行方式以 [Python 唯一运行时计划](2026-10-21-python-only-agent-runtime.md) 和 [Agent Engine README](../../agent-engine/README.md) 为准。
+
 ## 目标与范围
 
 创建独立的 `agent-engine/` Python 模块，作为后续编写 LangGraph 状态、节点、条件路由和学习工作流的固定位置。通过受控通信接口连接现有 Electron 应用，让新增 Agent 编排能够复用 TypeScript 中已有的模型通信、学习能力和数据访问。
@@ -294,3 +296,7 @@ pnpm test:electron
 | `LINGO_MATE_TEST_PACKAGED=1 pnpm test:electron` | 50 项全部通过，包含开发、冻结运行包、安装目录应用三条 Python 路径 |
 
 上面的 Electron 验证显式设置 `LINGO_MATE_TEST_PACKAGED=1`，测试装配显式启用 Python 试点并断言真实子进程存在、流式结果及崩溃重启；旧路径回归同时保留。所有测试数据位于内存数据库或临时用户目录。其他平台的 CI 尚未执行，正式签名/公证及干净机器安装仍未验收。
+
+## 后续架构变更（2026-10-21）
+
+本文以上内容保留试点时期的设计与验收记录，不再作为运行时选择说明。后续已移除运行时选择参数，Python 成为普通对话与 `/concept` 的唯一 Agent 路径，并接管命令识别和 Prompt；TS 保留可信宿主能力。协议升级至 v2。当前说明见 [Agent Engine README](../../agent-engine/README.md)，变更及验证见 [Python 唯一运行时计划](2026-10-21-python-only-agent-runtime.md)。原计划未完成的跨平台与正式发行验收仍保持待完成。

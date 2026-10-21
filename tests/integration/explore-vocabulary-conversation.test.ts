@@ -1,3 +1,4 @@
+import { createTestConversationModule } from '../fixtures/conversation'
 import { randomUUID } from 'node:crypto'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -5,7 +6,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ConversationEvent } from '../../src/shared/conversation'
 import type { LanguageModel } from '../../src/core/llm/language-model'
-import { ConversationModule } from '../../src/core/conversation/conversation-module'
+import type { ConversationModule } from '../../src/core/conversation/conversation-module'
 import { ExploreVocabularyConversationSkill } from '../../src/core/learning/explore-vocabulary/explore-vocabulary-conversation-skill'
 import {
   ExploreVocabularyModule,
@@ -129,7 +130,7 @@ function makeModule(
     ),
     createExploreVocabularyFeedbackFormatter()
   )
-  const module = new ConversationModule(
+  const module = createTestConversationModule(
     unusedConversationModel,
     conversationRepository,
     () => ({ outputLanguage: 'zh-CN' as const, targetLanguage: 'en' as const }),
@@ -265,7 +266,7 @@ describe('explore vocabulary conversation integration', () => {
       createExplorePhraseFeedbackFormatter()
     )
     const repository = new SqliteConversationRepository(database)
-    const module = new ConversationModule(
+    const module = createTestConversationModule(
       unusedConversationModel,
       repository,
       () => ({ outputLanguage: 'zh-CN' as const, targetLanguage: 'en' as const }),
@@ -365,7 +366,7 @@ describe('explore vocabulary conversation integration', () => {
         })),
         createExploreVocabularyFeedbackFormatter()
       )
-      const module = new ConversationModule(
+      const module = createTestConversationModule(
         unusedConversationModel,
         repository,
         () => ({ outputLanguage: locale, targetLanguage: 'en' }),

@@ -1,3 +1,4 @@
+import { createTestConversationModule } from '../fixtures/conversation'
 import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type Database from 'better-sqlite3'
@@ -21,7 +22,7 @@ function setup(model: LanguageModel): {
   const database = openDatabase(':memory:')
   databases.push(database)
   const repository = new SqliteConversationRepository(database)
-  const module = new ConversationModule(model, repository, () => ({
+  const module = createTestConversationModule(model, repository, () => ({
     outputLanguage: 'en',
     targetLanguage: 'en'
   }))
@@ -61,7 +62,7 @@ describe('first-message conversation titles', () => {
     const { module, repository } = setup({
       async *streamReply(input) {
         calls.push(input)
-        if (input.promptKind === 'conversation-title') {
+        if (input.purpose === 'conversation-title') {
           await finishTitle.promise
           yield { type: 'text' as const, delta: 'Coffee practice' }
         } else yield { type: 'text' as const, delta: 'What would you like?' }
@@ -76,8 +77,10 @@ describe('first-message conversation titles', () => {
     finishTitle.resolve()
     await vi.waitFor(() => expect(first.events.some((e) => e.type === 'titleUpdated')).toBe(true))
     expect(await repository.find(sessionId)).toEqual({ ...before, title: 'Coffee practice' })
-    expect(calls.filter(({ promptKind }) => promptKind === 'conversation-title')).toHaveLength(1)
-    expect(calls[0]).toMatchObject({ outputLanguage: 'en', targetLanguage: 'en' })
+    expect(calls.filter(({ purpose }) => purpose === 'conversation-title')).toHaveLength(1)
+    expect(calls.find((input) => input.purpose === 'conversation-title')?.systemPrompt).toContain(
+      'Write the title in English (en)'
+    )
   })
 
   it.each(['', '   ', 'a'.repeat(41), 'line one\nline two'])(
@@ -87,7 +90,7 @@ describe('first-message conversation titles', () => {
         async *streamReply(input) {
           yield {
             type: 'text' as const,
-            delta: input.promptKind === 'conversation-title' ? title : 'Reply'
+            delta: input.purpose === 'conversation-title' ? title : 'Reply'
           }
         }
       })
@@ -101,7 +104,7 @@ describe('first-message conversation titles', () => {
   it('keeps the input title when title generation fails', async () => {
     const { module, repository } = setup({
       async *streamReply(input) {
-        if (input.promptKind === 'conversation-title') {
+        if (input.purpose === 'conversation-title') {
           yield { type: 'text' as const, delta: 'Partial' }
           throw new Error('network failed')
         }

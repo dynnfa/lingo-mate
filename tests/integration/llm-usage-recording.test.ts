@@ -142,8 +142,8 @@ describe('LLM usage ledger across the unified client', () => {
     let text = ''
     for await (const event of model.streamReply({
       messages: [{ role: 'user', content: 'Practice English with me.' }],
-      outputLanguage: 'zh-CN',
-      targetLanguage: 'en',
+      systemPrompt: 'Explain in Simplified Chinese (zh-CN). Examples in English (en).',
+      purpose: 'conversation',
       signal: new AbortController().signal
     })) {
       if (event.type === 'text') text += event.delta
@@ -174,7 +174,7 @@ describe('LLM usage ledger across the unified client', () => {
         let text = ''
         for await (const event of runtime.stream({
           sessionId: task,
-          task,
+          task: 'conversation',
           messages: [{ role: 'user', content: task === 'conversation' ? 'Hi' : '/concept carry' }],
           outputLanguage: 'zh-CN',
           targetLanguage: 'en',
@@ -202,8 +202,8 @@ describe('LLM usage ledger across the unified client', () => {
     for (let call = 0; call < 2; call++) {
       for await (const event of frozen.streamReply({
         messages: [{ role: 'user', content: 'Hi' }],
-        outputLanguage: 'zh-CN',
-        targetLanguage: 'en',
+        systemPrompt: 'Explain in Simplified Chinese (zh-CN). Examples in English (en).',
+        purpose: 'conversation',
         signal: new AbortController().signal
       }))
         void event

@@ -130,8 +130,8 @@ const fakeVault: CredentialVault = {
 
 interface TestStreamInput {
   messages: Array<{ role: 'user'; content: string }>
-  outputLanguage: string
-  targetLanguage: string
+  systemPrompt: string
+  purpose: 'conversation'
   signal: AbortSignal
 }
 
@@ -148,8 +148,8 @@ const createClient: CreateLlmClient = (config) =>
 
 const STREAM_INPUT = (signal: AbortSignal, outputLanguage = 'zh-CN'): TestStreamInput => ({
   messages: [{ role: 'user', content: 'Hello' }],
-  outputLanguage,
-  targetLanguage: 'en',
+  systemPrompt: `Explain in ${outputLanguage === 'zh-CN' ? 'Simplified Chinese (zh-CN)' : 'English (en)'}. Examples in English (en).`,
+  purpose: 'conversation',
   signal
 })
 
