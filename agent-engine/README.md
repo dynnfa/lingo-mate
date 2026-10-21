@@ -2,7 +2,7 @@
 
 本模块只负责内存中的 LangGraph 编排。会话与消息持久化、语言学习规则、模型凭据、供应商请求和用量统计均由 TypeScript 宿主负责。生产只接入普通对话与 `/concept`；模型决策/只读工具循环通过测试扩展验证。无 checkpoint、业务数据库访问、云端 tracing 或模型 SDK 请求。
 
-决策与限制见 [ADR](../docs/adr/2026-10-21-python-langgraph-agent-engine.md)。协议源位于 `src/core/agent/agent-protocol.ts`；生成的 `protocol/schema.json` 随包发布，不能手改。共享契约样例在 `tests/integration/fixtures/agent/protocol-cases.json`。
+决策与限制见 [ADR](../docs/adr/2026-10-21-python-langgraph-agent-engine.md)。本文命令与文件路径均以仓库根目录为基准。协议源位于 `src/core/agent/agent-protocol.ts`；生成的 `agent-engine/src/lingo_agent/protocol/schema.json` 随包发布，不能手改。共享契约样例在 `tests/integration/fixtures/agent/protocol-cases.json`。
 
 ## 开发
 
@@ -16,9 +16,9 @@ pnpm agent:check
 LINGO_MATE_AGENT_RUNTIME=python pnpm dev
 ```
 
-PowerShell 使用 `$env:LINGO_MATE_AGENT_RUNTIME='python'` 后运行 `pnpm dev`。默认不启用试点；启用后的启动/协议/执行故障不会回退。开发解释器只从本仓库 `.venv/bin/python`（Windows `.venv/Scripts/python.exe`）启动，不搜索 PATH。手动入口为 `.venv` 中的 `python -I -m lingo_agent`，只接受 JSONL 管道协议。
+PowerShell 使用 `$env:LINGO_MATE_AGENT_RUNTIME='python'` 后运行 `pnpm dev`。默认不启用试点；启用后的启动/协议/执行故障不会回退。开发解释器只从 `agent-engine/.venv/bin/python`（Windows `agent-engine/.venv/Scripts/python.exe`）启动，不搜索 PATH。手动入口为 `agent-engine/.venv/bin/python -I -m lingo_agent`，Windows 使用对应解释器路径，只接受 JSONL 管道协议。
 
-所有检查与测试均使用锁定环境。Python 测试在 `src/lingo_agent/__tests__/test_*.py`，pytest 发现规则由 `pyproject.toml` 配置。执行 TypeScript 全量测试前也要完成 `agent:sync`；新增进程集成测试确实启动 Python，不会在缺环境时悄悄跳过。测试仅使用可控替身/本地假模型服务。
+所有检查与测试均使用锁定环境。Python 测试在 `agent-engine/src/lingo_agent/__tests__/test_*.py`，pytest 发现规则由 `agent-engine/pyproject.toml` 配置。执行 TypeScript 全量测试前也要完成 `agent:sync`；新增进程集成测试确实启动 Python，不会在缺环境时悄悄跳过。测试仅使用可控替身/本地假模型服务。
 
 ```sh
 pnpm lint
@@ -38,7 +38,7 @@ pnpm agent:smoke
 pnpm build:unpack
 ```
 
-`build:unpack`、`build:mac`、`build:win` 和 `build:linux` 均先构建原生运行包。PyInstaller 必须在目标 OS/CPU 原生构建；不能通过指定 electron-builder 架构来交叉编译 Python。原始目录在 `dist/<platform>-<arch>/lingo-agent/`，同级 tar.gz 保存执行权限及符号链接。下载 CI 产物后先解压到相应架构目录，再用于桌面打包。生成物全部忽略，不提交仓库。
+`build:unpack`、`build:mac`、`build:win` 和 `build:linux` 均先构建原生运行包。PyInstaller 必须在目标 OS/CPU 原生构建；不能通过指定 electron-builder 架构来交叉编译 Python。原始目录在 `agent-engine/dist/<platform>-<arch>/lingo-agent/`，归档位于 `agent-engine/dist/lingo-agent-<platform>-<arch>.tar.gz`，保存执行权限及符号链接。下载 CI 产物后先解压到相应架构目录，再用于桌面打包。生成物全部忽略，不提交仓库。
 
 electron-builder 复制该目录至 `resources/agent-engine/`，置于 ASAR 外。manifest 中应用版本、协议、OS 与 CPU 任一不匹配都会安全拒绝启动。应用启动不安装依赖，也不读取 Renderer 指定的命令、路径或环境。
 
@@ -58,7 +58,7 @@ macOS 本地包使用 PyInstaller 的 ad-hoc 签名。正式发行还需原有 A
 
 - 修改 Zod 协议后运行 `node --experimental-strip-types scripts/agent-protocol-schema.mjs`，更新共享用例；破坏性修改提升协议版本并重建全部运行包。
 - stdout 专用于协议，Python 不输出用户错误文案或 traceback。stderr 只由 Main 有界接收并进入已有本地错误日志。
-- `AGENT_UNAVAILABLE`：检查 `.venv` 或安装资源完整性、manifest、执行权限及启动次数上限。只对后续新请求重启，不重放失败任务。
+- `AGENT_UNAVAILABLE`：检查 `agent-engine/.venv` 或安装资源完整性、manifest、执行权限及启动次数上限。只对后续新请求重启，不重放失败任务。
 - `AGENT_PROTOCOL_ERROR`：检查应用与运行包是否匹配、帧格式/大小、身份、call ID 或事件序号。内部工具参数、状态及模型原始响应不会进入 UI。
 - `AGENT_LIMIT`：输入副本、输出、调用次数、图步数或总截止时间达到上限；完整存储历史保留。
 - 取消是独立控制消息，但不能超越其运行的启动帧。1 秒内无终态确认会终止共享进程，其余在途请求也失败；后续新请求可重新启动。

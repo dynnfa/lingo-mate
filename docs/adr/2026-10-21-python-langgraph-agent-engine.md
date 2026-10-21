@@ -8,7 +8,7 @@
 
 新增独立 `agent-engine/` 包，使用 CPython 3.13（开发与 CI 固定 3.13.3）、LangGraph 1.2.12、uv 锁文件和 PyInstaller 目录式分发。Electron Main 用固定路径、`shell: false` 和环境白名单启动共享 Python 子进程，通过私有 UTF-8 JSONL 管道通信。生产运行不依赖系统 Python、uv 或 PATH。
 
-这次重新审视 `docs/architecture-todo.md` 中“不引入通用 Agent 框架”的范围：仅新增编排层，现有会话生命周期、领域执行、模型适配、用量账本、存储与事务继续由 TypeScript 持有。该旧清单的状态保持原样。
+这次重新审视历史架构清单中“不引入通用 Agent 框架”的范围：仅新增编排层，现有会话生命周期、领域执行、模型适配、用量账本、存储与事务继续由 TypeScript 持有。历史清单原路径为 `docs/architecture-todo.md`，当前仓库已不包含该文件，此处仅保留决策背景，不作为现行规范入口。当前约定见 [AGENTS.md](../../AGENTS.md)，运行边界以本 ADR 为准。
 
 `ConversationModule` 通过可选 `AgentRuntime` 执行普通对话及 `/concept`。标题、显式学习技能和渠道沿用原流程。内部 `LINGO_MATE_AGENT_RUNTIME=python` 开关启用试点；默认继续使用 TypeScript。启用后故障返回明确错误，不能静默回退或重放失败请求。
 
