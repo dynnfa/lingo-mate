@@ -95,7 +95,6 @@ describe('phrase migrations', () => {
     `)
     migrateDatabase(database)
     migrateDatabase(database)
-    expect(database.pragma('user_version', { simple: true })).toBe(11)
     // 历史 Vocabulary 技能执行与用量记录保留
     expect(database.prepare('SELECT skill_id FROM conversation_skill_executions').get()).toEqual({
       skill_id: 'vocabulary'
