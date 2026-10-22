@@ -6,13 +6,13 @@ describe('private agent pipe', () => {
   it('decodes split UTF-8 and coalesced frames without treating a data event as a frame', () => {
     const decoder = new AgentFrameDecoder()
     const bytes = Buffer.from(
-      '{"v":5,"instanceId":"中文","type":"hello"}\n{"v":5,"instanceId":"p","type":"shutdown"}\n'
+      '{"v":6,"instanceId":"中文","type":"hello"}\n{"v":6,"instanceId":"p","type":"shutdown"}\n'
     )
     const cut = bytes.indexOf(Buffer.from('中文')) + 1
     expect(decoder.push(bytes.subarray(0, cut))).toEqual([])
     expect(decoder.push(bytes.subarray(cut))).toEqual([
-      { v: 5, instanceId: '中文', type: 'hello' },
-      { v: 5, instanceId: 'p', type: 'shutdown' }
+      { v: 6, instanceId: '中文', type: 'hello' },
+      { v: 6, instanceId: 'p', type: 'shutdown' }
     ])
   })
   it('bounds blocked writes and releases the pending sender when the pipe closes', async () => {
@@ -22,10 +22,10 @@ describe('private agent pipe', () => {
       }
     })
     const writer = new AgentFrameWriter(blocked, 256)
-    const pending = writer.send({ v: 5, instanceId: 'p', type: 'hello' })
+    const pending = writer.send({ v: 6, instanceId: 'p', type: 'hello' })
     const rejected = expect(pending).rejects.toThrow('closed')
     await expect(
-      writer.send({ v: 5, instanceId: 'p', runId: 'r', type: 'result', text: 'x'.repeat(300) })
+      writer.send({ v: 6, instanceId: 'p', runId: 'r', type: 'result', text: 'x'.repeat(300) })
     ).rejects.toThrow('queue limit')
     writer.close()
     await rejected

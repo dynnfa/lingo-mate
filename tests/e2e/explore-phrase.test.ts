@@ -15,12 +15,13 @@ import { startExplorePhraseServer } from '../integration/fixtures/explore-phrase
 // /explore-phrase 全链路实窗验收：Renderer 输入 → Preload → Main → Core →
 // 工具调用 → JSON 历史文件 → Markdown 会话表格，以及重启后的历史恢复。
 test('runs /explore-phrase end to end and restores the table after restart', async () => {
+  test.setTimeout(60_000)
   const server = await startExplorePhraseServer()
   try {
     await withTempUserData(async (directory) => {
       await writeLocalePreference(directory, 'zh-CN')
       await writeModelsConfig(directory, server.baseUrl, 'test-model')
-      let app = await launchApp(directory)
+      let app = await launchApp(directory, { agentBundle: true })
       try {
         let window = await app.firstWindow()
         await waitForReady(window)
@@ -29,6 +30,7 @@ test('runs /explore-phrase end to end and restores the table after restart', asy
         const input = window.locator('#message')
         await input.fill('/explore-phrase ')
         await input.press('Enter')
+        await expect(window.locator('.status')).toHaveText('回复完成', { timeout: 40_000 })
 
         // 用户消息就是命令本身（角色标签“你”独立于正文）。
         await expect(window.locator('.message.user').last()).toContainText('/explore-phrase')
@@ -73,7 +75,7 @@ test('runs /explore-phrase end to end and restores the table after restart', asy
 
         // 重启后从会话历史恢复同一表格。
         await app.close()
-        app = await launchApp(directory)
+        app = await launchApp(directory, { agentBundle: true })
         window = await app.firstWindow()
         await waitForReady(window)
         await openLatestConversation(window)
@@ -81,6 +83,81 @@ test('runs /explore-phrase end to end and restores the table after restart', asy
         await expect(restored.locator('tbody tr')).toHaveCount(10)
         await expect(restored).toContainText('e2e phrase 11')
         // 重启恢复不触发新的模型请求。
+        expect(server.requests).toHaveLength(2)
+      } finally {
+        await app.close()
+      }
+    })
+  } finally {
+    await server.close()
+  }
+})
+
+for (const locale of ['zh-CN', 'en'] as const) {
+  test(`bundled exploration tops up candidates with ${locale} explanations`, async () => {
+    test.setTimeout(60_000)
+    const server = await startExplorePhraseServer({ firstCount: 4 })
+    try {
+      await withTempUserData(async (directory) => {
+        await writeLocalePreference(directory, locale)
+        await writeModelsConfig(directory, server.baseUrl, 'test-model')
+        const app = await launchApp(directory, { agentBundle: true })
+        try {
+          const window = await app.firstWindow()
+          await waitForReady(window)
+          await window.locator('#message').fill('/explore-phrase')
+          await window.locator('#message').press('Enter')
+          await expect(window.locator('.status')).toHaveText(
+            locale === 'en' ? 'Reply complete' : '回复完成',
+            { timeout: 40_000 }
+          )
+          await expect(window.locator('.message.assistant').last().locator('tbody tr')).toHaveCount(
+            10
+          )
+          expect(server.requests).toHaveLength(2)
+          const data = server.requests.map((request) => JSON.parse(request.messages[1].content))
+          expect(data.map((request) => request.count)).toEqual([10, 6])
+          expect(data[1].excludedPhrases).toHaveLength(4)
+          for (const request of server.requests) {
+            expect(request.messages[0].content).toContain(
+              locale === 'en' ? 'English (en)' : 'Simplified Chinese (zh-CN)'
+            )
+            expect(request.messages[0].content).toContain(
+              'phrase and example are written in English'
+            )
+          }
+        } finally {
+          await app.close()
+        }
+      })
+    } finally {
+      await server.close()
+    }
+  })
+}
+
+test('bundled exploration cancels without writing history and allows explicit retry', async () => {
+  const server = await startExplorePhraseServer({ hangAtRequest: 1 })
+  try {
+    await withTempUserData(async (directory) => {
+      await writeLocalePreference(directory, 'en')
+      await writeModelsConfig(directory, server.baseUrl, 'test-model')
+      const app = await launchApp(directory, { agentBundle: true })
+      try {
+        const window = await app.firstWindow()
+        await waitForReady(window)
+        await window.locator('#message').fill('/explore-phrase')
+        await window.locator('#message').press('Enter')
+        await expect.poll(() => server.requests.length).toBe(1)
+        await window.getByRole('button', { name: 'Cancel', exact: true }).click()
+        await expect(window.getByRole('button', { name: 'Retry', exact: true })).toBeVisible()
+        await expect(
+          readFile(join(directory, 'explore-phrase-history.json'))
+        ).rejects.toMatchObject({ code: 'ENOENT' })
+        await window.getByRole('button', { name: 'Retry', exact: true }).click()
+        await expect(window.locator('.message.assistant').last().locator('tbody tr')).toHaveCount(
+          10
+        )
         expect(server.requests).toHaveLength(2)
       } finally {
         await app.close()

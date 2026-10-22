@@ -2,6 +2,9 @@ import { phraseInsertTools } from '../tools/phrase-tools'
 import { vocabularyInsertTools } from '../learning/vocabulary/vocabulary-insert'
 import type { LanguageModel, ModelStreamEvent } from '../llm/language-model'
 import {
+  explorePhraseModelArgsSchema,
+  explorePhrasePreparedSchema,
+  explorePhraseReceiptSchema,
   synonymModelArgsSchema,
   synonymApplyArgsSchema,
   synonymFinishArgsSchema,
@@ -31,7 +34,8 @@ import {
   AgentRuntimeError,
   type VocabularyHostOperations,
   type PhraseHostOperations,
-  type SynonymHostOperations
+  type SynonymHostOperations,
+  type ExplorePhraseHostOperations
 } from './agent-runtime'
 
 export interface AgentTestOperations {
@@ -63,7 +67,8 @@ export class AgentHost {
     private readonly testOperations?: AgentTestOperations,
     private readonly vocabulary?: VocabularyHostOperations,
     private readonly phrase?: PhraseHostOperations,
-    private readonly synonym?: SynonymHostOperations
+    private readonly synonym?: SynonymHostOperations,
+    private readonly explorePhrase?: ExplorePhraseHostOperations
   ) {
     this.snapshot = structuredClone(snapshot)
   }
@@ -84,6 +89,29 @@ export class AgentHost {
       throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR', { cause: parsedArgs.error })
     const args = parsedArgs.data
     if (this.calls.size > this.snapshot.budget.maxSteps) throw new AgentRuntimeError('AGENT_LIMIT')
+    if (this.explorePhrase && this.snapshot.task === 'explore-phrase') {
+      let result: AgentHostResult
+      if (operation === 'explore-phrase.prepare' && !Object.keys(args).length) {
+        if (++this.toolCalls > this.snapshot.budget.maxToolCalls)
+          throw new AgentRuntimeError('AGENT_LIMIT')
+        result = explorePhrasePreparedSchema.parse(this.explorePhrase.prepare())
+      } else if (operation === 'model.explore-phrase') {
+        if (++this.modelCalls > this.snapshot.budget.maxModelCalls)
+          throw new AgentRuntimeError('AGENT_LIMIT')
+        result = explorePhraseReceiptSchema.parse(
+          await this.explorePhrase.model(
+            explorePhraseModelArgsSchema.parse(args),
+            signal,
+            this.snapshot.budget.maxInputChars
+          )
+        )
+      } else throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+      signal.throwIfAborted()
+      this.outputChars += JSON.stringify(result).length
+      if (this.outputChars > this.snapshot.budget.maxOutputChars)
+        throw new AgentRuntimeError('AGENT_LIMIT')
+      return result
+    }
     if (this.synonym && this.snapshot.task === 'synonym') {
       let result: AgentHostResult
       if (operation === 'model.synonym') {
