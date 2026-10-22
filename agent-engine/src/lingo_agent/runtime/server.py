@@ -7,7 +7,8 @@ from typing import Any, cast
 
 from langgraph.errors import GraphRecursionError
 
-from lingo_agent.graphs.learning import LimitError, execute
+from lingo_agent.graphs.common import LimitError
+from lingo_agent.graphs.learning import execute
 from lingo_agent.graphs.phrase import PhraseState
 from lingo_agent.graphs.vocabulary import VocabularyState
 from lingo_agent.protocol import MAX_FRAME_BYTES, PROTOCOL_VERSION, encode_frame, parse_frame

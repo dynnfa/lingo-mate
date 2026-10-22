@@ -105,7 +105,7 @@ def tool_snapshot():
 async def test_budget_exhaustion_stops_a_loop():
     import pytest
 
-    from lingo_agent.graphs.learning import LimitError
+    from lingo_agent.graphs.common import LimitError
 
     calls = []
 
@@ -146,7 +146,7 @@ async def test_cancelled_model_never_schedules_a_tool():
 async def test_input_budget_is_checked_before_any_host_call():
     import pytest
 
-    from lingo_agent.graphs.learning import LimitError
+    from lingo_agent.graphs.common import LimitError
 
     snapshot = tool_snapshot()
     snapshot["messages"] = [{"role": "user", "content": "x" * 9000}]
@@ -180,7 +180,7 @@ async def test_reply_budget_counts_actual_prompt_instead_of_reserved_space():
 async def test_prompt_budget_rejects_oversize_unicode_input_before_host_call():
     import pytest
 
-    from lingo_agent.graphs.learning import LimitError
+    from lingo_agent.graphs.common import LimitError
 
     snapshot = tool_snapshot()
     snapshot.update(task="conversation", allowedOperations=["model.reply"])

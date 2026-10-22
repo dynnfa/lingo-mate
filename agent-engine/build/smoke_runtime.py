@@ -61,14 +61,14 @@ class Client:
         self.receive("ready")
         return (time.monotonic() - started) * 1000
 
-    def run(self, run_id, task="conversation"):
+    def run(self, run_id, task="conversation", content="Hi", output_language="zh-CN"):
         self.send(
             "run",
             runId=run_id,
             snapshot={
                 "task": task,
-                "messages": [{"role": "user", "content": "Hi"}],
-                "outputLanguage": "zh-CN",
+                "messages": [{"role": "user", "content": content}],
+                "outputLanguage": output_language,
                 "targetLanguage": "en",
                 "allowedOperations": [f"{task}.prepare", f"model.{task}"]
                 if task in ("vocabulary", "phrase")
@@ -126,6 +126,25 @@ with tempfile.TemporaryDirectory(prefix="lingo-bundle-") as cwd:
             assert client.receive("event")["event"] == event
         client.send("host_result", runId="stream", callId=call["callId"], result={"text": "你好"})
         assert client.receive("result")["text"] == "你好"
+        for language, name in [("zh-CN", "Simplified Chinese (zh-CN)"), ("en", "English (en)")]:
+            run_id = f"concept-{language}"
+            call = client.run(run_id, content="/concept carry", output_language=language)
+            assert call["operation"] == "model.reply"
+            prompt = call["args"]["systemPrompt"]
+            assert f"commentary on examples in {name}" in prompt
+            assert "the example sentences themselves in English (en)" in prompt
+            event = {"type": "text", "delta": "concept"}
+            client.send("host_chunk", runId=run_id, callId=call["callId"], seq=1, event=event)
+            assert client.receive("event")["event"] == event
+            client.send(
+                "host_result", runId=run_id, callId=call["callId"], result={"text": "concept"}
+            )
+            assert client.receive("result")["text"] == "concept"
+        call = client.run("concept-failure", content="/concept carry")
+        client.send(
+            "host_error", runId="concept-failure", callId=call["callId"], code="AGENT_LIMIT"
+        )
+        assert client.receive("error")["code"] == "AGENT_LIMIT"
         call = client.run("vocabulary", task="vocabulary")
         assert call["operation"] == "vocabulary.prepare"
         client.send(
@@ -189,11 +208,11 @@ with tempfile.TemporaryDirectory(prefix="lingo-bundle-") as cwd:
                 pending.append(client.receive("host_call"))
         assert sorted(indices) == list(range(20))
         assert client.receive("phrase_result")["result"] == {"completedIndices": list(range(20))}
-        call = client.run("cancel")
+        call = client.run("cancel", content="/concept carry")
         client.send("cancel", runId="cancel")
         client.receive("cancelled")
         client.send("host_result", runId="cancel", callId=call["callId"], result={"text": "late"})
-        client.run("crash")
+        client.run("crash", content="/concept carry")
         client.process.kill()
         client.process.wait(timeout=5)
     finally:
@@ -203,6 +222,11 @@ with tempfile.TemporaryDirectory(prefix="lingo-bundle-") as cwd:
     client = Client(cwd)
     try:
         restart_ms = client.start()
+        call = client.run("concept-retry", content="/concept carry")
+        client.send(
+            "host_result", runId="concept-retry", callId=call["callId"], result={"text": "retried"}
+        )
+        assert client.receive("result")["text"] == "retried"
         client.run("shutdown-with-active-run")
         client.send("shutdown")
         client.receive("cancelled")
@@ -228,6 +252,9 @@ print(
                 "empty-PATH",
                 "handshake",
                 "stream",
+                "concept-languages-stream",
+                "concept-failure",
+                "concept-retry",
                 "vocabulary-20-terms",
                 "phrase-20-items",
                 "cancel",
