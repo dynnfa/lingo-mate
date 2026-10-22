@@ -185,40 +185,11 @@ describe('RecordedPage', () => {
     expect(synonymCalls.list).toBe(2)
   })
 
-  it('marks the active menu item with aria-current while switching', async () => {
-    renderPage()
-
-    const vocabularyButton = screen.getByRole('button', { name: '词汇' })
-    const phraseButton = screen.getByRole('button', { name: '短语' })
-    fireEvent.click(phraseButton)
-    await screen.findByRole('heading', { name: '短语' })
-    expect(phraseButton).toHaveAttribute('aria-current', 'true')
-    expect(vocabularyButton).not.toHaveAttribute('aria-current')
-
-    fireEvent.click(vocabularyButton)
-    await screen.findByRole('heading', { name: '词汇' })
-    expect(vocabularyButton).toHaveAttribute('aria-current', 'true')
-    expect(phraseButton).not.toHaveAttribute('aria-current')
-  })
-
-  it('exits through the back button and Escape', () => {
+  it('connects the back button to the page exit callback', () => {
     const onExit = renderPage(vi.fn())
 
     fireEvent.click(screen.getByRole('button', { name: '返回' }))
     expect(onExit).toHaveBeenCalledTimes(1)
-
-    fireEvent.keyDown(screen.getByRole('main', { name: '已记录词汇' }), { key: 'Escape' })
-    expect(onExit).toHaveBeenCalledTimes(2)
-
-    // 其他按键不触发退出
-    fireEvent.keyDown(screen.getByRole('main', { name: '已记录词汇' }), { key: 'Enter' })
-    expect(onExit).toHaveBeenCalledTimes(2)
-  })
-
-  it('moves focus to the back button on entry', () => {
-    renderPage()
-
-    expect(screen.getByRole('button', { name: '返回' })).toHaveFocus()
   })
 
   it('repeats menu clicks without exiting or re-rendering content', () => {

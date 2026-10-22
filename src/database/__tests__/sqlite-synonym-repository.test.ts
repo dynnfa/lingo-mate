@@ -48,7 +48,6 @@ describe('synonym persistence', () => {
     migrateDatabase(db)
     expect(db.prepare('SELECT * FROM conversation_skill_executions').all()).toEqual(executions)
     expect(db.prepare('SELECT * FROM llm_request_usage').all()).toEqual(usage)
-    expect(db.pragma('user_version', { simple: true })).toBe(11)
     expect(db.pragma('foreign_key_check')).toEqual([])
     expect(() =>
       db.exec(

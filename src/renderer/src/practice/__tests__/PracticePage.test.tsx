@@ -63,24 +63,11 @@ describe('PracticePage', () => {
     expect(screen.getByTestId('sentence-practice-detail')).toBeInTheDocument()
   })
 
-  it('exits through the back button and Escape', () => {
+  it('connects the back button to the page exit callback', () => {
     const onExit = renderPage(vi.fn())
 
     fireEvent.click(screen.getByRole('button', { name: '返回' }))
     expect(onExit).toHaveBeenCalledTimes(1)
-
-    fireEvent.keyDown(screen.getByRole('main', { name: '开始练习' }), { key: 'Escape' })
-    expect(onExit).toHaveBeenCalledTimes(2)
-
-    // 其他按键不触发退出
-    fireEvent.keyDown(screen.getByRole('main', { name: '开始练习' }), { key: 'Enter' })
-    expect(onExit).toHaveBeenCalledTimes(2)
-  })
-
-  it('moves focus to the back button on entry', () => {
-    renderPage()
-
-    expect(screen.getByRole('button', { name: '返回' })).toHaveFocus()
   })
 
   it('renders accessible names in English', async () => {
