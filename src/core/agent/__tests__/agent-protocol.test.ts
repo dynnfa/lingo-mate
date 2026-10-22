@@ -99,3 +99,26 @@ it('supports bounded phrase calls and completion markers without accepting outer
     }).success
   ).toBe(true)
 })
+
+it('supports bound exploration attempts without accepting host data overrides', () => {
+  const frame = {
+    v: AGENT_PROTOCOL_VERSION,
+    instanceId: 'p',
+    runId: 'r',
+    callId: 'r:c',
+    type: 'host_call',
+    operation: 'model.explore-phrase',
+    args: { attempt: 1, systemPrompt: 'Explain in English.' }
+  }
+  expect(agentFrameSchema.safeParse(frame).success).toBe(true)
+  for (const extra of [
+    { count: 1 },
+    { excludedPhrases: [] },
+    { sessionId: 'outer' },
+    { attempt: 4 }
+  ]) {
+    expect(
+      agentFrameSchema.safeParse({ ...frame, args: { ...frame.args, ...extra } }).success
+    ).toBe(false)
+  }
+})

@@ -1,6 +1,6 @@
 # Lingo Mate Agent Engine
 
-本模块是唯一 Agent 运行时，负责任务识别、Prompt、工具决策与内存中的 LangGraph 编排。会话与消息持久化、语言学习规则、模型凭据、供应商请求和用量统计均由 TypeScript 宿主负责。生产接入普通对话、`/concept`、`/vocabulary`、`/phrase` 与 `/synonym`；模型决策/只读工具循环通过测试扩展验证。无 checkpoint、业务数据库访问、云端 tracing 或模型 SDK 请求。
+本模块是唯一 Agent 运行时，负责任务识别、Prompt、工具决策与内存中的 LangGraph 编排。会话与消息持久化、语言学习规则、模型凭据、供应商请求和用量统计均由 TypeScript 宿主负责。生产接入普通对话、`/concept`、`/vocabulary`、`/phrase`、`/synonym` 与 `/explore-phrase`；模型决策/只读工具循环通过测试扩展验证。无 checkpoint、业务数据库访问、云端 tracing 或模型 SDK 请求。
 
 决策与限制见 [ADR](../docs/adr/2026-10-21-python-langgraph-agent-engine.md)。本文命令与文件路径均以仓库根目录为基准。协议源位于 `src/core/agent/agent-protocol.ts`；生成的 `agent-engine/src/lingo_agent/protocol/schema.json` 随包发布，不能手改。共享契约样例在 `tests/integration/fixtures/agent/protocol-cases.json`。
 
@@ -56,7 +56,7 @@ macOS 本地包使用 PyInstaller 的 ad-hoc 签名。正式发行还需原有 A
 
 ## 协议演进与排错
 
-当前协议为 v5。应用提交 `conversation`、`vocabulary`、`phrase` 或 `synonym` 任务，`/concept` 在 Python 内部识别。`model.reply` 必须提供完整 `systemPrompt`，TS 模型适配器原样发送，不再选择 Agent Prompt。Prompt 上限为 4096 个 UTF-16 单元，两端校验实际 Prompt 加历史的总输入预算；旧运行包必须重建。除词汇、短语和近义词外的显式技能、标题及练习暂沿用 TS 实现，未来新增 Agent 策略和工作流统一在本模块实现。
+当前协议为 v6。应用提交 `conversation`、`vocabulary`、`phrase`、`synonym` 或 `explore-phrase` 任务，`/concept` 在 Python 内部识别。`model.reply` 必须提供完整 `systemPrompt`，TS 模型适配器原样发送，不再选择 Agent Prompt。Prompt 上限为 4096 个 UTF-16 单元，两端校验实际 Prompt 加历史的总输入预算；旧运行包必须重建。除词汇、短语、近义词和探索短语外的显式技能、标题及练习暂沿用 TS 实现，未来新增 Agent 策略和工作流统一在本模块实现。
 
 - 修改 Zod 协议后运行 `node --experimental-strip-types scripts/agent-protocol-schema.mjs`，更新共享用例；破坏性修改提升协议版本并重建全部运行包。
 - stdout 专用于协议，Python 不输出用户错误文案或 traceback。stderr 只由 Main 有界接收并进入已有本地错误日志。
@@ -128,3 +128,13 @@ TS 宿主账本保留原始输入、规范化身份、配置快照和校验后�
 TS 每轮只做一次模型传输，并保留同一批次的模型配置快照与客户端。宿主严格核验词项顺序、轮次、待执行决策、查询分页和分组授权；不能由 Python 提交任意工具参数。每词最多 60 秒、52 轮、50 页，每批最多 20 项，取得串行执行权后含启动的总硬截止 180 秒。模型／非模型宿主调用／步骤预算为 1040／1061／2200，单轮实际输入上限 65,536、累计安全回执上限 524,288 个 UTF-16 单元。Prompt 4096 和帧大小限制不变，其他任务预算不放宽。
 
 保留既有逐词事务和跨会话批次串行处理；后一个词可查询前一个词刚创建的分组。取消显示已提交结果；引擎故障、协议错误或批次硬截止明确失败并保留未完成报告。仅用户显式重试继续剩余词，完整报告则本地恢复回复。无 TS Agent 直跑、回退、数据库迁移或失败请求自动重放。协议 v5 必须重建运行包；验收见[近义词迁移计划](../docs/plans/2026-10-22-synonym-langgraph-agent.md)。
+
+## 探索短语 LangGraph 与协议 v6
+
+`/explore-phrase` 使用独立 `prepare → generate → 条件补足 → finalize` 图，最多串行生成三轮。Python 持有 `explore-phrase-tools-v1` Prompt，明确短语与例句使用英语、解释使用语言设置；TS 模型适配器只发送完整 `systemPrompt` 和宿主绑定的数据，沿用 `submit_explored_phrases` 与 `phrase_analysis` 记账。
+
+生产任务仅开放 `explore-phrase.prepare`、`model.explore-phrase`，完成帧为 `explore_phrase_result`。Python 仅接收已接受数量、轮次与下一轮输入大小；JSON 历史、候选正文、排除列表、模型配置与外层身份留在 TS。宿主验证调用顺序、禁止并发及重复轮次，核验实际轮数与数量后才允许提交。
+
+固定 10 项、近 7 批去重和 JSON schemaVersion 1 保持原样。工具结构无效消耗一次尝试，第三轮仍不足 10 项明确失败；网络、模型配置、工具能力和引擎故障立即失败。请求 60 秒，取得锁后准备与生成总计 180 秒（包含启动）；提交阶段不受生成计时器打断，等待实际存储结果。运行预算为模型／非模型调用／步骤 3／1／8，输入 65,536、安全回执 32,768 UTF-16 单元，Prompt 4,096。其他任务预算不变。
+
+图完成前取消或故障丢弃暂存候选；已提交的回复恢复直接读取 JSON，无需启动 Python 或重跑模型。无 TS Agent 回退、自动重放、checkpoint 或数据库迁移。协议 v5 及更旧运行包必须随应用重建。实施与平台验收见[探索短语迁移计划](../docs/plans/2026-10-22-explore-phrase-langgraph-agent.md)。

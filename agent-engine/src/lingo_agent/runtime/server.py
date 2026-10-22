@@ -8,6 +8,7 @@ from typing import Any, cast
 from langgraph.errors import GraphRecursionError
 
 from lingo_agent.graphs.common import LimitError
+from lingo_agent.graphs.explore_phrase import ExplorePhraseState
 from lingo_agent.graphs.learning import execute
 from lingo_agent.graphs.phrase import PhraseState
 from lingo_agent.graphs.synonym import SynonymState
@@ -80,7 +81,13 @@ class Server:
                         seq=self.sequences[run_id],
                         event={"type": "text", "delta": cast(LearningState, state)["text"]},
                     )
-                if snapshot["task"] == "synonym":
+                if snapshot["task"] == "explore-phrase":
+                    await self.send(
+                        "explore_phrase_result",
+                        runId=run_id,
+                        result=cast(ExplorePhraseState, state)["explorePhrase"],
+                    )
+                elif snapshot["task"] == "synonym":
                     await self.send(
                         "synonym_result", runId=run_id, result=cast(SynonymState, state)["synonym"]
                     )
@@ -126,7 +133,14 @@ class Server:
             self.instance = hello["instanceId"]
             await self.send(
                 "ready",
-                capabilities=["conversation", "tool-loop", "vocabulary", "phrase", "synonym"],
+                capabilities=[
+                    "conversation",
+                    "tool-loop",
+                    "vocabulary",
+                    "phrase",
+                    "synonym",
+                    "explore-phrase",
+                ],
             )
             while (line := await incoming.get()) is not None:
                 frame = parse_frame(line)

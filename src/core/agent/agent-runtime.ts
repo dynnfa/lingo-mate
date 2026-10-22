@@ -17,7 +17,11 @@ import {
   type SynonymModelArgs,
   type SynonymApplyArgs,
   type SynonymFinishArgs,
-  type AgentSnapshot
+  type AgentSnapshot,
+  type ExplorePhrasePrepared,
+  type ExplorePhraseReceipt,
+  type ExplorePhraseCompletion,
+  type ExplorePhraseModelArgs
 } from './agent-protocol'
 
 export const DEFAULT_AGENT_BUDGET: AgentBudget = {
@@ -85,8 +89,32 @@ export interface SynonymAgentRunInput {
 export interface SynonymAgentRuntime {
   runSynonym(input: SynonymAgentRunInput, host: SynonymHostOperations): Promise<void>
 }
+export interface ExplorePhraseHostOperations {
+  prepare(): ExplorePhrasePrepared
+  model(
+    args: ExplorePhraseModelArgs,
+    signal: AbortSignal,
+    maxInputChars: number
+  ): Promise<ExplorePhraseReceipt>
+  verifyCompletion(result: ExplorePhraseCompletion): void
+}
+export interface ExplorePhraseAgentRunInput {
+  outputLanguage: string
+  targetLanguage: string
+  signal: AbortSignal
+}
+export interface ExplorePhraseAgentRuntime {
+  runExplorePhrase(
+    input: ExplorePhraseAgentRunInput,
+    host: ExplorePhraseHostOperations
+  ): Promise<void>
+}
 export interface AgentRuntime
-  extends VocabularyAgentRuntime, PhraseAgentRuntime, SynonymAgentRuntime {
+  extends
+    VocabularyAgentRuntime,
+    PhraseAgentRuntime,
+    SynonymAgentRuntime,
+    ExplorePhraseAgentRuntime {
   stream(input: AgentRunInput): AsyncIterable<ModelStreamEvent>
 }
 export class AgentRuntimeError extends Error {
@@ -102,6 +130,19 @@ export class AgentRuntimeError extends Error {
 // Reserve space for the fixed host prompt/operation definitions. Persisted history
 // is never edited; only this execution's copied context is trimmed.
 export function createAgentSnapshot(input: AgentTask): AgentSnapshot {
+  if (input.task === 'explore-phrase')
+    return agentSnapshotSchema.parse({
+      ...input,
+      budget: {
+        timeoutMs: 180_000,
+        maxModelCalls: 3,
+        maxToolCalls: 1,
+        maxSteps: 8,
+        maxInputChars: 65_536,
+        maxOutputChars: 32_768
+      },
+      allowedOperations: ['explore-phrase.prepare', 'model.explore-phrase']
+    })
   if (input.task === 'synonym')
     return agentSnapshotSchema.parse({
       ...input,

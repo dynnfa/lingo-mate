@@ -13,7 +13,7 @@ def test_shutdown_exits_cleanly_with_the_parent_input_pipe_still_open():
     try:
         for kind in ["hello", "shutdown"]:
             child.stdin.write(
-                (json.dumps({"v": 5, "instanceId": "shutdown-test", "type": kind}) + "\n").encode()
+                (json.dumps({"v": 6, "instanceId": "shutdown-test", "type": kind}) + "\n").encode()
             )
             child.stdin.flush()
             assert json.loads(child.stdout.readline())["type"] == (

@@ -1,3 +1,5 @@
+import type { ExplorePhraseAgentRunInput } from '../../../agent/agent-runtime'
+import { createTestBatchRuntime } from '../../../../../tests/fixtures/python-agent'
 import { describe, expect, it, vi } from 'vitest'
 import type { SupportedLocale } from '../../../../shared/preferences'
 import {
@@ -112,7 +114,7 @@ function makeModule(
       return response
     }
   }
-  return new ExplorePhraseModule(store, () => generator, undefined, {
+  return new ExplorePhraseModule(store, () => generator, createTestBatchRuntime(), undefined, {
     requestMs: 60_000,
     totalMs: 180_000
   })
@@ -265,10 +267,16 @@ describe('ExplorePhraseModule', () => {
           reject(new ExplorePhraseError('CANCELLED'))
         })
     }
-    const module = new ExplorePhraseModule(store, () => generator, undefined, {
-      requestMs: 60_000,
-      totalMs: 180_000
-    })
+    const module = new ExplorePhraseModule(
+      store,
+      () => generator,
+      createTestBatchRuntime(),
+      undefined,
+      {
+        requestMs: 60_000,
+        totalMs: 180_000
+      }
+    )
     const result = await module.explore(makeOptions())
     expect(result).toEqual({ outcome: 'cancelled' })
     expect(store.commits).toHaveLength(0)
@@ -364,11 +372,12 @@ describe('ExplorePhraseModule', () => {
     const module = new ExplorePhraseModule(
       store,
       () => (which++ === 0 ? firstGenerator : secondGenerator),
+      createTestBatchRuntime(),
       undefined,
       { requestMs: 60_000, totalMs: 180_000 }
     )
     const first = module.explore(makeOptions())
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await vi.waitFor(() => expect(releaseFirst).toBeDefined())
     const second = module.explore(makeOptions())
     await new Promise((resolve) => setTimeout(resolve, 10))
     expect(timeline).toEqual(['first-generate-start'])
@@ -383,4 +392,32 @@ describe('ExplorePhraseModule', () => {
     ])
     expect(store.document.batches).toHaveLength(2)
   })
+})
+
+it('includes engine startup in the 180 second deadline and aborts an unresponsive runtime', async () => {
+  vi.useFakeTimers()
+  const store = new MemoryStore()
+  let runSignal: AbortSignal | undefined
+  const runExplorePhrase = vi.fn(async (input: ExplorePhraseAgentRunInput) => {
+    runSignal = input.signal
+    await new Promise<void>(() => {})
+  })
+  const module = new ExplorePhraseModule(
+    store,
+    () => {
+      throw new Error('unused')
+    },
+    { runExplorePhrase }
+  )
+  try {
+    const pending = module.explore(makeOptions())
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'TIMEOUT' })
+    await vi.advanceTimersByTimeAsync(180_000)
+    await rejected
+    expect(runSignal?.aborted).toBe(true)
+    expect(runExplorePhrase).toHaveBeenCalledTimes(1)
+    expect(store.commits).toHaveLength(0)
+  } finally {
+    vi.useRealTimers()
+  }
 })
