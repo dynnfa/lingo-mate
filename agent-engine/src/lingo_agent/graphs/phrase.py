@@ -5,7 +5,7 @@ from typing import Any, TypedDict, cast
 
 from langgraph.graph import END, START, StateGraph
 
-from lingo_agent.graphs.learning import LimitError
+from lingo_agent.graphs.common import LimitError
 from lingo_agent.prompts import phrase_system_message
 
 

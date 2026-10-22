@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { resolve } from 'node:path'
 import { PythonAgentProcess } from '../../src/main/agent/python-agent-process'
 import { PythonAgentRuntime } from '../../src/main/agent/python-agent-runtime'
-import type { LanguageModel } from '../../src/core/llm/language-model'
+import type { LanguageModel, ModelStreamEvent } from '../../src/core/llm/language-model'
 import { ConversationModule } from '../../src/core/conversation/conversation-module'
 import { openDatabase } from '../../src/database/database'
 import { SqliteConversationRepository } from '../../src/database/sqlite-conversation-repository'
@@ -26,9 +26,17 @@ const model: LanguageModel = {
 }
 
 describe('Python LangGraph process', () => {
-  it.each(['Hello', '/concept carry', ' /concept\u3000carry ', '/conceptual drift'])(
+  it.each([
+    ['Hello', false],
+    ['/concept carry', true],
+    [' /concept\u3000carry ', true],
+    ['/concept', true],
+    ['/conceptual drift', false],
+    ['What does /concept mean?', false],
+    ['/Concept carry', false]
+  ] as const)(
     'runs %s through Python-owned instructions and canonical conversation persistence',
-    async (text) => {
+    async (text, concept) => {
       const database = openDatabase(':memory:')
       const repository = new SqliteConversationRepository(database)
       const seen: import('../../src/core/llm/language-model').StreamReplyInput[] = []
@@ -70,7 +78,7 @@ describe('Python LangGraph process', () => {
         await terminal
         expect(seen).toHaveLength(1)
         expect(seen[0].systemPrompt).toContain(
-          text.includes('carry') ? 'the /concept command' : 'You are Lingo Mate'
+          concept ? 'the /concept command' : 'You are Lingo Mate'
         )
         expect(seen[0].systemPrompt).toContain('Simplified Chinese (zh-CN)')
         expect(seen[0].systemPrompt).toContain('English (en)')
@@ -151,92 +159,133 @@ describe('Python LangGraph process', () => {
     }
   })
 
-  it('cancels one waiting model while another session completes on the same process', async () => {
-    const process = launch()
-    let started!: () => void
-    const waiting = new Promise<void>((r) => {
-      started = r
-    })
-    const blocking: LanguageModel = {
-      async *streamReply({ messages, signal }) {
-        if (messages[0].content === 'wait') {
-          started()
-          await new Promise<void>((_, reject) =>
-            signal.addEventListener('abort', () => reject(signal.reason), { once: true })
-          )
+  it.each(['wait', '/concept wait'])(
+    'cancels %s while another session completes, then allows an explicit retry',
+    async (waitingText) => {
+      const process = launch()
+      let started!: () => void
+      const waiting = new Promise<void>((r) => {
+        started = r
+      })
+      let attempts = 0
+      const blocking: LanguageModel = {
+        async *streamReply({ messages, signal }) {
+          if (++attempts === 1 && messages[0].content === waitingText) {
+            started()
+            await new Promise<void>((_, reject) =>
+              signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+            )
+          }
+          yield { type: 'text', delta: 'done' }
         }
-        yield { type: 'text', delta: 'done' }
+      }
+      const runtime = new PythonAgentRuntime(process, () => blocking)
+      const abort = new AbortController()
+      const task = (
+        content: string,
+        signal = new AbortController().signal
+      ): import('../../src/core/agent/agent-runtime').AgentRunInput => ({
+        sessionId: content,
+        task: 'conversation' as const,
+        messages: [{ role: 'user' as const, content }],
+        outputLanguage: 'en',
+        targetLanguage: 'en',
+        signal
+      })
+      const collect = async (
+        input: ReturnType<typeof task>
+      ): Promise<import('../../src/core/llm/language-model').ModelStreamEvent[]> => {
+        const events = []
+        for await (const e of runtime.stream(input)) events.push(e)
+        return events
+      }
+      try {
+        const pending = collect(task(waitingText, abort.signal))
+        const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+        await waiting
+        expect(await collect(task('fast'))).toEqual([{ type: 'text', delta: 'done' }])
+        abort.abort()
+        await rejected
+        expect(attempts).toBe(2)
+        expect(await collect(task(waitingText))).toEqual([{ type: 'text', delta: 'done' }])
+        expect(attempts).toBe(3)
+        expect(process.handshakes).toBe(1)
+      } finally {
+        await runtime.dispose()
       }
     }
-    const runtime = new PythonAgentRuntime(process, () => blocking)
-    const abort = new AbortController()
-    const task = (
-      content: string,
-      signal = new AbortController().signal
-    ): import('../../src/core/agent/agent-runtime').AgentRunInput => ({
-      sessionId: content,
+  )
+  it('propagates a concept model failure once and accepts a later explicit retry', async () => {
+    const failure = new Error('fixture model failure')
+    let attempts = 0
+    const runtime = new PythonAgentRuntime(launch(), () => ({
+      async *streamReply() {
+        if (++attempts === 1) throw failure
+        yield { type: 'text', delta: 'recovered' }
+      }
+    }))
+    const input = {
+      sessionId: 'concept-model-failure',
       task: 'conversation' as const,
-      messages: [{ role: 'user' as const, content }],
+      messages: [{ role: 'user' as const, content: '/concept carry' }],
       outputLanguage: 'en',
       targetLanguage: 'en',
-      signal
-    })
-    const collect = async (
-      input: ReturnType<typeof task>
-    ): Promise<import('../../src/core/llm/language-model').ModelStreamEvent[]> => {
-      const events = []
-      for await (const e of runtime.stream(input)) events.push(e)
+      signal: new AbortController().signal
+    }
+    const collect = async (): Promise<ModelStreamEvent[]> => {
+      const events: ModelStreamEvent[] = []
+      for await (const event of runtime.stream(input)) events.push(event)
       return events
     }
     try {
-      const pending = collect(task('wait', abort.signal))
-      const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
-      await waiting
-      expect(await collect(task('fast'))).toEqual([{ type: 'text', delta: 'done' }])
-      abort.abort()
-      await rejected
-      expect(await collect(task('next'))).toEqual([{ type: 'text', delta: 'done' }])
-      expect(process.handshakes).toBe(1)
+      await expect(collect()).rejects.toBe(failure)
+      expect(attempts).toBe(1)
+      expect(await collect()).toEqual([{ type: 'text', delta: 'recovered' }])
+      expect(attempts).toBe(2)
     } finally {
       await runtime.dispose()
     }
   })
 
-  it('fails in-flight work on a real crash and restarts for a later new request without replay', async () => {
-    const process = launch()
-    let attempts = 0
-    const stalled: LanguageModel = {
-      async *streamReply({ signal }) {
-        yield { type: 'reasoning', delta: 'temporary' }
-        await new Promise<void>((_, reject) =>
-          signal.addEventListener('abort', () => reject(signal.reason), { once: true })
-        )
+  it.each(['Hi', '/concept carry'])(
+    'fails %s on a real crash and restarts for a new request without replay',
+    async (content) => {
+      const process = launch()
+      let attempts = 0
+      const stalled: LanguageModel = {
+        async *streamReply({ signal }) {
+          yield { type: 'reasoning', delta: 'temporary' }
+          await new Promise<void>((_, reject) =>
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+          )
+        }
+      }
+      const runtime = new PythonAgentRuntime(process, () => (++attempts === 1 ? stalled : model))
+      const task = {
+        sessionId: 'crash',
+        task: 'conversation' as const,
+        messages: [{ role: 'user' as const, content }],
+        outputLanguage: 'en',
+        targetLanguage: 'en',
+        signal: new AbortController().signal
+      }
+      try {
+        const stream = runtime.stream(task)[Symbol.asyncIterator]()
+        expect((await stream.next()).value).toEqual({ type: 'reasoning', delta: 'temporary' })
+        expect(process.pid).toBeGreaterThan(0)
+        globalThis.process.kill(process.pid!, 'SIGKILL')
+        await new Promise((r) => setTimeout(r, 50))
+        await expect(stream.next()).rejects.toMatchObject({ code: 'AGENT_UNAVAILABLE' })
+        const events = []
+        for await (const event of runtime.stream(task)) events.push(event)
+        expect(events).toHaveLength(3)
+        expect(process.handshakes).toBe(2)
+        expect(attempts).toBe(2)
+      } finally {
+        await runtime.dispose()
       }
     }
-    const runtime = new PythonAgentRuntime(process, () => (++attempts === 1 ? stalled : model))
-    const task = {
-      sessionId: 'crash',
-      task: 'conversation' as const,
-      messages: [{ role: 'user' as const, content: 'Hi' }],
-      outputLanguage: 'en',
-      targetLanguage: 'en',
-      signal: new AbortController().signal
-    }
-    try {
-      const stream = runtime.stream(task)[Symbol.asyncIterator]()
-      expect((await stream.next()).value).toEqual({ type: 'reasoning', delta: 'temporary' })
-      expect(process.pid).toBeGreaterThan(0)
-      globalThis.process.kill(process.pid!, 'SIGKILL')
-      await new Promise((r) => setTimeout(r, 50))
-      await expect(stream.next()).rejects.toMatchObject({ code: 'AGENT_UNAVAILABLE' })
-      const events = []
-      for await (const event of runtime.stream(task)) events.push(event)
-      expect(events).toHaveLength(3)
-      expect(process.handshakes).toBe(2)
-    } finally {
-      await runtime.dispose()
-    }
-  })
+  )
   it('keeps cancel behind its own queued run while releasing the caller immediately', async () => {
     const process = launch()
     const runtime = new PythonAgentRuntime(process, () => model)

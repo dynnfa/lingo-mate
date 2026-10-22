@@ -53,7 +53,7 @@ async def test_phrase_prepares_and_analyzes_only_new_phrases():
 async def test_phrase_enforces_output_budget_before_finalizing():
     import pytest
 
-    from lingo_agent.graphs.learning import LimitError
+    from lingo_agent.graphs.common import LimitError
 
     async def host(operation, args):
         if operation == "phrase.prepare":
