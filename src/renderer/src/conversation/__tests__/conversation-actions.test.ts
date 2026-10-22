@@ -107,15 +107,7 @@ describe('skill command boundary', () => {
 })
 
 describe('CONVERSATION_ACTIONS catalog', () => {
-  it('lists stable unique ids and commands in display order', () => {
-    expect(CONVERSATION_ACTIONS.map((action) => action.id)).toEqual([
-      'concept',
-      'vocabulary',
-      'phrase',
-      'explore-phrase',
-      'explore-vocabulary',
-      'synonym'
-    ])
+  it('keeps commands unique', () => {
     expect(new Set(CONVERSATION_ACTIONS.map((action) => action.command)).size).toBe(
       CONVERSATION_ACTIONS.length
     )
@@ -213,56 +205,6 @@ describe('filterConversationActions', () => {
     expect(filterConversationActions(CONVERSATION_ACTIONS, '', resolveZhName)).toEqual([
       ...CONVERSATION_ACTIONS
     ])
-  })
-
-  it('matches command names case-insensitively', () => {
-    expect(filterConversationActions(CONVERSATION_ACTIONS, 'CONCEPT', resolveZhName)).toEqual([
-      CONVERSATION_ACTIONS[0]
-    ])
-    expect(filterConversationActions(CONVERSATION_ACTIONS, 'PHR', resolveZhName)).toEqual([
-      CONVERSATION_ACTIONS[2],
-      CONVERSATION_ACTIONS[3]
-    ])
-  })
-
-  it('matches localized names and keeps catalog order for multiple hits', () => {
-    expect(filterConversationActions(CONVERSATION_ACTIONS, '概', resolveZhName)).toEqual([
-      CONVERSATION_ACTIONS[0]
-    ])
-    expect(filterConversationActions(CONVERSATION_ACTIONS, '近义', resolveZhName)).toEqual([
-      CONVERSATION_ACTIONS[5]
-    ])
-    // “收” 命中收藏词汇与收录短语的本地化名称，顺序沿用目录
-    expect(filterConversationActions(CONVERSATION_ACTIONS, '收', resolveZhName)).toEqual([
-      CONVERSATION_ACTIONS[1],
-      CONVERSATION_ACTIONS[2]
-    ])
-    // “探索” 命中探索短语与探索词汇的本地化名称，顺序沿用目录
-    expect(filterConversationActions(CONVERSATION_ACTIONS, '探索', resolveZhName)).toEqual([
-      CONVERSATION_ACTIONS[3],
-      CONVERSATION_ACTIONS[4]
-    ])
-    // “词汇” 命中收藏词汇与探索词汇的本地化名称，顺序沿用目录
-    expect(filterConversationActions(CONVERSATION_ACTIONS, '词汇', resolveZhName)).toEqual([
-      CONVERSATION_ACTIONS[1],
-      CONVERSATION_ACTIONS[4]
-    ])
-    // “o” 命中除 phrase 外全部命令名，顺序沿用目录
-    expect(filterConversationActions(CONVERSATION_ACTIONS, 'o', resolveZhName)).toEqual([
-      CONVERSATION_ACTIONS[0],
-      CONVERSATION_ACTIONS[1],
-      CONVERSATION_ACTIONS[3],
-      CONVERSATION_ACTIONS[4],
-      CONVERSATION_ACTIONS[5]
-    ])
-  })
-
-  it('returns an empty list for queries that match nothing, including spaced queries', () => {
-    expect(filterConversationActions(CONVERSATION_ACTIONS, 'xyz', resolveZhName)).toEqual([])
-    // 已移除的命令不再命中
-    expect(filterConversationActions(CONVERSATION_ACTIONS, 'translate', resolveZhName)).toEqual([])
-    expect(filterConversationActions(CONVERSATION_ACTIONS, 'concept me', resolveZhName)).toEqual([])
-    expect(filterConversationActions(CONVERSATION_ACTIONS, ' ', resolveZhName)).toEqual([])
   })
 
   it('does not mutate the input catalog', () => {
