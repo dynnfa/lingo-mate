@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
-import { LlmSynonymAnalyzer } from '../llm-synonym-analyzer'
-import type { CreateLlmClient } from '../llm-client'
-import { SynonymToolExecutor } from '../../tools/synonym-tools'
-import type { SynonymRepository } from '../../learning/synonym/synonym-repository'
-import type { RuntimeModelConfig } from '../model-config'
+import { LlmSynonymAnalyzer } from '../../src/core/llm/llm-synonym-analyzer'
+import type { CreateLlmClient } from '../../src/core/llm/llm-client'
+import { SynonymHost } from '../../src/core/learning/synonym/synonym-host'
+import { SynonymError } from '../../src/core/learning/synonym/parse-synonym-input'
+import { createTestBatchRuntime } from '../fixtures/python-agent'
+import type { SynonymRepository } from '../../src/core/learning/synonym/synonym-repository'
+import type { RuntimeModelConfig } from '../../src/core/llm/model-config'
 
 const config: RuntimeModelConfig = {
   configured: true,
@@ -30,7 +32,6 @@ function response(name: string, args: unknown, id = randomUUID()): Record<string
 }
 function setup(
   responses: unknown[],
-  maxRounds = 52,
   runtimeConfig: RuntimeModelConfig = config
 ): {
   complete: ReturnType<typeof vi.fn>
@@ -50,20 +51,37 @@ function setup(
     }
   }))
   const repository: SynonymRepository = {
-    findExisting: vi.fn(),
+    findExisting: () => new Map(),
     findGroups: () => ({ groups: [], nextCursor: null }),
     listGroups: vi.fn(),
-    saveWord: vi.fn(),
+    saveWord: (_id, _content, finalize) => {
+      const value = save()
+      finalize(value)
+      return value
+    },
     saveReport: vi.fn()
   }
   const signal = new AbortController().signal
-  const executor = new SynonymToolExecutor('adequate', repository, save, signal)
-  const analyzer = new LlmSynonymAnalyzer(runtimeConfig, 1000, () => client, maxRounds)
+  const analyzer = new LlmSynonymAnalyzer(runtimeConfig, 1000, () => client)
+  const host = new SynonymHost(repository, () => analyzer, {
+    requestId: randomUUID(),
+    executionId: randomUUID(),
+    sessionId: randomUUID(),
+    userMessageId: randomUUID(),
+    arguments: { text: 'adequate', wordLanguage: 'en' },
+    explanationLanguage: 'zh-CN',
+    signal,
+    onPhase: vi.fn()
+  })
+  const runtime = createTestBatchRuntime()
   return {
     complete,
     save,
-    run: () =>
-      analyzer.analyze({ word: 'adequate', explanationLanguage: 'zh-CN', signal, executor })
+    run: async () => {
+      await runtime.runSynonym({ outputLanguage: 'zh-CN', targetLanguage: 'en', signal }, host)
+      const item = host.report(true).items[0]
+      if (item.status === 'failed') throw new SynonymError(item.code)
+    }
   }
 }
 const query = { word: 'adequate', meaning: '尚可' }
@@ -140,11 +158,6 @@ describe('synonym multi-turn adapter', () => {
     await expect(run()).rejects.toMatchObject({ code: 'INVALID_ANALYSIS' })
     expect(save).not.toHaveBeenCalled()
   })
-  it('stops at the round limit without writing', async () => {
-    const { run, save } = setup([response('find_synonym_groups', query)], 1)
-    await expect(run()).rejects.toMatchObject({ code: 'ROUND_LIMIT' })
-    expect(save).not.toHaveBeenCalled()
-  })
   it('reports unsupported tools and does not fall back to text', async () => {
     const { run, complete, save } = setup([])
     complete.mockRejectedValue({ status: 400, message: 'tools are not supported' })
@@ -189,7 +202,6 @@ describe('synonym multi-turn adapter', () => {
     async ({ runtimeConfig, expectParallelToolCalls }) => {
       const { run, complete } = setup(
         [response('report_unrecognized_word', { word: 'adequate' })],
-        52,
         runtimeConfig
       )
       await run()

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const AGENT_PROTOCOL_VERSION = 4
+export const AGENT_PROTOCOL_VERSION = 5
 export const MAX_AGENT_SYSTEM_PROMPT_CHARS = 4096
 export const MAX_AGENT_FRAME_BYTES = 262_144
 export const AGENT_OPERATIONS = [
@@ -10,7 +10,11 @@ export const AGENT_OPERATIONS = [
   'vocabulary.prepare',
   'model.vocabulary',
   'phrase.prepare',
-  'model.phrase'
+  'model.phrase',
+  'synonym.prepare',
+  'model.synonym',
+  'synonym.apply',
+  'synonym.finish'
 ] as const
 const identity = z.string().min(1).max(128)
 const text = z.string().max(65_536)
@@ -21,20 +25,31 @@ export const agentMessageSchema = z.strictObject({
 })
 export const agentBudgetSchema = z.strictObject({
   timeoutMs: z.number().int().min(1).max(180_000),
-  maxModelCalls: z.number().int().min(1).max(20),
-  maxToolCalls: z.number().int().min(0).max(8),
-  maxSteps: z.number().int().min(1).max(32),
+  maxModelCalls: z.number().int().min(1).max(1040),
+  maxToolCalls: z.number().int().min(0).max(1061),
+  maxSteps: z.number().int().min(1).max(2200),
   maxInputChars: z.number().int().min(4096).max(65_536),
-  maxOutputChars: z.number().int().min(1).max(65_536)
+  maxOutputChars: z.number().int().min(1).max(524_288)
 })
-export const agentSnapshotSchema = z.strictObject({
-  task: z.enum(['conversation', 'tool-loop', 'vocabulary', 'phrase']),
+const snapshotFields = {
   messages: z.array(agentMessageSchema).min(1).max(100),
   outputLanguage: z.string().min(2).max(35),
   targetLanguage: z.string().min(2).max(35),
-  allowedOperations: z.array(agentOperationSchema).max(7),
-  budget: agentBudgetSchema
-})
+  allowedOperations: z.array(agentOperationSchema).max(11)
+}
+export const agentSnapshotSchema = z.discriminatedUnion('task', [
+  z.strictObject({
+    ...snapshotFields,
+    task: z.enum(['conversation', 'tool-loop', 'vocabulary', 'phrase']),
+    budget: agentBudgetSchema.extend({
+      maxModelCalls: z.number().int().min(1).max(20),
+      maxToolCalls: z.number().int().min(0).max(8),
+      maxSteps: z.number().int().min(1).max(32),
+      maxOutputChars: z.number().int().min(1).max(65_536)
+    })
+  }),
+  z.strictObject({ ...snapshotFields, task: z.literal('synonym'), budget: agentBudgetSchema })
+])
 export const agentDecisionSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('final'), text }),
   z.strictObject({
@@ -129,6 +144,34 @@ export const phraseCompletionSchema = z.strictObject({
 export type PhrasePrepared = z.infer<typeof phrasePreparedSchema>
 export type PhraseAnalysisReceipt = z.infer<typeof phraseAnalysisReceiptSchema>
 export type PhraseCompletion = z.infer<typeof phraseCompletionSchema>
+const synonymIndex = z.number().int().min(0).max(19)
+const synonymRound = z.number().int().min(1).max(52)
+export const synonymPreparedSchema = z.strictObject({
+  items: z
+    .array(z.strictObject({ inputIndex: synonymIndex, status: z.enum(['pending', 'resolved']) }))
+    .min(1)
+    .max(20)
+})
+export const synonymTurnSchema = z.strictObject({
+  inputIndex: synonymIndex,
+  round: synonymRound,
+  kind: z.enum(['tool', 'parallel', 'failed']),
+  inputChars: z.number().int().min(0).max(65_536)
+})
+export const synonymAppliedSchema = z.strictObject({
+  inputIndex: synonymIndex,
+  round: synonymRound,
+  kind: z.enum(['continue', 'terminal', 'failed'])
+})
+export const synonymFinishedSchema = z.strictObject({ inputIndex: synonymIndex, stop: z.boolean() })
+export const synonymCompletionSchema = z.strictObject({
+  completedIndices: z.array(synonymIndex).max(20)
+})
+export type SynonymPrepared = z.infer<typeof synonymPreparedSchema>
+export type SynonymTurn = z.infer<typeof synonymTurnSchema>
+export type SynonymApplied = z.infer<typeof synonymAppliedSchema>
+export type SynonymFinished = z.infer<typeof synonymFinishedSchema>
+export type SynonymCompletion = z.infer<typeof synonymCompletionSchema>
 export const agentHostResultSchema = z.union([
   z.strictObject({ text }),
   agentDecisionSchema,
@@ -136,6 +179,10 @@ export const agentHostResultSchema = z.union([
   vocabularyAnalysisReceiptSchema,
   phrasePreparedSchema,
   phraseAnalysisReceiptSchema,
+  synonymPreparedSchema,
+  synonymTurnSchema,
+  synonymAppliedSchema,
+  synonymFinishedSchema,
   z.strictObject({ entries: z.array(z.string().max(1024)).max(10) })
 ])
 // Zod/JSON Schema count code points; the wire budget is measured in UTF-16 units.
@@ -147,6 +194,9 @@ const systemPromptSchema = z
 export const agentCallArgsSchema = z.strictObject({
   systemPrompt: systemPromptSchema.optional(),
   inputIndex: vocabularyIndex.optional(),
+  round: synonymRound.optional(),
+  action: z.enum(['execute', 'reject_parallel']).optional(),
+  reason: z.enum(['terminal', 'failed', 'round_limit']).optional(),
   query: z.string().min(1).max(256).optional(),
   results: z
     .array(z.strictObject({ entries: z.array(z.string().max(1024)).max(10) }))
@@ -164,6 +214,24 @@ export const phraseModelArgsSchema = z.strictObject({
   inputIndex: phraseIndex,
   systemPrompt: systemPromptSchema
 })
+export const synonymModelArgsSchema = z.strictObject({
+  inputIndex: synonymIndex,
+  round: synonymRound,
+  systemPrompt: systemPromptSchema
+})
+export const synonymApplyArgsSchema = z.strictObject({
+  inputIndex: synonymIndex,
+  round: synonymRound,
+  action: z.enum(['execute', 'reject_parallel'])
+})
+export const synonymFinishArgsSchema = z.strictObject({
+  inputIndex: synonymIndex,
+  round: synonymRound,
+  reason: z.enum(['terminal', 'failed', 'round_limit'])
+})
+export type SynonymModelArgs = z.infer<typeof synonymModelArgsSchema>
+export type SynonymApplyArgs = z.infer<typeof synonymApplyArgsSchema>
+export type SynonymFinishArgs = z.infer<typeof synonymFinishArgsSchema>
 export const agentErrorCodeSchema = z.enum([
   'AGENT_UNAVAILABLE',
   'AGENT_PROTOCOL_ERROR',
@@ -179,10 +247,36 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
   z.strictObject({
     ...base,
     type: z.literal('ready'),
-    capabilities: z.array(z.enum(['conversation', 'tool-loop', 'vocabulary', 'phrase'])).max(4)
+    capabilities: z
+      .array(z.enum(['conversation', 'tool-loop', 'vocabulary', 'phrase', 'synonym']))
+      .max(5)
   }),
   z.strictObject({ ...run, type: z.literal('run'), snapshot: agentSnapshotSchema }),
   z.discriminatedUnion('operation', [
+    z.strictObject({
+      ...call,
+      type: z.literal('host_call'),
+      operation: z.literal('synonym.prepare'),
+      args: z.strictObject({})
+    }),
+    z.strictObject({
+      ...call,
+      type: z.literal('host_call'),
+      operation: z.literal('model.synonym'),
+      args: synonymModelArgsSchema
+    }),
+    z.strictObject({
+      ...call,
+      type: z.literal('host_call'),
+      operation: z.literal('synonym.apply'),
+      args: synonymApplyArgsSchema
+    }),
+    z.strictObject({
+      ...call,
+      type: z.literal('host_call'),
+      operation: z.literal('synonym.finish'),
+      args: synonymFinishArgsSchema
+    }),
     z.strictObject({
       ...call,
       type: z.literal('host_call'),
@@ -217,7 +311,7 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
       ...call,
       type: z.literal('host_call'),
       operation: z.literal('model.decide'),
-      args: agentCallArgsSchema.omit({ systemPrompt: true, query: true, inputIndex: true })
+      args: agentCallArgsSchema.pick({ results: true })
     }),
     z.strictObject({
       ...call,
@@ -248,6 +342,7 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
     result: phraseCompletionSchema
   }),
   z.strictObject({ ...run, type: z.literal('error'), code: agentErrorCodeSchema }),
+  z.strictObject({ ...run, type: z.literal('synonym_result'), result: synonymCompletionSchema }),
   z.strictObject({ ...run, type: z.literal('cancelled') }),
   z.strictObject({ ...base, type: z.literal('shutdown') }),
   z.strictObject({ ...base, type: z.literal('shutdown_ack') })

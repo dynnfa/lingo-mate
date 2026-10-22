@@ -10,7 +10,7 @@ Lingo Mate 是一个桌面端语言学习助手 Agent。它通过对话、记忆
 2. React 用户界面层
 3. Agent Engine 核心能力层（Python 策略与编排、TypeScript 宿主能力）
 
-Python 是唯一 Agent 运行时；普通对话、`/concept`、`/vocabulary` 与 `/phrase` 始终经过 Python，任务识别、Prompt 与执行流程由 Python 持有。未来新增 Agent 策略和工作流统一在 `agent-engine/` 实现，TypeScript 不再维护并行 Agent 执行路径。其余现有显式技能、标题及练习暂沿用 TS 实现，后续迁移。启动、协议或执行故障必须明确失败，不得静默回退或重放失败请求。架构边界见 [Python Agent ADR](docs/adr/2026-10-21-python-langgraph-agent-engine.md)。
+Python 是唯一 Agent 运行时；普通对话、`/concept`、`/vocabulary`、`/phrase` 与 `/synonym` 始终经过 Python，任务识别、Prompt 与执行流程由 Python 持有。未来新增 Agent 策略和工作流统一在 `agent-engine/` 实现，TypeScript 不再维护并行 Agent 执行路径。其余现有显式技能、标题及练习暂沿用 TS 实现，后续迁移。启动、协议或执行故障必须明确失败，不得静默回退或重放失败请求。架构边界见 [Python Agent ADR](docs/adr/2026-10-21-python-langgraph-agent-engine.md)。
 
 ## 目录职责
 
@@ -105,7 +105,7 @@ src/core/
 
 - Main 使用固定可执行路径、`shell: false` 和环境白名单启动进程；Renderer 不得指定命令、路径或环境。生产运行包不依赖系统 Python、uv 或 PATH。
 - Main 与 Python 通过私有 UTF-8 JSONL 管道通信，stdout 专用于协议；stderr 仅由 Main 有界接收并写入本地诊断日志，不进入 Renderer 或控制台。
-- Python 不得接收 API Key、数据库连接信息或外层会话/消息 ID；宿主调用必须经过白名单、运行归属及预算校验。生产普通对话仅开放携带 `systemPrompt` 的 `model.reply`；词汇任务另开放 `vocabulary.prepare` 与携带 `systemPrompt`、绑定词项索引的 `model.vocabulary`；短语任务仅开放 `phrase.prepare` 与 `model.phrase`，同样通过绑定索引和完整 `systemPrompt` 分析。分析内容与入库元数据留在宿主；Prompt 上限为 4096 个 UTF-16 单元，宿主与 Python 均校验输入预算（对话为 Prompt 加历史；词汇及短语为 Prompt、绑定词项与工具定义）。词汇及短语每批最多 20 项、并发 2、分析窗口 120 秒，硬截止 180 秒；图完成核验后才由宿主同步提交。测试扩展不等于生产授权。
+- Python 不得接收 API Key、数据库连接信息或外层会话/消息 ID；宿主调用必须经过白名单、运行归属及预算校验。生产普通对话仅开放携带 `systemPrompt` 的 `model.reply`；词汇任务另开放 `vocabulary.prepare` 与携带 `systemPrompt`、绑定词项索引的 `model.vocabulary`；短语任务仅开放 `phrase.prepare` 与 `model.phrase`，同样通过绑定索引和完整 `systemPrompt` 分析。分析内容与入库元数据留在宿主；Prompt 上限为 4096 个 UTF-16 单元，宿主与 Python 均校验输入预算（对话为 Prompt 加历史；词汇及短语为 Prompt、绑定词项与工具定义）。词汇及短语每批最多 20 项、并发 2、分析窗口 120 秒，硬截止 180 秒；图完成核验后才由宿主同步提交。近义词任务独立开放 `synonym.prepare`、`model.synonym`、`synonym.apply` 和 `synonym.finish`，仅交换绑定索引、轮次、完整 Prompt 与安全回执，完整模型消息和工具参数／结果留在宿主。Python 顺序驱动多轮工具流程，宿主校验待执行决策、查询授权和逐词事务；已提交词在取消或故障后保留。近义词每批最多 20 项、每词 60 秒／52 轮／50 页，取得串行执行权后总硬截止 180 秒（包含启动）；模型／非模型宿主调用／步骤预算为 1040／1061／2200，单轮实际模型输入 65,536、累计安全回执 524,288 UTF-16 单元。词汇和短语预算保持原样。测试扩展不等于生产授权。
 - 协议唯一来源为 `src/core/agent/agent-protocol.ts` 中的 Zod schema。`agent-engine/src/lingo_agent/protocol/schema.json` 为生成物，不得手改；协议变更需同步共享契约用例，破坏性变更还需提升协议版本、同步握手与运行包 manifest 并重建运行包。
 
 开发环境、协议演进、构建与分发细节见 [Agent Engine README](agent-engine/README.md)。

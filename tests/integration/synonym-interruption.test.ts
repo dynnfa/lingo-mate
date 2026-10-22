@@ -1,10 +1,11 @@
+import { createTestBatchRuntime } from '../fixtures/python-agent'
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
-import { SynonymModule } from '../synonym-module'
-import type { SynonymAnalyzer } from '../synonym-analyzer'
-import type { SynonymRepository } from '../synonym-repository'
-import type { ConversationSkillRunInput } from '../../../conversation/conversation-skill'
-import { SynonymError } from '../parse-synonym-input'
+import { SynonymModule } from '../../src/core/learning/synonym/synonym-module'
+import type { SynonymAnalyzer } from '../../src/core/learning/synonym/synonym-analyzer'
+import type { SynonymRepository } from '../../src/core/learning/synonym/synonym-repository'
+import type { ConversationSkillRunInput } from '../../src/core/conversation/conversation-skill'
+import { SynonymError } from '../../src/core/learning/synonym/parse-synonym-input'
 
 function input(controller: AbortController, text: string): ConversationSkillRunInput {
   return {
@@ -41,6 +42,7 @@ describe('synonym batch interruption', () => {
           throw new SynonymError('STORAGE_FAILED', { cause: underlying })
         }
       }),
+      createTestBatchRuntime(),
       60000,
       {
         report: (entry) => {
@@ -82,6 +84,7 @@ describe('synonym batch interruption', () => {
           throw new SynonymError('CANCELLED')
         }
       }),
+      createTestBatchRuntime(),
       60000,
       {
         report: (entry) => {
@@ -105,7 +108,12 @@ describe('synonym batch interruption', () => {
       started()
       await new Promise(() => {})
     })
-    const module = new SynonymModule(repository(), () => ({ analyze }), 1000)
+    const module = new SynonymModule(
+      repository(),
+      () => ({ analyze }),
+      createTestBatchRuntime(),
+      1000
+    )
     const first = module.addBatch(input(active, 'adequate'))
     await entered
     const second = module.addBatch(input(waiting, 'decent'))
@@ -122,14 +130,25 @@ describe('synonym batch interruption', () => {
     const entered = new Promise<void>((resolve) => {
       started = resolve
     })
-    const analyze: SynonymAnalyzer['analyze'] = async ({ executor, word }) => {
-      executor.execute('report_unrecognized_word', { word })
+    const analyze: SynonymAnalyzer['analyze'] = async () => {
       started()
       await new Promise<void>((resolve) => {
         release = resolve
       })
+      return {
+        canCorrectParallel: false,
+        message: {
+          tool_calls: [
+            {
+              id: 'late',
+              type: 'function',
+              function: { name: 'report_unrecognized_word', arguments: '{"word":"unknown"}' }
+            }
+          ]
+        }
+      }
     }
-    const module = new SynonymModule(repository(), () => ({ analyze }))
+    const module = new SynonymModule(repository(), () => ({ analyze }), createTestBatchRuntime())
     const task = module.addBatch(input(controller, 'unknown'))
     await entered
     controller.abort()

@@ -9,10 +9,27 @@ import {
   type VocabularyHostOperations,
   type PhraseAgentRunInput,
   type PhraseHostOperations,
+  type SynonymHostOperations,
+  type SynonymAgentRunInput,
   type VocabularyAgentRunInput
 } from '../../core/agent/agent-runtime'
 import type { AgentFrame } from '../../core/agent/agent-protocol'
 import { PythonAgentProcess } from './python-agent-process'
+
+type BatchTask = 'vocabulary' | 'phrase' | 'synonym'
+
+interface RunHosts {
+  vocabulary?: VocabularyHostOperations
+  phrase?: PhraseHostOperations
+  synonym?: SynonymHostOperations
+}
+
+// Batch snapshots still require one message; the batch graphs never read it.
+const BATCH_MESSAGE: Record<BatchTask, string> = {
+  vocabulary: 'Vocabulary batch',
+  phrase: 'Phrase batch',
+  synonym: 'Synonym batch'
+}
 
 interface Run {
   controller: AbortController
@@ -23,8 +40,7 @@ interface Run {
   sent: boolean
   cancelSent: boolean
   openCalls: Map<string, string>
-  vocabulary?: VocabularyHostOperations
-  phrase?: PhraseHostOperations
+  hosts: RunHosts
   pythonDone: boolean
   error?: unknown
   seq: number
@@ -55,7 +71,7 @@ export class PythonAgentRuntime implements AgentRuntime {
   }
 
   async *stream(input: AgentRunInput): AsyncIterable<ModelStreamEvent> {
-    if (input.task === 'vocabulary' || input.task === 'phrase')
+    if (input.task === 'vocabulary' || input.task === 'phrase' || input.task === 'synonym')
       throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
     yield* this.run(input)
   }
@@ -64,37 +80,30 @@ export class PythonAgentRuntime implements AgentRuntime {
     input: VocabularyAgentRunInput,
     host: VocabularyHostOperations
   ): Promise<void> {
-    for await (const event of this.run(
-      {
-        ...input,
-        sessionId: '',
-        task: 'vocabulary',
-        messages: [{ role: 'user', content: 'Vocabulary batch' }]
-      },
-      host
-    ))
-      void event
+    await this.runBatch(input, 'vocabulary', { vocabulary: host })
   }
 
   async runPhrase(input: PhraseAgentRunInput, host: PhraseHostOperations): Promise<void> {
+    await this.runBatch(input, 'phrase', { phrase: host })
+  }
+
+  async runSynonym(input: SynonymAgentRunInput, host: SynonymHostOperations): Promise<void> {
+    await this.runBatch(input, 'synonym', { synonym: host })
+  }
+
+  private async runBatch(
+    input: VocabularyAgentRunInput | PhraseAgentRunInput | SynonymAgentRunInput,
+    task: BatchTask,
+    hosts: RunHosts
+  ): Promise<void> {
     for await (const event of this.run(
-      {
-        ...input,
-        sessionId: '',
-        task: 'phrase',
-        messages: [{ role: 'user', content: 'Phrase batch' }]
-      },
-      undefined,
-      host
+      { ...input, sessionId: '', task, messages: [{ role: 'user', content: BATCH_MESSAGE[task] }] },
+      hosts
     ))
       void event
   }
 
-  private async *run(
-    input: AgentRunInput,
-    vocabulary?: VocabularyHostOperations,
-    phrase?: PhraseHostOperations
-  ): AsyncIterable<ModelStreamEvent> {
+  private async *run(input: AgentRunInput, hosts: RunHosts = {}): AsyncIterable<ModelStreamEvent> {
     input.signal.throwIfAborted()
     if (this.closed || this.runs.size >= 8) throw new AgentRuntimeError('AGENT_UNAVAILABLE')
     const { signal } = input
@@ -109,15 +118,21 @@ export class PythonAgentRuntime implements AgentRuntime {
     const runId = randomUUID()
     const run: Run = {
       controller,
-      host: new AgentHost(snapshot, this.resolveModel, this.testOperations, vocabulary, phrase),
+      host: new AgentHost(
+        snapshot,
+        this.resolveModel,
+        this.testOperations,
+        hosts.vocabulary,
+        hosts.phrase,
+        hosts.synonym
+      ),
       queue: [],
       wake: () => {},
       done: false,
       sent: false,
       cancelSent: false,
       openCalls: new Map(),
-      vocabulary,
-      phrase,
+      hosts,
       pythonDone: false,
       seq: 0,
       text: '',
@@ -177,6 +192,7 @@ export class PythonAgentRuntime implements AgentRuntime {
     if (
       frame.type === 'vocabulary_result' ||
       frame.type === 'phrase_result' ||
+      frame.type === 'synonym_result' ||
       frame.type === 'result' ||
       frame.type === 'error' ||
       frame.type === 'cancelled'
@@ -194,12 +210,13 @@ export class PythonAgentRuntime implements AgentRuntime {
       case 'host_call': {
         if (
           (run.openCalls.size > 0 &&
-            (!(run.vocabulary || run.phrase) ||
-              frame.operation !== (run.phrase ? 'model.phrase' : 'model.vocabulary') ||
+            (!(run.hosts.vocabulary || run.hosts.phrase) ||
+              frame.operation !== (run.hosts.phrase ? 'model.phrase' : 'model.vocabulary') ||
               [...run.openCalls.values()].some(
-                (operation) => operation !== (run.phrase ? 'model.phrase' : 'model.vocabulary')
+                (operation) =>
+                  operation !== (run.hosts.phrase ? 'model.phrase' : 'model.vocabulary')
               ))) ||
-          run.openCalls.size >= (run.vocabulary || run.phrase ? 2 : 1) ||
+          run.openCalls.size >= (run.hosts.vocabulary || run.hosts.phrase ? 2 : 1) ||
           !frame.callId.startsWith(`${frame.runId}:`) ||
           run.calls.has(frame.callId)
         ) {
@@ -212,7 +229,7 @@ export class PythonAgentRuntime implements AgentRuntime {
         return
       }
       case 'event':
-        if (run.vocabulary || run.phrase) {
+        if (run.hosts.vocabulary || run.hosts.phrase || run.hosts.synonym) {
           this.finish(frame.runId, run, new AgentRuntimeError('AGENT_PROTOCOL_ERROR'))
           return
         }
@@ -232,8 +249,17 @@ export class PythonAgentRuntime implements AgentRuntime {
         return
       case 'vocabulary_result':
         try {
-          if (!run.vocabulary) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-          run.vocabulary.verifyCompletion(frame.result)
+          if (!run.hosts.vocabulary) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+          run.hosts.vocabulary.verifyCompletion(frame.result)
+          this.finish(frame.runId, run)
+        } catch (error) {
+          this.finish(frame.runId, run, error)
+        }
+        return
+      case 'synonym_result':
+        try {
+          if (!run.hosts.synonym) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+          run.hosts.synonym.verifyCompletion(frame.result)
           this.finish(frame.runId, run)
         } catch (error) {
           this.finish(frame.runId, run, error)
@@ -241,15 +267,15 @@ export class PythonAgentRuntime implements AgentRuntime {
         return
       case 'phrase_result':
         try {
-          if (!run.phrase) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-          run.phrase.verifyCompletion(frame.result)
+          if (!run.hosts.phrase) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+          run.hosts.phrase.verifyCompletion(frame.result)
           this.finish(frame.runId, run)
         } catch (error) {
           this.finish(frame.runId, run, error)
         }
         return
       case 'result':
-        if (run.vocabulary || run.phrase) {
+        if (run.hosts.vocabulary || run.hosts.phrase || run.hosts.synonym) {
           this.finish(frame.runId, run, new AgentRuntimeError('AGENT_PROTOCOL_ERROR'))
           return
         }
