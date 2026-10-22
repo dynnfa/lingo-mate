@@ -51,7 +51,7 @@ async def test_vocabulary_prepares_and_analyzes_only_new_terms():
 async def test_vocabulary_enforces_output_budget_before_finalizing():
     import pytest
 
-    from lingo_agent.graphs.learning import LimitError
+    from lingo_agent.graphs.common import LimitError
 
     async def host(operation, args):
         if operation == "vocabulary.prepare":

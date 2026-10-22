@@ -42,7 +42,7 @@ pnpm build:unpack
 
 electron-builder 复制该目录至 `resources/agent-engine/`，置于 ASAR 外。manifest 中应用版本、协议、OS 与 CPU 任一不匹配都会安全拒绝启动。应用启动不安装依赖，也不读取 Renderer 指定的命令、路径或环境。
 
-`agent:smoke` 从独立临时工作目录、空 PATH、无虚拟环境变量启动冻结可执行文件，验证握手→流式任务→20 词双并发图→20 短语双并发图→取消→迟到结果→崩溃→重启→带活动任务退出，并输出包体积、耗时与可测的资源数据。Windows 的资源指标为空；不代表占用为零。
+`agent:smoke` 从独立临时工作目录、空 PATH、无虚拟环境变量启动冻结可执行文件，验证握手→流式任务→中英文概念讲解与宿主失败→20 词双并发图→20 短语双并发图→概念讲解取消→迟到结果→崩溃→重启与概念讲解重试→带活动任务退出，并输出包体积、耗时与可测的资源数据。Windows 的资源指标为空；不代表占用为零。
 
 `tests/e2e/python-agent.test.ts` 默认覆盖开发解释器和冻结运行包。构建 `electron-builder --dir` 后，显式设置 `LINGO_MATE_TEST_PACKAGED=1` 再运行该测试，还会启动安装布局中的应用，检查 `app.isPackaged` 路径。生产设置不提供运行时切换页面。
 
@@ -86,6 +86,16 @@ macOS 本地包使用 PyInstaller 的 ad-hoc 签名。正式发行还需原有 A
 ## Python 唯一运行时验收
 
 2026-10-21 的 v2 变更已通过 macOS arm64 的开发解释器、冻结包和安装布局端到端验证，以及空 PATH 运行包烟测。完整结果与尚未执行的平台见 [Python 唯一运行时计划](../docs/plans/2026-10-21-python-only-agent-runtime.md)。此前性能数字保留为历史观测，不代表本次构建的性能承诺。
+
+## 概念讲解独立图
+
+`/concept` 的专用图位于 `graphs/concept.py`，采用 `START → explain → END`。入口仅在 `conversation` 任务的最新消息为 user 且符合既有命令边界时选择该图；空命令和 ECMAScript 空白规则保持原样，普通追问重新走普通对话图，不根据历史命令粘连任务。
+
+图使用既有概念讲解 Prompt，一次 `model.reply` 请求直接流式回复。解释及比较使用界面语言，例句使用学习语言；保留语境澄清、拼写确认、不编造词源与不执行外部操作的规则。原始命令和历史上下文由宿主原样绑定，不增加路由模型请求或查询词库。
+
+`graphs/common.py` 统一回复的权限、Prompt／历史输入、输出、模型调用和步数预算检查，以及运行初态和错误类型。字符预算按 UTF-16 单元计算，Prompt 上限仍为 4096。单节点图为结束检查保留必要的调度轮次，实际操作仍受步数预算约束。取消、超时及故障沿用原有服务和宿主边界，无自动重试或回退。
+
+本次只拆分 Python 内部流程，继续使用 `conversation` 任务、协议 v4 和现有 IPC／运行接口。运行包需重新构建以包含专用图。实施与验收见 [概念讲解计划](../docs/plans/2026-10-22-concept-langgraph-agent.md)。
 
 ## 词汇 LangGraph 与协议 v3
 
