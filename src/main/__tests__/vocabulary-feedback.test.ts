@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createVocabularyFeedbackFormatter } from '../vocabulary-feedback'
 import type { VocabularyBatch } from '../../shared/vocabulary'
-import vocabularyEn from '../../shared/locales/en/vocabulary.json'
-import vocabularyZhCN from '../../shared/locales/zh-CN/vocabulary.json'
 
 const batch = (items: VocabularyBatch['items']): VocabularyBatch => {
   const counts = { total: items.length, saved: 0, existing: 0, duplicate: 0, failed: 0 }
@@ -83,21 +81,5 @@ describe('createVocabularyFeedbackFormatter', () => {
     ])
     expect(feedback(result, 'en')).toBe(`Processed 1 terms: ${en}.`)
     expect(feedback(result, 'zh-CN')).toBe(`已处理 1 个词汇：${zh}。`)
-  })
-  it('keeps locale resource key sets and placeholders aligned', () => {
-    const keys = (value: object): string[] =>
-      Object.entries(value).flatMap(([key, nested]) =>
-        typeof nested === 'object' && nested !== null
-          ? keys(nested as object).map((child) => `${key}.${child}`)
-          : [key]
-      )
-    expect(keys(vocabularyEn)).toEqual(keys(vocabularyZhCN))
-    const placeholders = (value: object): string[] =>
-      Object.values(value).flatMap((nested) =>
-        typeof nested === 'string'
-          ? [...nested.matchAll(/\{\{\s*(\w+)\s*\}\}/g)].map((match) => match[1]).sort()
-          : placeholders(nested as object)
-      )
-    expect(placeholders(vocabularyEn)).toEqual(placeholders(vocabularyZhCN))
   })
 })

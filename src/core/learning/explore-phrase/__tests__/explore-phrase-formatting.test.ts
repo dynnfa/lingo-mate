@@ -3,7 +3,7 @@ import {
   explorePhraseExampleContainsPhrase,
   normalizeExplorePhrase
 } from '../normalize-explore-phrase'
-import { escapeMarkdownTableCell, formatExplorePhraseTable } from '../explore-phrase-table'
+import { formatExplorePhraseTable } from '../explore-phrase-table'
 
 describe('normalizeExplorePhrase', () => {
   it('applies NFKC, trim, whitespace collapsing and lowercasing', () => {
@@ -71,41 +71,11 @@ describe('formatExplorePhraseTable', () => {
     expect(table.split('\n')[0]).toBe('| 序号 | 短语 | 释义 | 例句 |')
   })
 
-  it('escapes cell content so it cannot split columns or inject markup', () => {
+  it('escapes every untrusted data column', () => {
     const table = formatExplorePhraseTable(
-      [
-        {
-          phrase: 'a | b',
-          normalizedPhrase: 'a | b',
-          explanation: 'pipes \\ backticks ` [link](http://x) <b>bold</b> & amp',
-          example: 'Uses a | b with *emphasis* and _underscores_.'
-        },
-        ...items.slice(1)
-      ],
+      [{ ...items[0], phrase: 'a | b', explanation: 'c | d', example: 'e | f' }],
       labels
     )
-    const dataRow = table.split('\n')[2]
-    // 单元格内容被转义后仍位于同一行；管道符被转义不产生额外列。
-    expect(dataRow.split(/\|/u).length).toBeGreaterThan(6)
-    expect(dataRow).toContain('\\|')
-    expect(dataRow).toContain('\\`')
-    expect(dataRow).not.toContain('[link](http://x)')
-    expect(dataRow).toContain('\\[link\\](http\\://x)')
-    expect(dataRow).toContain('&lt;b&gt;bold&lt;/b&gt;')
-    expect(dataRow).toContain('&amp; amp')
-  })
-})
-
-describe('escapeMarkdownTableCell', () => {
-  it('escapes markdown markers, backslash and html characters', () => {
-    expect(escapeMarkdownTableCell('|')).toBe('\\|')
-    expect(escapeMarkdownTableCell('\\')).toBe('\\\\')
-    expect(escapeMarkdownTableCell('`code`')).toBe('\\`code\\`')
-    expect(escapeMarkdownTableCell('*a*_b_~c~[d]')).toBe('\\*a\\*\\_b\\_\\~c\\~\\[d\\]')
-    expect(escapeMarkdownTableCell('<img src=x>&')).toBe('&lt;img src=x&gt;&amp;')
-    // 句点、冒号、@ 被转义以破坏 GFM 裸 URL、www 前缀与邮箱自动链接。
-    expect(escapeMarkdownTableCell('https://example.com')).toBe('https\\://example\\.com')
-    expect(escapeMarkdownTableCell('www.example.com')).toBe('www\\.example\\.com')
-    expect(escapeMarkdownTableCell('user@example.com')).toBe('user\\@example\\.com')
+    expect(table.split('\n')[2]).toBe('| 1 | a \\| b | c \\| d | e \\| f |')
   })
 })

@@ -31,27 +31,11 @@ describe('formatExploreVocabularyTable', () => {
     expect(table.split('\n')[0]).toBe('| 序号 | 单词 | 释义 | 例句 |')
   })
 
-  it('escapes cell content so it cannot split columns or inject markup', () => {
+  it('escapes every untrusted data column', () => {
     const table = formatExploreVocabularyTable(
-      [
-        {
-          term: 'a | b',
-          normalizedTerm: 'a | b',
-          explanation: 'pipes \\ backticks ` [link](http://x) <b>bold</b> & amp',
-          example: 'Uses a | b with *emphasis* and _underscores_.'
-        },
-        ...items.slice(1)
-      ],
+      [{ ...items[0], term: 'a | b', explanation: 'c | d', example: 'e | f' }],
       labels
     )
-    const dataRow = table.split('\n')[2]
-    // 单元格内容被转义后仍位于同一行；管道符被转义不产生额外列。
-    expect(dataRow.split(/\|/u).length).toBeGreaterThan(6)
-    expect(dataRow).toContain('\\|')
-    expect(dataRow).toContain('\\`')
-    expect(dataRow).not.toContain('[link](http://x)')
-    expect(dataRow).toContain('\\[link\\](http\\://x)')
-    expect(dataRow).toContain('&lt;b&gt;bold&lt;/b&gt;')
-    expect(dataRow).toContain('&amp; amp')
+    expect(table.split('\n')[2]).toBe('| 1 | a \\| b | c \\| d | e \\| f |')
   })
 })

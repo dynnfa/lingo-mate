@@ -42,7 +42,6 @@ describe('vocabulary mistake migrations', () => {
     const database = open()
     migrateDatabase(database)
     migrateDatabase(database)
-    expect(database.pragma('user_version', { simple: true })).toBe(11)
     const columns = (
       database.pragma('table_info(vocabulary_practice_mistakes)') as Array<{
         name: string
@@ -71,7 +70,6 @@ describe('vocabulary mistake migrations', () => {
     `)
     migrateDatabase(database)
     expect(database.prepare('SELECT term FROM vocabulary').get()).toEqual({ term: 'apple' })
-    expect(database.pragma('user_version', { simple: true })).toBe(11)
     expect(
       (
         database

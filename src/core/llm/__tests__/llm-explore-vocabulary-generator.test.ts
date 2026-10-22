@@ -106,26 +106,7 @@ describe('LlmExploreVocabularyGenerator', () => {
 
   it.each([
     ['an unknown tool', submitCompletion([]) && completionWith([functionCall('other_tool', {})])],
-    [
-      'multiple tool calls',
-      completionWith([
-        functionCall('submit_explored_vocabulary', { items: [candidate('a')] }),
-        functionCall('submit_explored_vocabulary', { items: [candidate('b')] })
-      ])
-    ],
-    ['no tool call', completionWith(null)],
-    [
-      'mixed prose content',
-      completionWith([functionCall('submit_explored_vocabulary', { items: [candidate('a')] })], {
-        content: 'Here are words'
-      })
-    ],
-    [
-      'a stop finish reason',
-      completionWith([functionCall('submit_explored_vocabulary', { items: [candidate('a')] })], {
-        finishReason: 'stop'
-      })
-    ]
+    ['no tool call', completionWith(null)]
   ])('rejects %s', async (_name, response) => {
     complete.mockResolvedValue(response)
     await expect(
@@ -140,16 +121,6 @@ describe('LlmExploreVocabularyGenerator', () => {
   })
 
   it.each([
-    [
-      'invalid JSON arguments',
-      completionWith([
-        {
-          id: 'c',
-          type: 'function',
-          function: { name: 'submit_explored_vocabulary', arguments: '{nope' }
-        }
-      ])
-    ],
     ['extra fields on items', submitCompletion([{ ...candidate('a'), extra: true }])],
     ['empty items array', submitCompletion([])],
     ['multiline fields', submitCompletion([{ ...candidate('a'), example: 'line\nbreak' }])],

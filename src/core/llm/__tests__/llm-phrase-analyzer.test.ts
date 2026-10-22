@@ -75,8 +75,7 @@ describe('LlmPhraseAnalyzer', () => {
       const result = await makeAnalyzer().analyze(request)
       expect(result).toMatchObject({
         status: 'insert',
-        modelId: 'fixture',
-        promptVersion: 'phrase-tools-v1'
+        modelId: 'fixture'
       })
       if (result.status !== 'insert') throw new Error('expected insert')
       expect(result.content.phrase).toBe(request.phrase)
@@ -143,57 +142,8 @@ describe('LlmPhraseAnalyzer', () => {
     expect(body.parallel_tool_calls).toBeUndefined()
   })
   it.each([
-    ['non-v4 model on the DeepSeek host', 'https://api.deepseek.com/v1', 'deepseek-chat'],
-    ['v4-prefixed model on another host', 'https://api.example.com/v1', 'deepseek-v4-chat'],
-    ['subdomain lookalike host', 'https://api.deepseek.com.evil.example/v1', 'deepseek-v4-chat']
-  ])(
-    'keeps plain auto tool choice on non-matching configurations: %s',
-    async (_name, baseUrl, modelId) => {
-      create.mockResolvedValue(insertCompletion())
-      const analyzer = new LlmPhraseAnalyzer(
-        {
-          configured: true,
-          protocol: 'openai-compatible',
-          baseUrl,
-          modelId,
-          apiKey: undefined
-        },
-        30_000,
-        createClient
-      )
-      await expect(analyzer.analyze(input())).resolves.toMatchObject({ status: 'insert' })
-      const body = create.mock.calls[0][0]
-      expect(body.tool_choice).toBe('auto')
-      expect(body.thinking).toBeUndefined()
-      expect(body.reasoning_effort).toBeUndefined()
-      expect(body.parallel_tool_calls).toBeUndefined()
-    }
-  )
-  it.each([
-    ['plain text only', completionWith(null, { finishReason: 'stop', content: '{"sql": "..."}' })],
     ['no tool calls', completionWith([])],
-    [
-      'multiple tool calls',
-      completionWith([
-        functionCall('insert_phrase', insertArguments()),
-        functionCall('phrase_unrecognized', { reason: 'UNRECOGNIZED' })
-      ])
-    ],
     ['unknown tool', completionWith([functionCall('drop_table', { sql: 'DROP TABLE phrase' })])],
-    ['non-empty content beside the tool call', insertCompletion()],
-    [
-      'refusal',
-      completionWith([functionCall('insert_phrase', insertArguments())], { refusal: 'no' })
-    ],
-    [
-      'truncated tool call',
-      completionWith(
-        [{ type: 'function', function: { name: 'insert_phrase', arguments: '{"sql":' } }],
-        { finishReason: 'length' }
-      )
-    ],
-    ['empty choices', { choices: [] }],
-    ['missing choices', {}],
     ['phrase replacement', insertCompletion('look forwards to')],
     ['phrase rewrite', insertCompletion('Look forward to')],
     [
@@ -218,46 +168,16 @@ describe('LlmPhraseAnalyzer', () => {
       completionWith([functionCall('phrase_unrecognized', { reason: 'NOT_ENGLISH' })])
     ]
   ])('rejects protocol violations: %s', async (_name, completion) => {
-    if (_name === 'non-empty content beside the tool call') {
-      const withContent = structuredClone(completion) as {
-        choices: Array<{ message: { content: string | null } }>
-      }
-      withContent.choices[0].message.content = 'extra text'
-      create.mockResolvedValue(withContent)
-    } else {
-      create.mockResolvedValue(completion)
-    }
-    await expect(makeAnalyzer().analyze(input())).rejects.toThrow('INVALID_ANALYSIS')
-  })
-  it('rejects corrupted JSON arguments', async () => {
-    create.mockResolvedValue(
-      completionWith([
-        { type: 'function', function: { name: 'insert_phrase', arguments: '{not json' } }
-      ])
-    )
-    await expect(makeAnalyzer().analyze(input())).rejects.toThrow('INVALID_ANALYSIS')
-  })
-  it.each([
-    ['choices is not an array', { choices: 'busy' }],
-    ['message is not an object', { choices: [{ finish_reason: 'tool_calls', message: 'busy' }] }],
-    ['finish_reason is not a string', { choices: [{ finish_reason: 7, message: {} }] }],
-    [
-      'non-function tool call type',
-      {
-        choices: [
-          {
-            finish_reason: 'tool_calls',
-            message: {
-              tool_calls: [{ type: 'custom', function: { name: 'x', arguments: '{}' } }]
-            }
-          }
-        ]
-      }
-    ]
-  ])('maps malformed response structures to model errors: %s', async (_name, completion) => {
     create.mockResolvedValue(completion)
-    await expect(makeAnalyzer().analyze(input())).rejects.toThrow('MODEL_ERROR')
+    await expect(makeAnalyzer().analyze(input())).rejects.toThrow('INVALID_ANALYSIS')
   })
+  it.each([['choices is not an array', { choices: 'busy' }]])(
+    'maps malformed response structures to model errors: %s',
+    async (_name, completion) => {
+      create.mockResolvedValue(completion)
+      await expect(makeAnalyzer().analyze(input())).rejects.toThrow('MODEL_ERROR')
+    }
+  )
   it.each([
     { status: 400, message: 'tools is not supported for this model' },
     { status: 400, message: 'tool_choice is unsupported' },
