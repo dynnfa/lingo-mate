@@ -44,7 +44,7 @@ class Client:
         threading.Thread(target=read, daemon=True).start()
 
     def send(self, kind, **payload):
-        data = {"v": 4, "instanceId": self.instance, "type": kind, **payload}
+        data = {"v": 5, "instanceId": self.instance, "type": kind, **payload}
         self.process.stdin.write((json.dumps(data) + "\n").encode())
         self.process.stdin.flush()
 
@@ -70,16 +70,39 @@ class Client:
                 "messages": [{"role": "user", "content": content}],
                 "outputLanguage": output_language,
                 "targetLanguage": "en",
-                "allowedOperations": [f"{task}.prepare", f"model.{task}"]
+                "allowedOperations": [
+                    "synonym.prepare",
+                    "model.synonym",
+                    "synonym.apply",
+                    "synonym.finish",
+                ]
+                if task == "synonym"
+                else [f"{task}.prepare", f"model.{task}"]
                 if task in ("vocabulary", "phrase")
                 else ["model.reply"],
                 "budget": {
                     "timeoutMs": 5000,
-                    "maxModelCalls": 20 if task in ("vocabulary", "phrase") else 1,
-                    "maxToolCalls": 1 if task in ("vocabulary", "phrase") else 0,
-                    "maxSteps": 32 if task in ("vocabulary", "phrase") else 4,
+                    "maxModelCalls": 1040
+                    if task == "synonym"
+                    else 20
+                    if task in ("vocabulary", "phrase")
+                    else 1,
+                    "maxToolCalls": 1061
+                    if task == "synonym"
+                    else 1
+                    if task in ("vocabulary", "phrase")
+                    else 0,
+                    "maxSteps": 2200
+                    if task == "synonym"
+                    else 32
+                    if task in ("vocabulary", "phrase")
+                    else 4,
                     "maxInputChars": 8192,
-                    "maxOutputChars": 32768 if task in ("vocabulary", "phrase") else 100,
+                    "maxOutputChars": 524288
+                    if task == "synonym"
+                    else 32768
+                    if task in ("vocabulary", "phrase")
+                    else 100,
                 },
             },
         )
@@ -118,6 +141,75 @@ with tempfile.TemporaryDirectory(prefix="lingo-bundle-") as cwd:
         else:
             idle_rss_kib = None
             idle_cpu_percent = None
+        for locale, language in (("zh-CN", "Simplified Chinese"), ("en", "English")):
+            run_id = f"synonym-{locale}"
+            call = client.run(run_id, task="synonym", output_language=locale)
+            assert call["operation"] == "synonym.prepare"
+            client.send(
+                "host_result",
+                runId=run_id,
+                callId=call["callId"],
+                result={"items": [{"inputIndex": i, "status": "pending"} for i in range(20)]},
+            )
+            for index in range(20):
+                for round_ in (1, 2):
+                    call = client.receive("host_call")
+                    assert call["operation"] == "model.synonym"
+                    assert call["args"]["inputIndex"] == index
+                    assert call["args"]["round"] == round_
+                    assert language in call["args"]["systemPrompt"]
+                    client.send(
+                        "host_result",
+                        runId=run_id,
+                        callId=call["callId"],
+                        result={
+                            "inputIndex": index,
+                            "round": round_,
+                            "kind": "tool",
+                            "inputChars": 4000,
+                        },
+                    )
+                    call = client.receive("host_call")
+                    assert call["operation"] == "synonym.apply"
+                    assert call["args"]["action"] == "execute"
+                    client.send(
+                        "host_result",
+                        runId=run_id,
+                        callId=call["callId"],
+                        result={
+                            "inputIndex": index,
+                            "round": round_,
+                            "kind": "continue" if round_ == 1 else "terminal",
+                        },
+                    )
+                call = client.receive("host_call")
+                assert call["operation"] == "synonym.finish"
+                client.send(
+                    "host_result",
+                    runId=run_id,
+                    callId=call["callId"],
+                    result={"inputIndex": index, "stop": False},
+                )
+            assert client.receive("synonym_result")["result"] == {
+                "completedIndices": list(range(20))
+            }
+        call = client.run("synonym-cancel", task="synonym")
+        client.send(
+            "host_result",
+            runId="synonym-cancel",
+            callId=call["callId"],
+            result={"items": [{"inputIndex": 0, "status": "pending"}]},
+        )
+        call = client.receive("host_call")
+        assert call["operation"] == "model.synonym"
+        client.send("cancel", runId="synonym-cancel")
+        client.receive("cancelled")
+        client.send(
+            "host_result",
+            runId="synonym-cancel",
+            callId=call["callId"],
+            result={"inputIndex": 0, "round": 1, "kind": "tool", "inputChars": 4000},
+        )
         call = client.run("stream")
         for seq, event in enumerate(
             [{"type": "reasoning", "delta": "temporary"}, {"type": "text", "delta": "你好"}], 1
@@ -257,6 +349,8 @@ print(
                 "concept-retry",
                 "vocabulary-20-terms",
                 "phrase-20-items",
+                "synonym-languages-20-items-multi-turn",
+                "synonym-cancel-late-result",
                 "cancel",
                 "late-result",
                 "crash",

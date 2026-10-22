@@ -9,6 +9,8 @@ import {
   type VocabularyHostOperations,
   type PhraseAgentRunInput,
   type PhraseHostOperations,
+  type SynonymHostOperations,
+  type SynonymAgentRunInput,
   type VocabularyAgentRunInput
 } from '../../core/agent/agent-runtime'
 import type { AgentFrame } from '../../core/agent/agent-protocol'
@@ -24,6 +26,7 @@ interface Run {
   cancelSent: boolean
   openCalls: Map<string, string>
   vocabulary?: VocabularyHostOperations
+  synonym?: SynonymHostOperations
   phrase?: PhraseHostOperations
   pythonDone: boolean
   error?: unknown
@@ -55,7 +58,7 @@ export class PythonAgentRuntime implements AgentRuntime {
   }
 
   async *stream(input: AgentRunInput): AsyncIterable<ModelStreamEvent> {
-    if (input.task === 'vocabulary' || input.task === 'phrase')
+    if (input.task === 'vocabulary' || input.task === 'phrase' || input.task === 'synonym')
       throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
     yield* this.run(input)
   }
@@ -90,10 +93,26 @@ export class PythonAgentRuntime implements AgentRuntime {
       void event
   }
 
+  async runSynonym(input: SynonymAgentRunInput, host: SynonymHostOperations): Promise<void> {
+    for await (const event of this.run(
+      {
+        ...input,
+        sessionId: '',
+        task: 'synonym',
+        messages: [{ role: 'user', content: 'Synonym batch' }]
+      },
+      undefined,
+      undefined,
+      host
+    ))
+      void event
+  }
+
   private async *run(
     input: AgentRunInput,
     vocabulary?: VocabularyHostOperations,
-    phrase?: PhraseHostOperations
+    phrase?: PhraseHostOperations,
+    synonym?: SynonymHostOperations
   ): AsyncIterable<ModelStreamEvent> {
     input.signal.throwIfAborted()
     if (this.closed || this.runs.size >= 8) throw new AgentRuntimeError('AGENT_UNAVAILABLE')
@@ -109,7 +128,14 @@ export class PythonAgentRuntime implements AgentRuntime {
     const runId = randomUUID()
     const run: Run = {
       controller,
-      host: new AgentHost(snapshot, this.resolveModel, this.testOperations, vocabulary, phrase),
+      host: new AgentHost(
+        snapshot,
+        this.resolveModel,
+        this.testOperations,
+        vocabulary,
+        phrase,
+        synonym
+      ),
       queue: [],
       wake: () => {},
       done: false,
@@ -118,6 +144,7 @@ export class PythonAgentRuntime implements AgentRuntime {
       openCalls: new Map(),
       vocabulary,
       phrase,
+      synonym,
       pythonDone: false,
       seq: 0,
       text: '',
@@ -177,6 +204,7 @@ export class PythonAgentRuntime implements AgentRuntime {
     if (
       frame.type === 'vocabulary_result' ||
       frame.type === 'phrase_result' ||
+      frame.type === 'synonym_result' ||
       frame.type === 'result' ||
       frame.type === 'error' ||
       frame.type === 'cancelled'
@@ -212,7 +240,7 @@ export class PythonAgentRuntime implements AgentRuntime {
         return
       }
       case 'event':
-        if (run.vocabulary || run.phrase) {
+        if (run.vocabulary || run.phrase || run.synonym) {
           this.finish(frame.runId, run, new AgentRuntimeError('AGENT_PROTOCOL_ERROR'))
           return
         }
@@ -239,6 +267,15 @@ export class PythonAgentRuntime implements AgentRuntime {
           this.finish(frame.runId, run, error)
         }
         return
+      case 'synonym_result':
+        try {
+          if (!run.synonym) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+          run.synonym.verifyCompletion(frame.result)
+          this.finish(frame.runId, run)
+        } catch (error) {
+          this.finish(frame.runId, run, error)
+        }
+        return
       case 'phrase_result':
         try {
           if (!run.phrase) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
@@ -249,7 +286,7 @@ export class PythonAgentRuntime implements AgentRuntime {
         }
         return
       case 'result':
-        if (run.vocabulary || run.phrase) {
+        if (run.vocabulary || run.phrase || run.synonym) {
           this.finish(frame.runId, run, new AgentRuntimeError('AGENT_PROTOCOL_ERROR'))
           return
         }
