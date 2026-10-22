@@ -2,6 +2,13 @@ import { phraseInsertTools } from '../tools/phrase-tools'
 import { vocabularyInsertTools } from '../learning/vocabulary/vocabulary-insert'
 import type { LanguageModel, ModelStreamEvent } from '../llm/language-model'
 import {
+  synonymModelArgsSchema,
+  synonymApplyArgsSchema,
+  synonymFinishArgsSchema,
+  synonymPreparedSchema,
+  synonymTurnSchema,
+  synonymAppliedSchema,
+  synonymFinishedSchema,
   agentCallArgsSchema,
   agentHostResultSchema,
   agentDecisionSchema,
@@ -23,7 +30,8 @@ import {
 import {
   AgentRuntimeError,
   type VocabularyHostOperations,
-  type PhraseHostOperations
+  type PhraseHostOperations,
+  type SynonymHostOperations
 } from './agent-runtime'
 
 export interface AgentTestOperations {
@@ -54,7 +62,8 @@ export class AgentHost {
     private readonly resolveModel: () => LanguageModel,
     private readonly testOperations?: AgentTestOperations,
     private readonly vocabulary?: VocabularyHostOperations,
-    private readonly phrase?: PhraseHostOperations
+    private readonly phrase?: PhraseHostOperations,
+    private readonly synonym?: SynonymHostOperations
   ) {
     this.snapshot = structuredClone(snapshot)
   }
@@ -75,6 +84,42 @@ export class AgentHost {
       throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR', { cause: parsedArgs.error })
     const args = parsedArgs.data
     if (this.calls.size > this.snapshot.budget.maxSteps) throw new AgentRuntimeError('AGENT_LIMIT')
+    if (this.synonym && this.snapshot.task === 'synonym') {
+      let result: AgentHostResult
+      if (operation === 'model.synonym') {
+        if (++this.modelCalls > this.snapshot.budget.maxModelCalls)
+          throw new AgentRuntimeError('AGENT_LIMIT')
+        const turn = synonymTurnSchema.parse(
+          await this.synonym.model(
+            synonymModelArgsSchema.parse(args),
+            signal,
+            this.snapshot.budget.maxInputChars
+          )
+        )
+        if (turn.inputChars > this.snapshot.budget.maxInputChars)
+          throw new AgentRuntimeError('AGENT_LIMIT')
+        result = turn
+      } else {
+        if (++this.toolCalls > this.snapshot.budget.maxToolCalls)
+          throw new AgentRuntimeError('AGENT_LIMIT')
+        if (operation === 'synonym.prepare' && !Object.keys(args).length)
+          result = synonymPreparedSchema.parse(this.synonym.prepare())
+        else if (operation === 'synonym.apply')
+          result = synonymAppliedSchema.parse(
+            this.synonym.apply(synonymApplyArgsSchema.parse(args), signal)
+          )
+        else if (operation === 'synonym.finish')
+          result = synonymFinishedSchema.parse(
+            this.synonym.finish(synonymFinishArgsSchema.parse(args))
+          )
+        else throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+      }
+      signal.throwIfAborted()
+      this.outputChars += JSON.stringify(result).length
+      if (this.outputChars > this.snapshot.budget.maxOutputChars)
+        throw new AgentRuntimeError('AGENT_LIMIT')
+      return result
+    }
     if (operation === 'vocabulary.prepare' && this.vocabulary) {
       if (Object.keys(args).length || ++this.toolCalls > 1)
         throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')

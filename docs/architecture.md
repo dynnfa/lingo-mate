@@ -69,4 +69,10 @@ type AppView = 'conversation' | 'settings' | 'recorded' | 'practice' | 'mistakes
 
 ## 对话技能执行边界
 
-`/phrase` 与 `/vocabulary` 的显式命令入口继续使用现有会话界面和 Preload API；它们不是页面路由。两者的分析 Prompt 和批量执行由 Python / LangGraph 持有，Renderer 仅展示原有阶段、报告和安全错误。词条内容与报告在可信宿主统一提交，不把图状态或内部工具载荷暴露给界面。运行时职责与协议 v4 见 [Python Agent ADR](adr/2026-10-21-python-langgraph-agent-engine.md)。
+`/phrase` 与 `/vocabulary` 的显式命令入口继续使用现有会话界面和 Preload API；它们不是页面路由。两者的分析 Prompt 和批量执行由 Python / LangGraph 持有，Renderer 仅展示原有阶段、报告和安全错误。词条内容与报告在可信宿主统一提交，不把图状态或内部工具载荷暴露给界面。运行时职责与协议 v5 见 [Python Agent ADR](adr/2026-10-21-python-langgraph-agent-engine.md)。
+
+### 近义词 Agent
+
+`/synonym` 沿用现有显式命令、选择器和报告界面，由 Python / LangGraph 持有 Prompt 与顺序多轮工具流程。TS 的运行账本保管模型消息、供应商回放状态、工具参数及分组内容；Python 只取得绑定索引、轮次和安全回执。Main 装配的唯一近义词模块串行处理跨会话批次，后续词能查询前面新建的分组。
+
+近义词保留逐词事务：词条与对应未完成报告同时提交。取消保留已有结果并生成本地报告；引擎故障、协议错误及 180 秒批次硬截止明确失败，未完成报告在用户显式重试时继续剩余词。完整报告只恢复回复，不重跑模型或存储。每词仍受 60 秒、52 轮、50 页限制；不继承词汇和短语的双并发、120 秒分析窗口及整批统一提交方式。详情见[近义词迁移计划](plans/2026-10-22-synonym-langgraph-agent.md)。

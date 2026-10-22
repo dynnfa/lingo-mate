@@ -11,7 +11,7 @@ describe('agent executable boundary', () => {
     const directory = join(resources, 'agent-engine')
     mkdirSync(directory)
     const manifest = {
-      protocolVersion: 4,
+      protocolVersion: 5,
       appVersion: '1.0.0',
       platform: process.platform,
       arch: process.arch

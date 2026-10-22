@@ -473,6 +473,7 @@ app.whenReady().then(() => {
           )
         }
       },
+      agentRuntime,
       60000,
       coreDiagnostics
     ),

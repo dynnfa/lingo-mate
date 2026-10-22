@@ -9,6 +9,14 @@ import {
   type PhrasePrepared,
   type PhraseAnalysisReceipt,
   type PhraseCompletion,
+  type SynonymPrepared,
+  type SynonymTurn,
+  type SynonymApplied,
+  type SynonymFinished,
+  type SynonymCompletion,
+  type SynonymModelArgs,
+  type SynonymApplyArgs,
+  type SynonymFinishArgs,
   type AgentSnapshot
 } from './agent-protocol'
 
@@ -62,7 +70,23 @@ export interface PhraseAgentRunInput {
 export interface PhraseAgentRuntime {
   runPhrase(input: PhraseAgentRunInput, host: PhraseHostOperations): Promise<void>
 }
-export interface AgentRuntime extends VocabularyAgentRuntime, PhraseAgentRuntime {
+export interface SynonymHostOperations {
+  prepare(): SynonymPrepared
+  model(args: SynonymModelArgs, signal: AbortSignal, maxInputChars: number): Promise<SynonymTurn>
+  apply(args: SynonymApplyArgs, signal: AbortSignal): SynonymApplied
+  finish(args: SynonymFinishArgs): SynonymFinished
+  verifyCompletion(result: SynonymCompletion): void
+}
+export interface SynonymAgentRunInput {
+  outputLanguage: string
+  targetLanguage: string
+  signal: AbortSignal
+}
+export interface SynonymAgentRuntime {
+  runSynonym(input: SynonymAgentRunInput, host: SynonymHostOperations): Promise<void>
+}
+export interface AgentRuntime
+  extends VocabularyAgentRuntime, PhraseAgentRuntime, SynonymAgentRuntime {
   stream(input: AgentRunInput): AsyncIterable<ModelStreamEvent>
 }
 export class AgentRuntimeError extends Error {
@@ -78,6 +102,19 @@ export class AgentRuntimeError extends Error {
 // Reserve space for the fixed host prompt/operation definitions. Persisted history
 // is never edited; only this execution's copied context is trimmed.
 export function createAgentSnapshot(input: AgentTask): AgentSnapshot {
+  if (input.task === 'synonym')
+    return agentSnapshotSchema.parse({
+      ...input,
+      budget: {
+        timeoutMs: 180_000,
+        maxModelCalls: 1040,
+        maxToolCalls: 1061,
+        maxSteps: 2200,
+        maxInputChars: 65_536,
+        maxOutputChars: 524_288
+      },
+      allowedOperations: ['synonym.prepare', 'model.synonym', 'synonym.apply', 'synonym.finish']
+    })
   if (input.task === 'vocabulary' || input.task === 'phrase')
     return agentSnapshotSchema.parse({
       ...input,

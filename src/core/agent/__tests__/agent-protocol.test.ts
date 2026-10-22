@@ -3,6 +3,29 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { agentFrameSchema, AGENT_PROTOCOL_VERSION } from '../agent-protocol'
 
+it('accepts bound synonym turns and completion without exposing tool arguments', () => {
+  const base = { v: AGENT_PROTOCOL_VERSION, instanceId: 'p', runId: 'r', callId: 'r:c' }
+  const frame = {
+    ...base,
+    type: 'host_call',
+    operation: 'model.synonym',
+    args: { inputIndex: 0, round: 1, systemPrompt: 'Explain in English' }
+  }
+  expect(agentFrameSchema.safeParse(frame).success).toBe(true)
+  expect(
+    agentFrameSchema.safeParse({ ...frame, args: { ...frame.args, word: 'forged' } }).success
+  ).toBe(false)
+  expect(
+    agentFrameSchema.safeParse({
+      v: base.v,
+      instanceId: base.instanceId,
+      runId: base.runId,
+      type: 'synonym_result',
+      result: { completedIndices: [0] }
+    }).success
+  ).toBe(true)
+})
+
 describe('agent protocol', () => {
   it('accepts a versioned handshake and rejects incompatible versions and extra authority', () => {
     const frame = { v: AGENT_PROTOCOL_VERSION, instanceId: 'process-1', type: 'hello' }

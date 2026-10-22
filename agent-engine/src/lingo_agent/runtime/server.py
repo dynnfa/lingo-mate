@@ -10,8 +10,10 @@ from langgraph.errors import GraphRecursionError
 from lingo_agent.graphs.common import LimitError
 from lingo_agent.graphs.learning import execute
 from lingo_agent.graphs.phrase import PhraseState
+from lingo_agent.graphs.synonym import SynonymState
 from lingo_agent.graphs.vocabulary import VocabularyState
 from lingo_agent.protocol import MAX_FRAME_BYTES, PROTOCOL_VERSION, encode_frame, parse_frame
+from lingo_agent.state import LearningState
 
 
 class HostError(Exception):
@@ -76,9 +78,13 @@ class Server:
                         "event",
                         runId=run_id,
                         seq=self.sequences[run_id],
-                        event={"type": "text", "delta": state["text"]},
+                        event={"type": "text", "delta": cast(LearningState, state)["text"]},
                     )
-                if snapshot["task"] == "vocabulary":
+                if snapshot["task"] == "synonym":
+                    await self.send(
+                        "synonym_result", runId=run_id, result=cast(SynonymState, state)["synonym"]
+                    )
+                elif snapshot["task"] == "vocabulary":
                     await self.send(
                         "vocabulary_result",
                         runId=run_id,
@@ -91,7 +97,7 @@ class Server:
                         result=cast(PhraseState, state)["phrase"],
                     )
                 else:
-                    await self.send("result", runId=run_id, text=state["text"])
+                    await self.send("result", runId=run_id, text=cast(LearningState, state)["text"])
         except asyncio.CancelledError:
             await self.send("cancelled", runId=run_id)
         except (TimeoutError, LimitError, GraphRecursionError):
@@ -119,7 +125,8 @@ class Server:
                 raise ValueError("handshake required")
             self.instance = hello["instanceId"]
             await self.send(
-                "ready", capabilities=["conversation", "tool-loop", "vocabulary", "phrase"]
+                "ready",
+                capabilities=["conversation", "tool-loop", "vocabulary", "phrase", "synonym"],
             )
             while (line := await incoming.get()) is not None:
                 frame = parse_frame(line)
