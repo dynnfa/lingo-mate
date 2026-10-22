@@ -171,6 +171,9 @@ describe('ConversationModule', () => {
         runPhrase: async () => {
           throw new Error('Unused phrase runtime')
         },
+        runSynonym: async () => {
+          throw new Error('Unused synonym runtime')
+        },
         runVocabulary: async () => {
           throw new Error('Unused vocabulary runtime')
         },

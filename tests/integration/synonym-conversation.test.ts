@@ -1,3 +1,4 @@
+import { createTestBatchRuntime } from '../fixtures/python-agent'
 import { createTestConversationModule } from '../fixtures/conversation'
 import { randomUUID } from 'node:crypto'
 import type Database from 'better-sqlite3'
@@ -16,17 +17,38 @@ import { SynonymError } from '../../src/core/learning/synonym/parse-synonym-inpu
 
 const databases: Database.Database[] = []
 afterEach(() => databases.splice(0).forEach((database) => database.close()))
-const normal: SynonymAnalyzer['analyze'] = async ({ word, executor }) => {
-  const page = executor.execute('find_synonym_groups', { word, meaning: 'acceptable' })
-    .result as SynonymGroupPage
-  const groupid = page.groups[0]?.id
-  executor.execute(groupid ? 'add_synonym_to_group' : 'create_synonym_group_and_add_word', {
+const normal: SynonymAnalyzer['analyze'] = async ({ messages }) => {
+  const word = JSON.parse(String(messages.find((m) => m.role === 'user')!.content)).word as string
+  const page =
+    messages.at(-1)?.role === 'tool'
+      ? (JSON.parse(String(messages.at(-1)!.content)) as SynonymGroupPage)
+      : undefined
+  const groupid = page?.groups[0]?.id
+  const name = !page
+    ? 'find_synonym_groups'
+    : groupid
+      ? 'add_synonym_to_group'
+      : 'create_synonym_group_and_add_word'
+  const args = {
     word,
     meaning: 'acceptable',
-    distinction: 'ordinary register',
-    ...(groupid ? { groupid } : { groupMeaning: 'acceptable' })
-  })
+    ...(!page
+      ? {}
+      : {
+          distinction: 'ordinary register',
+          ...(groupid ? { groupid } : { groupMeaning: 'acceptable' })
+        })
+  }
+  return {
+    canCorrectParallel: false,
+    message: {
+      tool_calls: [
+        { id: randomUUID(), type: 'function', function: { name, arguments: JSON.stringify(args) } }
+      ]
+    }
+  }
 }
+
 function setup(analyze = vi.fn(normal)): {
   database: Database.Database
   module: ConversationModule
@@ -39,7 +61,7 @@ function setup(analyze = vi.fn(normal)): {
   databases.push(database)
   const repository = new SqliteConversationRepository(database)
   const synonym = new SqliteSynonymRepository(database)
-  const service = new SynonymModule(synonym, () => ({ analyze }), 30)
+  const service = new SynonymModule(synonym, () => ({ analyze }), createTestBatchRuntime(), 100)
   const skill = new SynonymConversationSkill(service, createSynonymFeedbackFormatter())
   const module = createTestConversationModule(
     {
@@ -95,7 +117,7 @@ describe('synonym conversation', () => {
       'duplicate',
       'failed'
     ])
-    expect(analyze).toHaveBeenCalledTimes(2)
+    expect(analyze).toHaveBeenCalledTimes(3)
   })
   it('retries processing after precheck failure instead of replying with the initial checkpoint', async () => {
     const { module, repository, synonym, analyze } = setup()
@@ -131,7 +153,7 @@ describe('synonym conversation', () => {
       )
     )
     expect(retry.at(-1)?.type).toBe('completed')
-    expect(analyze).toHaveBeenCalledOnce()
+    expect(analyze).toHaveBeenCalledTimes(2)
     expect((await module.loadConversation(sessionId)).messages.at(-1)?.content).toContain(
       'adequate: added'
     )
@@ -176,7 +198,11 @@ describe('synonym conversation', () => {
       )
     )
     expect(retry.at(-1)?.type).toBe('completed')
-    expect(analyze.mock.calls.map(([input]) => input.word)).toEqual(['adequate', 'decent'])
+    expect(
+      analyze.mock.calls
+        .filter(([input]) => input.messages.length === 2)
+        .map(([input]) => JSON.parse(String(input.messages[1].content)).word)
+    ).toEqual(['adequate', 'decent'])
     expect(
       (await repository.findExecutionByUserMessage(sessionId, userMessageId))?.batch?.items.map(
         (item) => item.status
@@ -203,7 +229,7 @@ describe('synonym conversation', () => {
     expect((await run()).at(-1)?.type).toBe('completed')
     expect(database.prepare('SELECT * FROM synonym_group').all()).toHaveLength(1)
     expect(database.prepare('SELECT * FROM synonym').all()).toHaveLength(2)
-    expect(analyze).toHaveBeenCalledTimes(2)
+    expect(analyze).toHaveBeenCalledTimes(4)
     const history = await module.loadConversation(sessionId)
     expect(history.messages[1].content).toContain('adequate: added')
     const stored = await repository.findExecutionByUserMessage(
@@ -213,15 +239,16 @@ describe('synonym conversation', () => {
     expect(stored?.skillId).toBe('synonym')
     expect(stored?.batch?.items.map((item) => item.status)).toEqual(['saved', 'saved', 'duplicate'])
     await run()
-    expect(analyze).toHaveBeenCalledTimes(2)
+    expect(analyze).toHaveBeenCalledTimes(4)
     expect((await module.loadConversation(sessionId)).messages.at(-1)?.content).toContain(
       'already saved'
     )
   })
   it('retains committed words when a later word fails or times out', async () => {
     const analyze = vi.fn<SynonymAnalyzer['analyze']>(async (input) => {
-      if (input.word === 'decent') await new Promise(() => {})
-      else await normal(input)
+      if (JSON.parse(String(input.messages[1].content)).word === 'decent')
+        await new Promise(() => {})
+      else return normal(input)
     })
     const { module, database } = setup(analyze)
     const { sessionId } = await module.createConversation()
@@ -244,11 +271,13 @@ describe('synonym conversation', () => {
   })
   it('cancels remaining words while displaying committed ones', async () => {
     let cancel = (): void => {}
-    const analyze = vi.fn<SynonymAnalyzer['analyze']>(async (input) => {
-      await normal(input)
+    const { module, database, synonym } = setup()
+    const saveWord = synonym.saveWord.bind(synonym)
+    vi.spyOn(synonym, 'saveWord').mockImplementation((...args) => {
+      const saved = saveWord(...args)
       cancel()
+      return saved
     })
-    const { module, database } = setup(analyze)
     const { sessionId } = await module.createConversation()
     const requestId = randomUUID()
     cancel = () => {
@@ -297,7 +326,7 @@ describe('synonym conversation', () => {
       )
     )
     expect(events.at(-1)?.type).toBe('completed')
-    expect(analyze).toHaveBeenCalledOnce()
+    expect(analyze).toHaveBeenCalledTimes(2)
     expect(finish).toHaveBeenCalledTimes(2)
   })
   it('serializes concurrent batches so the second observes the first group', async () => {
