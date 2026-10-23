@@ -6,7 +6,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 8
+          "const": 9
         },
         "instanceId": {
           "type": "string",
@@ -30,7 +30,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 8
+          "const": 9
         },
         "instanceId": {
           "type": "string",
@@ -42,11 +42,13 @@
           "const": "ready"
         },
         "capabilities": {
-          "maxItems": 8,
+          "maxItems": 10,
           "type": "array",
           "items": {
             "type": "string",
             "enum": [
+              "sentence-practice-hints",
+              "sentence-practice-review",
               "conversation",
               "conversation-title",
               "tool-loop",
@@ -72,7 +74,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 8
+          "const": 9
         },
         "instanceId": {
           "type": "string",
@@ -90,6 +92,129 @@
         },
         "snapshot": {
           "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "messages": {
+                  "minItems": 1,
+                  "maxItems": 100,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "user",
+                          "assistant"
+                        ]
+                      },
+                      "content": {
+                        "type": "string",
+                        "maxLength": 65536
+                      }
+                    },
+                    "required": [
+                      "role",
+                      "content"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "outputLanguage": {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 35
+                },
+                "targetLanguage": {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 35
+                },
+                "allowedOperations": {
+                  "maxItems": 11,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "sentence-practice.prepare",
+                      "model.sentence-practice-hints",
+                      "model.sentence-practice-review",
+                      "model.reply",
+                      "model.title",
+                      "model.decide",
+                      "learning.lookup",
+                      "vocabulary.prepare",
+                      "model.vocabulary",
+                      "phrase.prepare",
+                      "model.phrase",
+                      "synonym.prepare",
+                      "model.synonym",
+                      "synonym.apply",
+                      "synonym.finish",
+                      "explore-phrase.prepare",
+                      "model.explore-phrase",
+                      "explore-vocabulary.prepare",
+                      "model.explore-vocabulary"
+                    ]
+                  }
+                },
+                "task": {
+                  "type": "string",
+                  "enum": [
+                    "sentence-practice-hints",
+                    "sentence-practice-review"
+                  ]
+                },
+                "budget": {
+                  "type": "object",
+                  "properties": {
+                    "timeoutMs": {
+                      "type": "number",
+                      "const": 120000
+                    },
+                    "maxModelCalls": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "maxToolCalls": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "maxSteps": {
+                      "type": "number",
+                      "const": 2
+                    },
+                    "maxInputChars": {
+                      "type": "number",
+                      "const": 65536
+                    },
+                    "maxOutputChars": {
+                      "type": "number",
+                      "const": 1024
+                    }
+                  },
+                  "required": [
+                    "timeoutMs",
+                    "maxModelCalls",
+                    "maxToolCalls",
+                    "maxSteps",
+                    "maxInputChars",
+                    "maxOutputChars"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "messages",
+                "outputLanguage",
+                "targetLanguage",
+                "allowedOperations",
+                "task",
+                "budget"
+              ],
+              "additionalProperties": false
+            },
             {
               "type": "object",
               "properties": {
@@ -236,6 +361,9 @@
                   "items": {
                     "type": "string",
                     "enum": [
+                      "sentence-practice.prepare",
+                      "model.sentence-practice-hints",
+                      "model.sentence-practice-review",
                       "model.reply",
                       "model.title",
                       "model.decide",
@@ -364,6 +492,9 @@
                   "items": {
                     "type": "string",
                     "enum": [
+                      "sentence-practice.prepare",
+                      "model.sentence-practice-hints",
+                      "model.sentence-practice-review",
                       "model.reply",
                       "model.title",
                       "model.decide",
@@ -487,6 +618,9 @@
                   "items": {
                     "type": "string",
                     "enum": [
+                      "sentence-practice.prepare",
+                      "model.sentence-practice-hints",
+                      "model.sentence-practice-review",
                       "model.reply",
                       "model.title",
                       "model.decide",
@@ -587,7 +721,166 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 8
+              "const": 9
+            },
+            "instanceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "runId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "callId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "type": {
+              "type": "string",
+              "const": "host_call"
+            },
+            "operation": {
+              "type": "string",
+              "const": "sentence-practice.prepare"
+            },
+            "args": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "v",
+            "instanceId",
+            "runId",
+            "callId",
+            "type",
+            "operation",
+            "args"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 9
+            },
+            "instanceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "runId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "callId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "type": {
+              "type": "string",
+              "const": "host_call"
+            },
+            "operation": {
+              "type": "string",
+              "const": "model.sentence-practice-hints"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "systemPrompt": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                }
+              },
+              "required": [
+                "systemPrompt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "v",
+            "instanceId",
+            "runId",
+            "callId",
+            "type",
+            "operation",
+            "args"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 9
+            },
+            "instanceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "runId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "callId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "type": {
+              "type": "string",
+              "const": "host_call"
+            },
+            "operation": {
+              "type": "string",
+              "const": "model.sentence-practice-review"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "systemPrompt": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                }
+              },
+              "required": [
+                "systemPrompt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "v",
+            "instanceId",
+            "runId",
+            "callId",
+            "type",
+            "operation",
+            "args"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 9
             },
             "instanceId": {
               "type": "string",
@@ -643,7 +936,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 8
+              "const": 9
             },
             "instanceId": {
               "type": "string",
@@ -690,7 +983,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 8
+              "const": 9
             },
             "instanceId": {
               "type": "string",
@@ -752,7 +1045,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 8
+              "const": 9
             },
             "instanceId": {
               "type": "string",
@@ -799,7 +1092,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 8
+              "const": 9
             },
             "instanceId": {
               "type": "string",
@@ -861,7 +1154,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 8
+              "const": 9
             },
             "instanceId": {
               "type": "string",
@@ -908,7 +1201,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 8
+              "const": 9
             },
             "instanceId": {
               "type": "string",
@@ -976,7 +1269,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 8
+              "const": 9
             },
             "instanceId": {
               "type": "string",
@@ -1046,7 +1339,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 8
+              "const": 9
             },
             "instanceId": {
               "type": "string",
@@ -1117,7 +1410,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 8
+              "const": 9
             },
             "instanceId": {
               "type": "string",
@@ -1164,7 +1457,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 8
+              "const": 9
             },
             "instanceId": {
               "type": "string",
@@ -1226,7 +1519,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 8
+              "const": 9
             },
             "instanceId": {
               "type": "string",
@@ -1273,7 +1566,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 8
+              "const": 9
             },
             "instanceId": {
               "type": "string",
@@ -1335,7 +1628,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 8
+              "const": 9
             },
             "instanceId": {
               "type": "string",
@@ -1391,7 +1684,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 8
+              "const": 9
             },
             "instanceId": {
               "type": "string",
@@ -1460,7 +1753,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 8
+              "const": 9
             },
             "instanceId": {
               "type": "string",
@@ -1518,7 +1811,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 8
+          "const": 9
         },
         "instanceId": {
           "type": "string",
@@ -1541,6 +1834,33 @@
         },
         "result": {
           "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "inputChars": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65536
+                }
+              },
+              "required": [
+                "inputChars"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "completed": {
+                  "type": "boolean",
+                  "const": true
+                }
+              },
+              "required": [
+                "completed"
+              ],
+              "additionalProperties": false
+            },
             {
               "type": "object",
               "properties": {
@@ -2149,7 +2469,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 8
+          "const": 9
         },
         "instanceId": {
           "type": "string",
@@ -2195,7 +2515,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 8
+          "const": 9
         },
         "instanceId": {
           "type": "string",
@@ -2259,7 +2579,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 8
+          "const": 9
         },
         "instanceId": {
           "type": "string",
@@ -2317,7 +2637,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 8
+          "const": 9
         },
         "instanceId": {
           "type": "string",
@@ -2347,7 +2667,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 8
+          "const": 9
         },
         "instanceId": {
           "type": "string",
@@ -2382,7 +2702,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 8
+          "const": 9
         },
         "instanceId": {
           "type": "string",
@@ -2431,7 +2751,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 8
+          "const": 9
         },
         "instanceId": {
           "type": "string",
@@ -2480,7 +2800,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 8
+          "const": 9
         },
         "instanceId": {
           "type": "string",
@@ -2520,7 +2840,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 8
+          "const": 9
         },
         "instanceId": {
           "type": "string",
@@ -2569,7 +2889,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 8
+          "const": 9
         },
         "instanceId": {
           "type": "string",
@@ -2620,7 +2940,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 8
+          "const": 9
         },
         "instanceId": {
           "type": "string",
@@ -2671,7 +2991,51 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 8
+          "const": 9
+        },
+        "instanceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "type": "string",
+          "const": "sentence_practice_result"
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "completed": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "completed"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "v",
+        "instanceId",
+        "runId",
+        "type",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "number",
+          "const": 9
         },
         "instanceId": {
           "type": "string",
@@ -2701,7 +3065,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 8
+          "const": 9
         },
         "instanceId": {
           "type": "string",
@@ -2725,7 +3089,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 8
+          "const": 9
         },
         "instanceId": {
           "type": "string",

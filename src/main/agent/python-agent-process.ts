@@ -125,6 +125,8 @@ export class PythonAgentProcess {
                 frame.type !== 'ready' ||
                 !(
                   [
+                    'sentence-practice-hints',
+                    'sentence-practice-review',
                     'conversation',
                     'conversation-title',
                     'tool-loop',

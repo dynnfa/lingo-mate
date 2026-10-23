@@ -12,6 +12,7 @@ from lingo_agent.graphs.explore_phrase import ExplorePhraseState
 from lingo_agent.graphs.explore_vocabulary import ExploreVocabularyState
 from lingo_agent.graphs.learning import execute
 from lingo_agent.graphs.phrase import PhraseState
+from lingo_agent.graphs.sentence_practice import SentencePracticeState
 from lingo_agent.graphs.synonym import SynonymState
 from lingo_agent.graphs.vocabulary import VocabularyState
 from lingo_agent.protocol import MAX_FRAME_BYTES, PROTOCOL_VERSION, encode_frame, parse_frame
@@ -82,7 +83,13 @@ class Server:
                         seq=self.sequences[run_id],
                         event={"type": "text", "delta": cast(LearningState, state)["text"]},
                     )
-                if snapshot["task"] == "explore-phrase":
+                if snapshot["task"] in ("sentence-practice-hints", "sentence-practice-review"):
+                    await self.send(
+                        "sentence_practice_result",
+                        runId=run_id,
+                        result=cast(SentencePracticeState, state)["sentencePractice"],
+                    )
+                elif snapshot["task"] == "explore-phrase":
                     await self.send(
                         "explore_phrase_result",
                         runId=run_id,
@@ -141,6 +148,8 @@ class Server:
             await self.send(
                 "ready",
                 capabilities=[
+                    "sentence-practice-hints",
+                    "sentence-practice-review",
                     "conversation",
                     "conversation-title",
                     "tool-loop",
