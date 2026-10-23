@@ -44,7 +44,7 @@ class Client:
         threading.Thread(target=read, daemon=True).start()
 
     def send(self, kind, **payload):
-        data = {"v": 6, "instanceId": self.instance, "type": kind, **payload}
+        data = {"v": 7, "instanceId": self.instance, "type": kind, **payload}
         self.process.stdin.write((json.dumps(data) + "\n").encode())
         self.process.stdin.flush()
 
@@ -78,34 +78,34 @@ class Client:
                 ]
                 if task == "synonym"
                 else [f"{task}.prepare", f"model.{task}"]
-                if task in ("vocabulary", "phrase", "explore-phrase")
+                if task in ("vocabulary", "phrase", "explore-phrase", "explore-vocabulary")
                 else ["model.reply"],
                 "budget": {
                     "timeoutMs": 5000,
                     "maxModelCalls": 3
-                    if task == "explore-phrase"
+                    if task in ("explore-phrase", "explore-vocabulary")
                     else 1040
                     if task == "synonym"
                     else 20
-                    if task in ("vocabulary", "phrase", "explore-phrase")
+                    if task in ("vocabulary", "phrase", "explore-phrase", "explore-vocabulary")
                     else 1,
                     "maxToolCalls": 1061
                     if task == "synonym"
                     else 1
-                    if task in ("vocabulary", "phrase", "explore-phrase")
+                    if task in ("vocabulary", "phrase", "explore-phrase", "explore-vocabulary")
                     else 0,
                     "maxSteps": 8
-                    if task == "explore-phrase"
+                    if task in ("explore-phrase", "explore-vocabulary")
                     else 2200
                     if task == "synonym"
                     else 32
-                    if task in ("vocabulary", "phrase", "explore-phrase")
+                    if task in ("vocabulary", "phrase", "explore-phrase", "explore-vocabulary")
                     else 4,
                     "maxInputChars": 8192,
                     "maxOutputChars": 524288
                     if task == "synonym"
                     else 32768
-                    if task in ("vocabulary", "phrase", "explore-phrase")
+                    if task in ("vocabulary", "phrase", "explore-phrase", "explore-vocabulary")
                     else 100,
                 },
             },
@@ -145,52 +145,56 @@ with tempfile.TemporaryDirectory(prefix="lingo-bundle-") as cwd:
         else:
             idle_rss_kib = None
             idle_cpu_percent = None
-        for locale, language in (("zh-CN", "Simplified Chinese"), ("en", "English")):
-            run_id = f"exploration-{locale}"
-            call = client.run(run_id, task="explore-phrase", output_language=locale)
-            assert call["operation"] == "explore-phrase.prepare"
-            client.send(
-                "host_result",
-                runId=run_id,
-                callId=call["callId"],
-                result={"acceptedCount": 0, "inputChars": 1000},
-            )
-            for attempt, accepted in enumerate((4, 7, 10), 1):
-                call = client.receive("host_call")
-                assert call["operation"] == "model.explore-phrase"
-                assert call["args"]["attempt"] == attempt
-                assert language in call["args"]["systemPrompt"]
-                assert "phrase and example are written in English" in call["args"]["systemPrompt"]
+        for task, field in (("explore-phrase", "phrase"), ("explore-vocabulary", "term")):
+            for locale, language in (("zh-CN", "Simplified Chinese"), ("en", "English")):
+                run_id = f"{task}-{locale}"
+                call = client.run(run_id, task=task, output_language=locale)
+                assert call["operation"] == f"{task}.prepare"
                 client.send(
                     "host_result",
                     runId=run_id,
                     callId=call["callId"],
-                    result={
-                        "attempt": attempt,
-                        "acceptedCount": accepted,
-                        "inputChars": 0 if accepted == 10 else 1000,
-                    },
+                    result={"acceptedCount": 0, "inputChars": 1000},
                 )
-            assert client.receive("explore_phrase_result")["result"] == {
-                "attempts": 3,
-                "acceptedCount": 10,
-            }
-        call = client.run("exploration-cancel", task="explore-phrase")
-        client.send(
-            "host_result",
-            runId="exploration-cancel",
-            callId=call["callId"],
-            result={"acceptedCount": 0, "inputChars": 1000},
-        )
-        call = client.receive("host_call")
-        client.send("cancel", runId="exploration-cancel")
-        client.receive("cancelled")
-        client.send(
-            "host_result",
-            runId="exploration-cancel",
-            callId=call["callId"],
-            result={"attempt": 1, "acceptedCount": 10, "inputChars": 0},
-        )
+                for attempt, accepted in enumerate((4, 7, 10), 1):
+                    call = client.receive("host_call")
+                    assert call["operation"] == f"model.{task}"
+                    assert call["args"]["attempt"] == attempt
+                    assert language in call["args"]["systemPrompt"]
+                    assert (
+                        f"{field} and example are written in English"
+                        in call["args"]["systemPrompt"]
+                    )
+                    client.send(
+                        "host_result",
+                        runId=run_id,
+                        callId=call["callId"],
+                        result={
+                            "attempt": attempt,
+                            "acceptedCount": accepted,
+                            "inputChars": 0 if accepted == 10 else 1000,
+                        },
+                    )
+                assert client.receive(task.replace("-", "_") + "_result")["result"] == {
+                    "attempts": 3,
+                    "acceptedCount": 10,
+                }
+            call = client.run(f"{task}-cancel", task=task)
+            client.send(
+                "host_result",
+                runId=f"{task}-cancel",
+                callId=call["callId"],
+                result={"acceptedCount": 0, "inputChars": 1000},
+            )
+            call = client.receive("host_call")
+            client.send("cancel", runId=f"{task}-cancel")
+            client.receive("cancelled")
+            client.send(
+                "host_result",
+                runId=f"{task}-cancel",
+                callId=call["callId"],
+                result={"attempt": 1, "acceptedCount": 10, "inputChars": 0},
+            )
         for locale, language in (("zh-CN", "Simplified Chinese"), ("en", "English")):
             run_id = f"synonym-{locale}"
             call = client.run(run_id, task="synonym", output_language=locale)
@@ -402,6 +406,8 @@ print(
                 "synonym-languages-20-items-multi-turn",
                 "explore-phrase-languages-top-up",
                 "explore-phrase-cancel-late-result",
+                "explore-vocabulary-languages-top-up",
+                "explore-vocabulary-cancel-late-result",
                 "synonym-cancel-late-result",
                 "cancel",
                 "late-result",

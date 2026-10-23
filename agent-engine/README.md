@@ -1,6 +1,6 @@
 # Lingo Mate Agent Engine
 
-本模块是唯一 Agent 运行时，负责任务识别、Prompt、工具决策与内存中的 LangGraph 编排。会话与消息持久化、语言学习规则、模型凭据、供应商请求和用量统计均由 TypeScript 宿主负责。生产接入普通对话、`/concept`、`/vocabulary`、`/phrase`、`/synonym` 与 `/explore-phrase`；模型决策/只读工具循环通过测试扩展验证。无 checkpoint、业务数据库访问、云端 tracing 或模型 SDK 请求。
+本模块是唯一 Agent 运行时，负责任务识别、Prompt、工具决策与内存中的 LangGraph 编排。会话与消息持久化、语言学习规则、模型凭据、供应商请求和用量统计均由 TypeScript 宿主负责。生产接入普通对话、`/concept`、`/vocabulary`、`/phrase`、`/synonym`、`/explore-phrase` 与 `/explore-vocabulary`；模型决策/只读工具循环通过测试扩展验证。无 checkpoint、业务数据库访问、云端 tracing 或模型 SDK 请求。
 
 决策与限制见 [ADR](../docs/adr/2026-10-21-python-langgraph-agent-engine.md)。本文命令与文件路径均以仓库根目录为基准。协议源位于 `src/core/agent/agent-protocol.ts`；生成的 `agent-engine/src/lingo_agent/protocol/schema.json` 随包发布，不能手改。共享契约样例在 `tests/integration/fixtures/agent/protocol-cases.json`。
 
@@ -16,7 +16,7 @@ pnpm agent:check
 pnpm dev
 ```
 
-普通对话、`/concept`、`/vocabulary`、`/phrase` 与 `/synonym` 默认且始终经过 Python（包括本地模拟模型），无需运行时参数。子进程在首次 Agent 请求时启动；启动/协议/执行故障不会回退或自动重放失败请求。`LINGO_MATE_AGENT_BUNDLE=1` 仅用于开发时选择冻结运行包。开发解释器只从 `agent-engine/.venv/bin/python`（Windows `agent-engine/.venv/Scripts/python.exe`）启动，不搜索 PATH。手动入口为 `agent-engine/.venv/bin/python -I -m lingo_agent`，Windows 使用对应解释器路径，只接受 JSONL 管道协议。
+普通对话、`/concept`、`/vocabulary`、`/phrase`、`/synonym`、`/explore-phrase` 与 `/explore-vocabulary` 默认且始终经过 Python（包括本地模拟模型），无需运行时参数。子进程在首次 Agent 请求时启动；启动/协议/执行故障不会回退或自动重放失败请求。`LINGO_MATE_AGENT_BUNDLE=1` 仅用于开发时选择冻结运行包。开发解释器只从 `agent-engine/.venv/bin/python`（Windows `agent-engine/.venv/Scripts/python.exe`）启动，不搜索 PATH。手动入口为 `agent-engine/.venv/bin/python -I -m lingo_agent`，Windows 使用对应解释器路径，只接受 JSONL 管道协议。
 
 所有检查与测试均使用锁定环境。Python 测试在 `agent-engine/src/lingo_agent/__tests__/test_*.py`，pytest 发现规则由 `agent-engine/pyproject.toml` 配置。执行 TypeScript 全量测试前也要完成 `agent:sync`；新增进程集成测试确实启动 Python，不会在缺环境时悄悄跳过。测试仅使用可控替身/本地假模型服务。
 
@@ -42,7 +42,7 @@ pnpm build:unpack
 
 electron-builder 复制该目录至 `resources/agent-engine/`，置于 ASAR 外。manifest 中应用版本、协议、OS 与 CPU 任一不匹配都会安全拒绝启动。应用启动不安装依赖，也不读取 Renderer 指定的命令、路径或环境。
 
-`agent:smoke` 从独立临时工作目录、空 PATH、无虚拟环境变量启动冻结可执行文件，验证握手→流式任务→中英文概念讲解与宿主失败→20 词双并发图→20 短语双并发图→中英文近义词各 20 项顺序多轮图→近义词取消与迟到结果→概念讲解取消→迟到结果→崩溃→重启与概念讲解重试→带活动任务退出，并输出包体积、耗时与可测的资源数据。Windows 的资源指标为空；不代表占用为零。
+`agent:smoke` 从独立临时工作目录、空 PATH、无虚拟环境变量启动冻结可执行文件，验证握手→流式任务→中英文概念讲解与宿主失败→20 词双并发图→20 短语双并发图→中英文近义词各 20 项顺序多轮图→近义词取消与迟到结果→中英文探索短语与探索词汇三轮补足及取消迟到回执→概念讲解取消→迟到结果→崩溃→重启与概念讲解重试→带活动任务退出，并输出包体积、耗时与可测的资源数据。Windows 的资源指标为空；不代表占用为零。
 
 `tests/e2e/python-agent.test.ts` 默认覆盖开发解释器和冻结运行包。构建 `electron-builder --dir` 后，显式设置 `LINGO_MATE_TEST_PACKAGED=1` 再运行该测试，还会启动安装布局中的应用，检查 `app.isPackaged` 路径。生产设置不提供运行时切换页面。
 
@@ -56,7 +56,7 @@ macOS 本地包使用 PyInstaller 的 ad-hoc 签名。正式发行还需原有 A
 
 ## 协议演进与排错
 
-当前协议为 v6。应用提交 `conversation`、`vocabulary`、`phrase`、`synonym` 或 `explore-phrase` 任务，`/concept` 在 Python 内部识别。`model.reply` 必须提供完整 `systemPrompt`，TS 模型适配器原样发送，不再选择 Agent Prompt。Prompt 上限为 4096 个 UTF-16 单元，两端校验实际 Prompt 加历史的总输入预算；旧运行包必须重建。除词汇、短语、近义词和探索短语外的显式技能、标题及练习暂沿用 TS 实现，未来新增 Agent 策略和工作流统一在本模块实现。
+当前协议为 v7。应用提交 `conversation`、`vocabulary`、`phrase`、`synonym`、`explore-phrase` 或 `explore-vocabulary` 任务，`/concept` 在 Python 内部识别。`model.reply` 必须提供完整 `systemPrompt`，TS 模型适配器原样发送，不再选择 Agent Prompt。Prompt 上限为 4096 个 UTF-16 单元，两端校验实际 Prompt 加历史的总输入预算；旧运行包必须重建。标题及练习暂沿用 TS 实现，未来新增 Agent 策略和工作流统一在本模块实现。
 
 - 修改 Zod 协议后运行 `node --experimental-strip-types scripts/agent-protocol-schema.mjs`，更新共享用例；破坏性修改提升协议版本并重建全部运行包。
 - stdout 专用于协议，Python 不输出用户错误文案或 traceback。stderr 只由 Main 有界接收并进入已有本地错误日志。
@@ -138,3 +138,13 @@ TS 每轮只做一次模型传输，并保留同一批次的模型配置快照�
 固定 10 项、近 7 批去重和 JSON schemaVersion 1 保持原样。工具结构无效消耗一次尝试，第三轮仍不足 10 项明确失败；网络、模型配置、工具能力和引擎故障立即失败。请求 60 秒，取得锁后准备与生成总计 180 秒（包含启动）；提交阶段不受生成计时器打断，等待实际存储结果。运行预算为模型／非模型调用／步骤 3／1／8，输入 65,536、安全回执 32,768 UTF-16 单元，Prompt 4,096。其他任务预算不变。
 
 图完成前取消或故障丢弃暂存候选；已提交的回复恢复直接读取 JSON，无需启动 Python 或重跑模型。无 TS Agent 回退、自动重放、checkpoint 或数据库迁移。协议 v5 及更旧运行包必须随应用重建。实施与平台验收见[探索短语迁移计划](../docs/plans/2026-10-22-explore-phrase-langgraph-agent.md)。
+
+## 探索词汇 LangGraph 与协议 v7
+
+`/explore-vocabulary` 使用独立的 `graphs/explore_vocabulary.py`，流程为 `prepare → generate → 条件补足 → finalize`，最多三轮串行生成。Prompt 从 TS 迁入 Python，保留 `explore-vocabulary-tools-v1`、`submit_explored_vocabulary` 和 `vocabulary_analysis` 用量登记；单词、例句明确使用英语，解释明确使用语言设置。
+
+新增独立任务和握手能力 `explore-vocabulary`，仅授权 `explore-vocabulary.prepare` 与 `model.explore-vocabulary`，完成帧为 `explore_vocabulary_result`。模型调用只带轮次及完整 `systemPrompt`；Python 仅接收已接受数量、轮次和输入大小。TS 保留完整历史、排除列表、候选正文与每次运行单独解析的模型配置，按现有单词词形、规范化去重及例句完整词形规则校验。宿主拒绝重复准备、跳轮、并发、跨运行／跨任务操作与伪造终态。
+
+固定 10 项、近 7 批去重、JSON schemaVersion 1、历史文件、独立串行锁和表格恢复语义不变。结构无效消耗一次尝试，三轮不足 10 项明确失败；通信、配置、工具能力和引擎故障立即失败。模型／准备调用／步骤预算为 3／1／8，实际输入 65,536、累计安全回执 32,768、Prompt 4,096 UTF-16 单元。请求 60 秒，取得锁后准备与生成含启动总截止 180 秒；提交阶段等待真实存储结果再解锁。图完成核验前不提交部分结果，已提交结果的本地恢复不启动 Python 或模型。
+
+无 TS Agent 直跑／回退、自动重放、checkpoint 或数据库迁移。v6 及旧运行包必须重建并随应用发布。验收仅使用临时数据；本次平台结果见[探索词汇迁移计划](../docs/plans/2026-10-23-explore-vocabulary-langgraph-agent.md)。

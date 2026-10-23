@@ -10,7 +10,7 @@
 
 这次重新审视历史架构清单中“不引入通用 Agent 框架”的范围：Agent 策略、Prompt 与编排统一由 Python 持有，现有会话生命周期、领域执行、模型适配、用量账本、存储与事务继续由 TypeScript 持有。历史清单原路径为 `docs/architecture-todo.md`，当前仓库已不包含该文件，此处仅保留决策背景，不作为现行规范入口。当前约定见 [AGENTS.md](../../AGENTS.md)，运行边界以本 ADR 为准。
 
-`ConversationModule` 必须注入 `AgentRuntime`，普通对话、`/concept`、`/vocabulary`、`/phrase`、`/synonym` 及 `/explore-phrase` 始终经过 Python，不保留 TypeScript 直跑分支或运行时选择参数。Python 根据最新消息识别 `/concept`，组装明确指定解释语言和学习语言的系统指令。标题、其余显式学习技能及练习暂沿用原流程，后续迁移；未来新增 Agent 策略和工作流统一在 Python 实现。故障返回明确错误，不能静默回退或重放失败请求。子进程仍在首个请求时启动。
+`ConversationModule` 必须注入 `AgentRuntime`，普通对话、`/concept`、`/vocabulary`、`/phrase`、`/synonym`、`/explore-phrase` 及 `/explore-vocabulary` 始终经过 Python，不保留 TypeScript 直跑分支或运行时选择参数。Python 根据最新消息识别 `/concept`，组装明确指定解释语言和学习语言的系统指令。标题、其余显式学习技能及练习暂沿用原流程，后续迁移；未来新增 Agent 策略和工作流统一在 Python 实现。故障返回明确错误，不能静默回退或重放失败请求。子进程仍在首个请求时启动。
 
 Python 只得到不含会话/消息 ID、密钥和连接信息的运行快照。运行 ID、独立 call ID、事件序号和进程实例身份在 Main 中关联。模型配置在第一次宿主调用时解析一次，语言在会话执行开始时解析；同一运行内保持稳定。实际 Prompt 由 Python 组装，以 `model.reply` 的必填 `systemPrompt` 传给宿主；供应商请求、取消和记账继续通过原模型适配器执行。宿主不识别 Agent 命令、不选择 Agent Prompt，只使用绑定运行的历史与模型配置执行请求。
 
@@ -18,7 +18,7 @@ Python 只得到不含会话/消息 ID、密钥和连接信息的运行快照。
 
 ## 协议与限制
 
-当前协议版本为 6，严格拒绝额外字段。TypeScript Zod 是协议源，生成 Python 使用的 Draft 2020-12 JSON Schema；两端测试共用合法/非法样例，CI 检查生成物是否过期。版本变更必须同时更新握手、契约和运行包 manifest。
+当前协议版本为 7，严格拒绝额外字段。TypeScript Zod 是协议源，生成 Python 使用的 Draft 2020-12 JSON Schema；两端测试共用合法/非法样例，CI 检查生成物是否过期。版本变更必须同时更新握手、契约和运行包 manifest。
 
 | 限制                     | 首版值                                                                                           |
 | ------------------------ | ------------------------------------------------------------------------------------------------ |
@@ -59,3 +59,7 @@ Python 标准输入使用独立守护线程的非缓冲 OS 读取，避免父管
 2026-10-22：`/explore-phrase` 完整迁至独立 Python 图，协议升级 v6。图按 `prepare → generate → 条件补足 → finalize` 最多串行生成三轮，保留 `explore-phrase-tools-v1` 与原有模型工具契约。生产权限独立为 `explore-phrase.prepare` 和 `model.explore-phrase`，终态为 `explore_phrase_result`。TS 账本持有排除列表和候选正文，Python 仅取得轮次、计数和输入大小。两端核验预算，宿主拒绝错序、并发、越权和伪造完成；凑齐 10 项并核验终态后才原子提交 JSON，保留最近 7 批历史及回复恢复语义。
 
 探索短语预算为 3 次模型调用／1 次准备调用／8 个步骤，单次请求 60 秒，取得串行锁后准备与生成总截止 180 秒（包含启动）；实际输入 65,536、累计安全回执 32,768 UTF-16 单元，Prompt 与帧上限保持原值，其他任务预算不变。提交开始后等待真实存储结果，取消或故障不提交部分候选；已提交结果本地恢复不启动 Python。无 TS Agent 回退、自动重放或持久化结构迁移。v5 及旧运行包必须随应用重建。实施与验收见[探索短语迁移计划](../plans/2026-10-22-explore-phrase-langgraph-agent.md)。
+
+2026-10-23：`/explore-vocabulary` 完整迁至独立 Python 图，协议升级 v7。图按 `prepare → generate → 条件补足 → finalize` 最多串行三轮，Python 持有 `explore-vocabulary-tools-v1` Prompt，解释语言显式指定，保留 `submit_explored_vocabulary` 与 `vocabulary_analysis`。生产权限独立为 `explore-vocabulary.prepare`、`model.explore-vocabulary`，终态为 `explore_vocabulary_result`。宿主账本保管历史、排除列表、候选正文和模型配置；Python 仅取得轮次、计数与输入大小，宿主校验词形、例句、调用顺序与终态后才提交。
+
+探索词汇沿用 10 项、近 7 批去重、独立跨会话串行锁、JSON schemaVersion 1 与本地回复恢复；不修改数据库。预算为模型／准备调用／步骤 3／1／8，单次请求 60 秒，取得锁后准备与生成总截止 180 秒（包含启动）；实际输入 65,536、安全回执 32,768、Prompt 4,096 UTF-16 单元。提交开始后等待存储实际结果再解锁，取消或故障不提交部分候选。无 TS Agent 回退或失败请求自动重放。v6 及旧运行包须随应用重建；实施与平台验收见[探索词汇迁移计划](../plans/2026-10-23-explore-vocabulary-langgraph-agent.md)。

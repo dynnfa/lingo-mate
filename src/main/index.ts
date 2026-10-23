@@ -509,7 +509,8 @@ app.whenReady().then(() => {
           modelsService.resolveSnapshot(),
           timeoutMs,
           createLlmClient
-        )
+        ),
+      agentRuntime
     ),
     createExploreVocabularyFeedbackFormatter()
   )
