@@ -69,7 +69,7 @@ type AppView = 'conversation' | 'settings' | 'recorded' | 'practice' | 'mistakes
 
 ## 对话技能执行边界
 
-`/phrase` 与 `/vocabulary` 的显式命令入口继续使用现有会话界面和 Preload API；它们不是页面路由。两者的分析 Prompt 和批量执行由 Python / LangGraph 持有，Renderer 仅展示原有阶段、报告和安全错误。词条内容与报告在可信宿主统一提交，不把图状态或内部工具载荷暴露给界面。运行时职责与协议 v9 见 [Python Agent ADR](adr/2026-10-21-python-langgraph-agent-engine.md)。
+`/phrase` 与 `/vocabulary` 的显式命令入口继续使用现有会话界面和 Preload API；它们不是页面路由。两者的分析 Prompt 和批量执行由 Python / LangGraph 持有，Renderer 仅展示原有阶段、报告和安全错误。词条内容与报告在可信宿主统一提交，不把图状态或内部工具载荷暴露给界面。运行时职责与协议 v10 见 [Python Agent ADR](adr/2026-10-21-python-langgraph-agent-engine.md)。
 
 ### 近义词 Agent
 
@@ -82,3 +82,6 @@ type AppView = 'conversation' | 'settings' | 'recorded' | 'practice' | 'mistakes
 `/explore-vocabulary` 同样由独立 Python / LangGraph 图持有 Prompt 与三轮补足，TS 宿主校验单词词形、规范化去重及例句完整词形。它与探索短语分别持有权限、串行锁、JSON 历史及恢复身份，保留 10 项、最近 7 批和相同的原子提交边界。Renderer 与 Preload 接口不变；迁移与验收见[探索词汇迁移计划](plans/2026-10-23-explore-vocabulary-langgraph-agent.md)。
 
 句子练习的提示生成及答案点评均通过 Python 的独立任务与 LangGraph 图执行，Prompt 在 `agent-engine/` 中维护。Renderer 沿用现有 Preload API 和会话操作，只展示校验后的提示、点评及安全错误。TS 宿主持有抽词、词条／提示快照、答案、模型传输和取消；Python 只接收输入大小及完成回执，图完成核验后才释放结果，不新增持久化练习记录。
+
+
+词汇练习批改由 Python 的 `vocabulary-practice-review` 任务持有 Prompt、多轮标红及补标策略。TS 绑定抽词快照、答案、参考释义及完整模型／工具消息，Python 只接收轮次、分类与输入大小。宿主校验 `vocabulary_practice_result` 后才释放结果并保存错题，保留整批保存及 requestId 幂等重试。开始练习的窗口拥有批改和取消权限，窗口销毁时取消；引擎故障显示安全错误并保留用户答案，后续仅由用户显式提交新请求。详见[迁移计划](plans/2026-10-23-vocabulary-practice-langgraph-agent.md)。

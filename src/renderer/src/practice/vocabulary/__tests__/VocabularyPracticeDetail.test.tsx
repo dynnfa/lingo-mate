@@ -268,7 +268,13 @@ describe('VocabularyPracticeDetail', () => {
     expect(stub.calls.reviews[1].answers[0].meaning).toBe('另一种水果')
   })
 
-  it('keeps answers and allows retry after a failed review', async () => {
+  it.each([
+    ['MODEL_ERROR', 'errors:vocabularyPractice.modelError'],
+    ['AGENT_UNAVAILABLE', 'errors:generation.agentUnavailable'],
+    ['AGENT_PROTOCOL_ERROR', 'errors:generation.agentProtocol'],
+    ['AGENT_LIMIT', 'errors:generation.agentLimit'],
+    ['AGENT_HOST_ERROR', 'errors:generation.agentProtocol']
+  ] as const)('keeps answers and allows explicit retry after %s', async (code, key) => {
     const stub = installApi(practiceApiStub(startOk(['apple'])))
     renderDetail()
     confirmCount()
@@ -276,10 +282,10 @@ describe('VocabularyPracticeDetail', () => {
 
     const input = screen.getAllByRole('textbox')[0] as HTMLInputElement
     fireEvent.change(input, { target: { value: '一种水果' } })
-    stub.respondReview({ status: 'error', error: { code: 'MODEL_ERROR' } })
+    stub.respondReview({ status: 'error', error: { code } })
     fireEvent.click(screen.getByRole('button', { name: '提交审查' }))
     await waitFor(() => screen.getByText('审查失败'))
-    expect(screen.getByText('模型请求失败，请稍后重试。')).toBeInTheDocument()
+    expect(screen.getByText(i18n.t(key))).toBeInTheDocument()
     expect(input.value).toBe('一种水果')
     expect(input).not.toHaveAttribute('readonly')
 

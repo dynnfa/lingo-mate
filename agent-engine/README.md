@@ -56,7 +56,7 @@ macOS 本地包使用 PyInstaller 的 ad-hoc 签名。正式发行还需原有 A
 
 ## 协议演进与排错
 
-当前协议为 v9。应用提交 `conversation-title`、`conversation`、`vocabulary`、`phrase`、`synonym`、`explore-phrase`、`explore-vocabulary`、`sentence-practice-hints` 或 `sentence-practice-review` 任务，`/concept` 在 Python 内部识别。`model.reply` 与标题专用 `model.title` 必须提供完整 `systemPrompt`，TS 模型适配器原样发送，不再选择 Agent Prompt。Prompt 上限为 4096 个 UTF-16 单元，两端校验实际 Prompt 加历史的总输入预算；旧运行包必须重建。其余显式技能及练习暂沿用 TS 实现，未来新增 Agent 策略和工作流统一在本模块实现。
+当前协议为 v10。应用提交 `conversation-title`、`conversation`、`vocabulary`、`phrase`、`synonym`、`explore-phrase`、`explore-vocabulary`、`sentence-practice-hints`、`sentence-practice-review` 或 `vocabulary-practice-review` 任务，`/concept` 在 Python 内部识别。`model.reply` 与标题专用 `model.title` 必须提供完整 `systemPrompt`，TS 模型适配器原样发送，不再选择 Agent Prompt。Prompt 上限为 4096 个 UTF-16 单元，两端校验实际 Prompt 加历史的总输入预算；旧运行包必须重建。其余显式技能及练习暂沿用 TS 实现，未来新增 Agent 策略和工作流统一在本模块实现。
 
 - 修改 Zod 协议后运行 `node --experimental-strip-types scripts/agent-protocol-schema.mjs`，更新共享用例；破坏性修改提升协议版本并重建全部运行包。
 - stdout 专用于协议，Python 不输出用户错误文案或 traceback。stderr 只由 Main 有界接收并进入已有本地错误日志。
@@ -166,3 +166,14 @@ TS 每轮只做一次模型传输，并保留同一批次的模型配置快照�
 每次最多 1 次模型调用、1 次准备调用及 2 个操作步骤，含启动总截止 120 秒，供应商请求 60 秒；实际模型输入／累计安全回执／Prompt 为 65,536／1,024／4,096 个 UTF-16 单元。固定抽取三词、3–6 条覆盖全部词项的提示、结构及词项 ID 校验、点评前置条件和内存会话生命周期保持原有行为。取消、超时、协议或引擎故障明确失败，丢弃迟到结果，无自动重试、TS Agent 直跑或回退。失败后的下一次用户请求可重新启动引擎。
 
 协议 v9 同步任务、操作、能力握手、共享契约及运行包 manifest，v8 及旧包必须重建。抽词、会话及业务规则仍在 TS，不新增数据库迁移或练习历史。空 PATH 烟测覆盖双语提示与点评、取消／迟到回执及宿主失败，验证记录见[句子练习迁移计划](../docs/plans/2026-10-23-sentence-practice-langgraph-agent.md)。
+
+
+## 词汇练习批改图与协议 v10
+
+`vocabulary-practice-review` 进入 `graphs/vocabulary_practice.py`，按 `prepare → model → apply / correct → model → finish` 执行有界循环；全部正确时直接结束，不要求调用标红工具。Python 持有原有中英文系统 Prompt、最多两次补标指令及最多八轮策略。TS 模型适配器每次只请求一次供应商，不再选择 Prompt 或驱动循环。补标指令显式指定 summary 与 reason 的输出语言。
+
+权限仅限 `vocabulary-practice.prepare`、`model.vocabulary-practice-review`、`vocabulary-practice.apply`、`vocabulary-practice.correct`、`vocabulary-practice.finish`。模型调用绑定连续轮次及固定完整 `systemPrompt`；apply 只能执行宿主上一轮待处理的调用，correct 只能响应缺少标记的最终反馈。词条、外层会话／请求 ID、答案、参考释义、完整模型消息、reason、summary 和工具参数留在 TS，Python 只接收输入大小、轮次、结果分类及安全回执。`vocabulary_practice_result` 核验后宿主才向领域服务释放结果，随后沿用整批错题保存和 requestId 幂等语义。取消／故障不发布暂存标记，失败不重放，不回退到 TS。
+
+模型／非模型宿主调用／步骤上限为 8／10／18；含启动总截止 120 秒、供应商请求 60 秒。每轮实际输入包含完整消息和工具定义，上限 65,536 UTF-16 单元；累计回执／单个 Prompt 上限均为 4,096，单轮原始模型消息上限 65,536。两端校验预算；宿主另行拒绝错序、重复、越权、并发调用和伪造完成。IPC 将开始练习的窗口绑定为 owner，跨窗口无法批改或取消，owner 销毁时中止练习。
+
+协议 v10 同步生成 schema、共享契约、能力握手及运行包 manifest，v9 及旧运行包须随应用重建。空 PATH 烟测覆盖双语全对／标红／补标、取消／迟到回执与宿主故障。不改变数据库结构，不访问真实用户数据库；验收见[词汇练习批改迁移计划](../docs/plans/2026-10-23-vocabulary-practice-langgraph-agent.md)。

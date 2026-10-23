@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto'
+import { resolve } from 'node:path'
+import { afterEach } from 'vitest'
+import { PythonAgentProcess } from '../../src/main/agent/python-agent-process'
+import { PythonAgentRuntime } from '../../src/main/agent/python-agent-runtime'
+import { AgentVocabularyPracticeReviewer } from '../../src/core/learning/vocabulary-practice/vocabulary-practice-agent'
 import { describe, expect, it, vi } from 'vitest'
-import { LlmVocabularyPracticeReviewer } from '../llm-vocabulary-practice-reviewer'
-import type { CreateLlmClient } from '../llm-client'
-import type { RuntimeModelConfig } from '../model-config'
+import { LlmVocabularyPracticeReviewer } from '../../src/core/llm/llm-vocabulary-practice-reviewer'
+import type { CreateLlmClient } from '../../src/core/llm/llm-client'
+import type { RuntimeModelConfig } from '../../src/core/llm/model-config'
 
 const config: RuntimeModelConfig = {
   configured: true,
@@ -44,9 +49,32 @@ function finalResponse(content: string): unknown {
   }
 }
 
+const runtimes: PythonAgentRuntime[] = []
+afterEach(async () => {
+  await Promise.all(runtimes.splice(0).map((runtime) => runtime.dispose()))
+})
+function createReviewer(
+  runtimeConfig: RuntimeModelConfig,
+  client: ReturnType<CreateLlmClient>
+): AgentVocabularyPracticeReviewer {
+  const child = new PythonAgentProcess({
+    command: resolve(
+      'agent-engine/.venv',
+      process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'
+    ),
+    args: ['-I', '-m', 'lingo_agent']
+  })
+  const runtime = new PythonAgentRuntime(child, () => {
+    throw new Error('Unused conversation model')
+  })
+  runtimes.push(runtime)
+  return new AgentVocabularyPracticeReviewer(
+    runtime,
+    new LlmVocabularyPracticeReviewer(runtimeConfig, 1000, () => client)
+  )
+}
 function setup(
   responses: unknown[],
-  maxRounds = 8,
   runtimeConfig: RuntimeModelConfig = config
 ): {
   complete: ReturnType<typeof vi.fn>
@@ -55,7 +83,7 @@ function setup(
 } {
   const complete = vi.fn().mockImplementation(async () => responses.shift())
   const client = { complete, stream: vi.fn() } satisfies ReturnType<CreateLlmClient>
-  const reviewer = new LlmVocabularyPracticeReviewer(runtimeConfig, 1000, () => client, maxRounds)
+  const reviewer = createReviewer(runtimeConfig, client)
   const signal = new AbortController().signal
   return {
     complete,
@@ -145,7 +173,7 @@ describe('llm vocabulary practice reviewer', () => {
   ])(
     'applies the multi-turn request policy: $label',
     async ({ runtimeConfig, expectParallelToolCalls }) => {
-      const { run, complete } = setup([finalResponse(ALL_CORRECT)], 8, runtimeConfig)
+      const { run, complete } = setup([finalResponse(ALL_CORRECT)], runtimeConfig)
       await run()
       const body = complete.mock.calls[0][0]
       expect(body.tool_choice).toBe('auto')
@@ -189,10 +217,11 @@ describe('llm vocabulary practice reviewer', () => {
   })
 
   it('fails after bounded correction rounds without marks', async () => {
-    const { run, complete } = setup(
-      [finalResponse(HAS_ERRORS), finalResponse(HAS_ERRORS), finalResponse(HAS_ERRORS)],
-      8
-    )
+    const { run, complete } = setup([
+      finalResponse(HAS_ERRORS),
+      finalResponse(HAS_ERRORS),
+      finalResponse(HAS_ERRORS)
+    ])
     await expect(run()).rejects.toMatchObject({ code: 'INVALID_ANALYSIS' })
     expect(complete).toHaveBeenCalledTimes(3)
   })
@@ -266,6 +295,7 @@ describe('llm vocabulary practice reviewer', () => {
             finish_reason: 'tool_calls',
             message: {
               content: '发现一处错误。',
+              reasoning_content: 'private provider reasoning',
               tool_calls: [
                 {
                   id: 'call-1',
@@ -292,7 +322,8 @@ describe('llm vocabulary practice reviewer', () => {
     expect(complete).toHaveBeenCalledTimes(2)
     expect(complete.mock.calls[1][0].messages[2]).toMatchObject({
       role: 'assistant',
-      content: '发现一处错误。'
+      content: '发现一处错误。',
+      reasoning_content: 'private provider reasoning'
     })
     expect(complete.mock.calls[1][0].messages[3]).toMatchObject({
       role: 'tool',
@@ -366,18 +397,17 @@ describe('llm vocabulary practice reviewer', () => {
 
   it('fails at the round limit instead of looping forever', async () => {
     const { run, complete } = setup(
-      Array.from({ length: 5 }, () =>
+      Array.from({ length: 8 }, () =>
         toolCallResponse([
           {
             name: 'mark_text_red',
             args: { items: [{ entryId: UUID2, field: 'meaning', reason: 'x' }] }
           }
         ])
-      ),
-      3
+      )
     )
     await expect(run()).rejects.toMatchObject({ code: 'ROUND_LIMIT' })
-    expect(complete).toHaveBeenCalledTimes(3)
+    expect(complete).toHaveBeenCalledTimes(8)
   })
 
   it('reports unsupported tool capability without falling back to text', async () => {
@@ -395,7 +425,7 @@ describe('llm vocabulary practice reviewer', () => {
   it('rejects before any request when no model is configured', async () => {
     const complete = vi.fn()
     const client = { complete, stream: vi.fn() } satisfies ReturnType<CreateLlmClient>
-    const reviewer = new LlmVocabularyPracticeReviewer({ configured: false }, 1000, () => client)
+    const reviewer = createReviewer({ configured: false }, client)
     await expect(
       reviewer.review({
         entries: ENTRIES,
@@ -405,4 +435,190 @@ describe('llm vocabulary practice reviewer', () => {
     ).rejects.toMatchObject({ code: 'MODEL_NOT_CONFIGURED' })
     expect(complete).not.toHaveBeenCalled()
   })
+})
+
+it.each([
+  'cross-run',
+  'cross-call',
+  'before-prepare',
+  'premature-result',
+  'forbidden-operation',
+  'cross-task',
+  'wrong-result',
+  'duplicate-prepare',
+  'oversized-prompt',
+  'extra-authority',
+  'excess-concurrency',
+  'duplicate-model',
+  'engine-failure',
+  'forged-complete-after-model',
+  'wrong-round',
+  'apply-before-model'
+])('rejects engine fault %s without releasing review output', async (mode) => {
+  const child = new PythonAgentProcess({
+    command: resolve(
+      'agent-engine/.venv',
+      process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'
+    ),
+    args: [
+      '-I',
+      resolve('tests/integration/fixtures/agent/vocabulary-practice-fault-engine.py'),
+      mode
+    ]
+  })
+  const runtime = new PythonAgentRuntime(child, () => {
+    throw new Error('Unused')
+  })
+  runtimes.push(runtime)
+  const signals: AbortSignal[] = []
+  const complete = vi.fn(async ({ signal }) => {
+    signals.push(signal)
+    if (mode === 'excess-concurrency') return new Promise<never>(() => {})
+    return { role: 'assistant' as const, content: ALL_CORRECT }
+  })
+  const reviewer = new AgentVocabularyPracticeReviewer(runtime, { complete })
+  await expect(
+    reviewer.review({
+      entries: ENTRIES,
+      explanationLanguage: 'en',
+      signal: new AbortController().signal
+    })
+  ).rejects.toMatchObject({
+    code: expect.stringMatching(/^AGENT_(PROTOCOL_ERROR|LIMIT|HOST_ERROR)$/)
+  })
+  expect(complete.mock.calls.length).toBeLessThanOrEqual(1)
+  expect(signals.every((signal) => signal.aborted)).toBe(true)
+})
+
+it.each(['cancel', 'crash'] as const)(
+  'discards late model output after %s and accepts an explicit new request',
+  async (mode) => {
+    const child = new PythonAgentProcess({
+      command: resolve(
+        'agent-engine/.venv',
+        process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'
+      ),
+      args: ['-I', '-m', 'lingo_agent']
+    })
+    const runtime = new PythonAgentRuntime(child, () => {
+      throw new Error('Unused')
+    })
+    runtimes.push(runtime)
+    const controller = new AbortController()
+    let resolveModel!: (value: { role: 'assistant'; content: string }) => void
+    const complete = vi.fn(
+      () =>
+        new Promise<{ role: 'assistant'; content: string }>((resolve) => {
+          resolveModel = resolve
+        })
+    )
+    const reviewer = new AgentVocabularyPracticeReviewer(runtime, { complete })
+    const input = {
+      entries: ENTRIES,
+      explanationLanguage: 'en' as const,
+      signal: controller.signal
+    }
+    const pending = reviewer.review(input)
+    const rejected =
+      mode === 'cancel'
+        ? expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+        : expect(pending).rejects.toMatchObject({ code: 'AGENT_UNAVAILABLE' })
+    await vi.waitFor(() => expect(complete).toHaveBeenCalledTimes(1))
+    if (mode === 'cancel') controller.abort()
+    else process.kill(child.pid!, 'SIGKILL')
+    await rejected
+    resolveModel({ role: 'assistant', content: ALL_CORRECT })
+    const nextComplete = vi.fn(async () => ({ role: 'assistant' as const, content: ALL_CORRECT }))
+    const next = new AgentVocabularyPracticeReviewer(runtime, { complete: nextComplete })
+    await expect(
+      next.review({ ...input, signal: new AbortController().signal })
+    ).resolves.toMatchObject({ verdict: 'all_correct' })
+    expect(nextComplete).toHaveBeenCalledTimes(1)
+    expect(complete).toHaveBeenCalledTimes(1)
+  }
+)
+
+it.each(['zh-CN', 'en'] as const)(
+  'keeps practice content and identifiers off the Python wire with %s instructions',
+  async (locale) => {
+    const child = new PythonAgentProcess({
+      command: resolve(
+        'agent-engine/.venv',
+        process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'
+      ),
+      args: ['-I', '-m', 'lingo_agent']
+    })
+    const runtime = new PythonAgentRuntime(child, () => {
+      throw new Error('Unused')
+    })
+    runtimes.push(runtime)
+    const sent = vi.spyOn(child, 'send')
+    const complete = vi.fn(async (params: { messages: Array<{ content: string }> }) => {
+      expect(params.messages).toHaveLength(2)
+      return { choices: [{ finish_reason: 'stop', message: { content: ALL_CORRECT } }] }
+    })
+    const reviewer = new AgentVocabularyPracticeReviewer(
+      runtime,
+      new LlmVocabularyPracticeReviewer(config, 1000, () => ({ complete, stream: vi.fn() }))
+    )
+    await reviewer.review({
+      entries: ENTRIES,
+      explanationLanguage: locale,
+      signal: new AbortController().signal
+    })
+    const wire = JSON.stringify(sent.mock.calls)
+    for (const value of [UUID, UUID2, 'banana', '苹果', '一种水果', '全部正确'])
+      expect(wire).not.toContain(value)
+    const body = complete.mock.calls[0][0]
+    expect(body.messages[0].content).toContain(
+      locale === 'zh-CN' ? 'Simplified Chinese' : 'English'
+    )
+  }
+)
+
+it('refuses oversized UTF-16 bound input before contacting the model', async () => {
+  const complete = vi.fn()
+  const reviewer = createReviewer(config, { complete, stream: vi.fn() })
+  await expect(
+    reviewer.review({
+      entries: [{ ...ENTRIES[0], submittedMeaning: '😀'.repeat(32768) }],
+      explanationLanguage: 'en',
+      signal: new AbortController().signal
+    })
+  ).rejects.toMatchObject({ code: 'AGENT_LIMIT' })
+  expect(complete).not.toHaveBeenCalled()
+})
+
+it('counts the complete tool transcript against the next model input budget', async () => {
+  const complete = vi.fn(async () => ({
+    choices: [
+      {
+        finish_reason: 'tool_calls',
+        message: {
+          content: '😀'.repeat(20500),
+          tool_calls: [
+            {
+              id: 'mark-long',
+              type: 'function',
+              function: {
+                name: 'mark_text_red',
+                arguments: JSON.stringify({
+                  items: [{ entryId: UUID, field: 'meaning', reason: 'incorrect' }]
+                })
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }))
+  const reviewer = createReviewer(config, { complete, stream: vi.fn() })
+  await expect(
+    reviewer.review({
+      entries: [{ ...ENTRIES[0], referenceMeaning: '😀'.repeat(11000) }],
+      explanationLanguage: 'en',
+      signal: new AbortController().signal
+    })
+  ).rejects.toMatchObject({ code: 'AGENT_LIMIT' })
+  expect(complete).toHaveBeenCalledTimes(1)
 })
