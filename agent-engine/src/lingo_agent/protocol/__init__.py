@@ -5,7 +5,7 @@ from typing import Any, cast
 from jsonschema import Draft202012Validator
 
 MAX_FRAME_BYTES = 262_144
-PROTOCOL_VERSION = 5
+PROTOCOL_VERSION = 6
 _validator = Draft202012Validator(json.loads(Path(__file__).with_name("schema.json").read_text()))
 
 
@@ -17,6 +17,7 @@ def _validate_frame(frame: Any) -> None:
         "model.vocabulary",
         "model.phrase",
         "model.synonym",
+        "model.explore-phrase",
     ):
         prompt = frame["args"]["systemPrompt"]
         if len(prompt.encode("utf-16-le", errors="surrogatepass")) // 2 > 4096:

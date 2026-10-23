@@ -1,3 +1,4 @@
+import { createTestBatchRuntime } from '../fixtures/python-agent'
 import { createTestConversationModule } from '../fixtures/conversation'
 import { randomUUID } from 'node:crypto'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
@@ -261,7 +262,8 @@ describe('explore vocabulary conversation integration', () => {
     const phraseSkill = new ExplorePhraseConversationSkill(
       new ExplorePhraseModule(
         new JsonFileExplorePhraseHistoryStore(phrasePath),
-        () => phraseGenerator
+        () => phraseGenerator,
+        createTestBatchRuntime()
       ),
       createExplorePhraseFeedbackFormatter()
     )

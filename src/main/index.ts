@@ -490,7 +490,8 @@ app.whenReady().then(() => {
     new ExplorePhraseModule(
       exploreHistoryStore,
       (timeoutMs) =>
-        new LlmExplorePhraseGenerator(modelsService.resolveSnapshot(), timeoutMs, createLlmClient)
+        new LlmExplorePhraseGenerator(modelsService.resolveSnapshot(), timeoutMs, createLlmClient),
+      agentRuntime
     ),
     createExplorePhraseFeedbackFormatter()
   )

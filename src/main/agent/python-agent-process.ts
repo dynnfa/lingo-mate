@@ -123,9 +123,16 @@ export class PythonAgentProcess {
             if (this.status === 'starting') {
               if (
                 frame.type !== 'ready' ||
-                !(['conversation', 'tool-loop', 'vocabulary', 'phrase', 'synonym'] as const).every(
-                  (c) => frame.capabilities.includes(c)
-                )
+                !(
+                  [
+                    'conversation',
+                    'tool-loop',
+                    'vocabulary',
+                    'phrase',
+                    'synonym',
+                    'explore-phrase'
+                  ] as const
+                ).every((c) => frame.capabilities.includes(c))
               )
                 throw new Error('Agent handshake mismatch')
               this.status = 'ready'

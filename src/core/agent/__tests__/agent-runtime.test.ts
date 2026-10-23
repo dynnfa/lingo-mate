@@ -17,3 +17,21 @@ it('trims a copied history within the prompt budget without splitting Unicode ch
   )
   expect(messages).toEqual(original)
 })
+
+it('gives exploration its own bounded operations without forwarding business messages', () => {
+  const snapshot = createAgentSnapshot({
+    task: 'explore-phrase',
+    messages: [{ role: 'user', content: 'Exploration batch' }],
+    outputLanguage: 'en',
+    targetLanguage: 'en'
+  })
+  expect(snapshot.allowedOperations).toEqual(['explore-phrase.prepare', 'model.explore-phrase'])
+  expect(snapshot.budget).toEqual({
+    timeoutMs: 180000,
+    maxModelCalls: 3,
+    maxToolCalls: 1,
+    maxSteps: 8,
+    maxInputChars: 65536,
+    maxOutputChars: 32768
+  })
+})

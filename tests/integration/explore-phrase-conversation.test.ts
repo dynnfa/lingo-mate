@@ -1,3 +1,4 @@
+import { createTestBatchRuntime } from '../fixtures/python-agent'
 import { createTestConversationModule } from '../fixtures/conversation'
 import { randomUUID } from 'node:crypto'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
@@ -99,6 +100,7 @@ function makeModule(
   const exploreModule = new ExplorePhraseModule(
     store,
     () => makeGenerator(responses, options.onGenerate),
+    createTestBatchRuntime(),
     undefined,
     { requestMs: 5_000, totalMs: 30_000 }
   )
@@ -340,10 +342,16 @@ describe('explore phrase conversation integration', () => {
     }
     const conversationRepository = new SqliteConversationRepository(database)
     const store = new JsonFileExplorePhraseHistoryStore(historyPath)
-    const exploreModule = new ExplorePhraseModule(store, () => hangingGenerator, undefined, {
-      requestMs: 5_000,
-      totalMs: 30_000
-    })
+    const exploreModule = new ExplorePhraseModule(
+      store,
+      () => hangingGenerator,
+      createTestBatchRuntime(),
+      undefined,
+      {
+        requestMs: 5_000,
+        totalMs: 30_000
+      }
+    )
     const skill = new ExplorePhraseConversationSkill(
       exploreModule,
       createExplorePhraseFeedbackFormatter()
@@ -446,13 +454,17 @@ describe('explore phrase conversation integration', () => {
       let locale: 'zh-CN' | 'en' = 'zh-CN'
       const repository = new SqliteConversationRepository(database)
       const skill = new ExplorePhraseConversationSkill(
-        new ExplorePhraseModule(new JsonFileExplorePhraseHistoryStore(historyPath), () => ({
-          generate: async (input) => {
-            onGenerate(input)
-            if (fail) throw new ExplorePhraseError(failure)
-            return candidates('retried', 10)
-          }
-        })),
+        new ExplorePhraseModule(
+          new JsonFileExplorePhraseHistoryStore(historyPath),
+          () => ({
+            generate: async (input) => {
+              onGenerate(input)
+              if (fail) throw new ExplorePhraseError(failure)
+              return candidates('retried', 10)
+            }
+          }),
+          createTestBatchRuntime()
+        ),
         createExplorePhraseFeedbackFormatter()
       )
       const module = createTestConversationModule(
