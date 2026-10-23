@@ -1,6 +1,9 @@
 import type { ModelMessage, ModelStreamEvent } from '../llm/language-model'
 import {
   agentSnapshotSchema,
+  type SentencePracticeTask,
+  type SentencePracticePrepared,
+  type SentencePracticeCompletion,
   type AgentBudget,
   type AgentErrorCode,
   type VocabularyPrepared,
@@ -133,8 +136,29 @@ export interface ExploreVocabularyAgentRuntime {
     host: ExploreVocabularyHostOperations
   ): Promise<void>
 }
+export interface SentencePracticeHostOperations {
+  prepare(): SentencePracticePrepared
+  model(
+    args: { systemPrompt: string },
+    signal: AbortSignal,
+    maxInputChars: number
+  ): Promise<SentencePracticeCompletion>
+  verifyCompletion(result: SentencePracticeCompletion): void
+}
+export interface SentencePracticeAgentRuntime {
+  runSentencePractice(
+    input: {
+      task: SentencePracticeTask
+      outputLanguage: string
+      targetLanguage: string
+      signal: AbortSignal
+    },
+    host: SentencePracticeHostOperations
+  ): Promise<void>
+}
 export interface AgentRuntime
   extends
+    SentencePracticeAgentRuntime,
     VocabularyAgentRuntime,
     PhraseAgentRuntime,
     SynonymAgentRuntime,
@@ -155,6 +179,19 @@ export class AgentRuntimeError extends Error {
 // Reserve space for the fixed host prompt/operation definitions. Persisted history
 // is never edited; only this execution's copied context is trimmed.
 export function createAgentSnapshot(input: AgentTask): AgentSnapshot {
+  if (input.task === 'sentence-practice-hints' || input.task === 'sentence-practice-review')
+    return agentSnapshotSchema.parse({
+      ...input,
+      budget: {
+        timeoutMs: 120_000,
+        maxModelCalls: 1,
+        maxToolCalls: 1,
+        maxSteps: 2,
+        maxInputChars: 65_536,
+        maxOutputChars: 1024
+      },
+      allowedOperations: ['sentence-practice.prepare', `model.${input.task}`]
+    })
   if (input.task === 'conversation-title')
     return agentSnapshotSchema.parse({
       ...input,

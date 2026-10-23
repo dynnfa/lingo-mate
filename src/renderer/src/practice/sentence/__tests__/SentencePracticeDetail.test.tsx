@@ -218,15 +218,21 @@ describe('SentencePracticeDetail', () => {
     expect(screen.queryByRole('button', { name: '提交点评' })).not.toBeInTheDocument()
   })
 
-  it('keeps words and offers retry when hint generation fails', async () => {
+  it.each([
+    ['MODEL_ERROR', '模型请求失败，请稍后重试。'],
+    ['AGENT_UNAVAILABLE', 'Agent 引擎暂不可用，请重试。'],
+    ['AGENT_PROTOCOL_ERROR', 'Agent 引擎未能完成请求，请重试。'],
+    ['AGENT_HOST_ERROR', 'Agent 引擎未能完成请求，请重试。'],
+    ['AGENT_LIMIT', 'Agent 已达到执行上限，请缩短输入后重试。']
+  ] as const)('keeps words and offers retry after %s', async (code, message) => {
     const stub = installApi(practiceApiStub())
     stub.respondStart(startOk(['apple', 'banana', 'cherry']))
     renderDetail()
-    stub.respondHints({ status: 'error', error: { code: 'MODEL_ERROR' } })
+    stub.respondHints({ status: 'error', error: { code } })
 
     await waitFor(() => {
       expect(screen.getByText('提示生成失败')).toBeInTheDocument()
-      expect(screen.getByText('模型请求失败，请稍后重试。')).toBeInTheDocument()
+      expect(screen.getByText(message)).toBeInTheDocument()
     })
     expect(screen.getByText('apple')).toBeInTheDocument()
     // 提示未就绪：不可提交

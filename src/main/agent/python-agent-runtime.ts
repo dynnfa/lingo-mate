@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import type { LanguageModel, ModelStreamEvent } from '../../core/llm/language-model'
 import { AgentHost, type AgentTestOperations } from '../../core/agent/agent-host'
 import {
+  type SentencePracticeAgentRuntime,
+  type SentencePracticeHostOperations,
   AgentRuntimeError,
   createAgentSnapshot,
   type ExploreVocabularyAgentRunInput,
@@ -20,9 +22,17 @@ import {
 import type { AgentFrame } from '../../core/agent/agent-protocol'
 import { PythonAgentProcess } from './python-agent-process'
 
-type BatchTask = 'vocabulary' | 'phrase' | 'synonym' | 'explore-phrase' | 'explore-vocabulary'
+type BatchTask =
+  | 'sentence-practice-hints'
+  | 'sentence-practice-review'
+  | 'vocabulary'
+  | 'phrase'
+  | 'synonym'
+  | 'explore-phrase'
+  | 'explore-vocabulary'
 
 interface RunHosts {
+  sentencePractice?: SentencePracticeHostOperations
   vocabulary?: VocabularyHostOperations
   phrase?: PhraseHostOperations
   synonym?: SynonymHostOperations
@@ -32,6 +42,8 @@ interface RunHosts {
 
 // Batch snapshots still require one message; the batch graphs never read it.
 const BATCH_MESSAGE: Record<BatchTask, string> = {
+  'sentence-practice-hints': 'Bound sentence practice',
+  'sentence-practice-review': 'Bound sentence practice',
   vocabulary: 'Vocabulary batch',
   phrase: 'Phrase batch',
   synonym: 'Synonym batch',
@@ -80,6 +92,8 @@ export class PythonAgentRuntime implements AgentRuntime {
 
   async *stream(input: AgentRunInput): AsyncIterable<ModelStreamEvent> {
     if (
+      input.task === 'sentence-practice-hints' ||
+      input.task === 'sentence-practice-review' ||
       input.task === 'vocabulary' ||
       input.task === 'phrase' ||
       input.task === 'synonym' ||
@@ -88,6 +102,13 @@ export class PythonAgentRuntime implements AgentRuntime {
     )
       throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
     yield* this.run(input)
+  }
+
+  async runSentencePractice(
+    input: Parameters<SentencePracticeAgentRuntime['runSentencePractice']>[0],
+    host: SentencePracticeHostOperations
+  ): Promise<void> {
+    await this.runBatch(input, input.task, { sentencePractice: host })
   }
 
   async runVocabulary(
@@ -121,6 +142,7 @@ export class PythonAgentRuntime implements AgentRuntime {
 
   private async runBatch(
     input:
+      | Parameters<SentencePracticeAgentRuntime['runSentencePractice']>[0]
       | VocabularyAgentRunInput
       | PhraseAgentRunInput
       | SynonymAgentRunInput
@@ -159,7 +181,8 @@ export class PythonAgentRuntime implements AgentRuntime {
         hosts.phrase,
         hosts.synonym,
         hosts.explorePhrase,
-        hosts.exploreVocabulary
+        hosts.exploreVocabulary,
+        hosts.sentencePractice
       ),
       queue: [],
       wake: () => {},
@@ -225,6 +248,7 @@ export class PythonAgentRuntime implements AgentRuntime {
     }
     const run = this.runs.get(frame.runId)
     if (
+      frame.type === 'sentence_practice_result' ||
       frame.type === 'vocabulary_result' ||
       frame.type === 'phrase_result' ||
       frame.type === 'synonym_result' ||
@@ -267,6 +291,7 @@ export class PythonAgentRuntime implements AgentRuntime {
       }
       case 'event':
         if (
+          run.hosts.sentencePractice ||
           run.hosts.vocabulary ||
           run.hosts.phrase ||
           run.hosts.synonym ||
@@ -289,6 +314,16 @@ export class PythonAgentRuntime implements AgentRuntime {
         if (frame.event.type === 'text') run.text += frame.event.delta
         run.queue.push(frame.event)
         run.wake()
+        return
+      case 'sentence_practice_result':
+        try {
+          if (!run.hosts.sentencePractice || run.openCalls.size)
+            throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+          run.hosts.sentencePractice.verifyCompletion(frame.result)
+          this.finish(frame.runId, run)
+        } catch (error) {
+          this.finish(frame.runId, run, error)
+        }
         return
       case 'vocabulary_result':
         try {
@@ -337,6 +372,7 @@ export class PythonAgentRuntime implements AgentRuntime {
         return
       case 'result':
         if (
+          run.hosts.sentencePractice ||
           run.hosts.vocabulary ||
           run.hosts.phrase ||
           run.hosts.synonym ||

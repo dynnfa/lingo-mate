@@ -5,14 +5,14 @@ import sys
 
 mode = sys.argv[1]
 hello = json.loads(sys.stdin.readline())
-base = {"v": 8, "instanceId": hello["instanceId"]}
+base = {"v": 9, "instanceId": hello["instanceId"]}
 
 
 def send(kind, **payload):
     print(json.dumps({**base, "type": kind, **payload}), flush=True)
 
 
-send("ready", capabilities=["conversation", "conversation-title", "tool-loop", "vocabulary", "phrase", "synonym", "explore-phrase", "explore-vocabulary"])
+send("ready", capabilities=["conversation", "conversation-title", "tool-loop", "vocabulary", "phrase", "synonym", "explore-phrase", "explore-vocabulary", "sentence-practice-hints", "sentence-practice-review"])
 run = json.loads(sys.stdin.readline())
 run_id = run["runId"]
 

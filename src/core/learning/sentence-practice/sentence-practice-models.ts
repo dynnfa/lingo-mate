@@ -38,3 +38,15 @@ export interface SentencePracticeReviewer {
     signal: AbortSignal
   }): Promise<SentencePracticeReview>
 }
+
+// Transport-only models require the complete Python-owned system instruction.
+export interface SentencePracticeHintModel {
+  generate(
+    input: Parameters<SentenceHintGenerator['generate']>[0] & { systemPrompt: string }
+  ): Promise<SentenceHint[]>
+}
+export interface SentencePracticeReviewModel {
+  review(
+    input: Parameters<SentencePracticeReviewer['review']>[0] & { systemPrompt: string }
+  ): Promise<SentencePracticeReview>
+}

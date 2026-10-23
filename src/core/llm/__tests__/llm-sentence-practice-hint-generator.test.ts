@@ -49,6 +49,7 @@ function setup(response: unknown): {
     complete,
     run: () =>
       generator.generate({
+        systemPrompt: 'Python-owned prompt. Explain in English.',
         entries: ENTRIES,
         explanationLanguage: 'zh-CN',
         practiceLanguage: 'en',
@@ -58,17 +59,12 @@ function setup(response: unknown): {
 }
 
 describe('llm sentence practice hint generator', () => {
-  it('returns validated hints and sends explicit language rules', async () => {
+  it('returns validated hints and forwards the Python system prompt', async () => {
     const { run, complete } = setup(finalResponse(JSON.stringify(HINTS_PAYLOAD)))
     const hints = await run()
     expect(hints).toEqual(HINTS_PAYLOAD.hints)
     const [params, context] = complete.mock.calls[0]
-    // 系统消息显式声明两种语言：短语用英语，解释用简体中文
-    const system = params.messages[0].content as string
-    expect(system).toContain('Simplified Chinese')
-    expect(system).toContain('English')
-    expect(system).toContain('phrase must be written in English')
-    expect(system).toContain('explanation must be written in Simplified Chinese')
+    expect(params.messages[0].content).toBe('Python-owned prompt. Explain in English.')
     // 用户消息只携带词条数据
     expect(JSON.parse(params.messages[1].content)).toEqual({ entries: ENTRIES })
     expect(context.operation).toBe('vocabulary_analysis')
@@ -85,6 +81,7 @@ describe('llm sentence practice hint generator', () => {
     )
     await expect(
       generator.generate({
+        systemPrompt: 'Python-owned prompt. Explain in English.',
         entries: ENTRIES,
         explanationLanguage: 'zh-CN',
         practiceLanguage: 'en',
@@ -144,6 +141,7 @@ describe('llm sentence practice hint generator', () => {
     const generator = new LlmSentencePracticeHintGenerator(config, 1000, () => client)
     await expect(
       generator.generate({
+        systemPrompt: 'Python-owned prompt. Explain in English.',
         entries: ENTRIES,
         explanationLanguage: 'zh-CN',
         practiceLanguage: 'en',
@@ -158,6 +156,7 @@ describe('llm sentence practice hint generator', () => {
     const timeoutGenerator = new LlmSentencePracticeHintGenerator(config, 1000, () => timeoutClient)
     await expect(
       timeoutGenerator.generate({
+        systemPrompt: 'Python-owned prompt. Explain in English.',
         entries: ENTRIES,
         explanationLanguage: 'zh-CN',
         practiceLanguage: 'en',
