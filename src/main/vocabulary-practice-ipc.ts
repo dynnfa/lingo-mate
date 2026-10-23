@@ -1,3 +1,5 @@
+import type { WebContents } from 'electron'
+import { AgentRuntimeError } from '../core/agent/agent-runtime'
 import type { RegisterTrustedHandler, TrustedHandlerConfig } from './ipc-guard'
 import type { SupportedLocale } from '../shared/preferences'
 import {
@@ -17,6 +19,7 @@ import type { VocabularyPracticeService } from '../core/learning/vocabulary-prac
 // 在进程边界把 Core 错误转换为对用户安全的结构：只保留练习协议的
 // 安全错误码，不携带数据库路径、SQL、模型地址或异常堆栈。
 export function toSafeVocabularyPracticeError(error: unknown): VocabularyPracticeError {
+  if (error instanceof AgentRuntimeError) return { code: error.code }
   if (error instanceof CoreVocabularyPracticeError) return { code: error.code }
   if (error instanceof VocabularyError && error.code === 'STORAGE_FAILED') {
     return { code: 'STORAGE_FAILED' }
@@ -31,6 +34,15 @@ export function registerVocabularyPracticeIpc(
   resolveExplanationLanguage: () => SupportedLocale,
   registerTrustedHandler: RegisterTrustedHandler
 ): () => void {
+  let owner: { sender: WebContents; sessionId: string; onDestroyed: () => void } | undefined
+  const releaseOwner = (dispose = false): void => {
+    if (!owner) return
+    owner.sender.removeListener('destroyed', owner.onDestroyed)
+    owner = undefined
+    if (dispose) service.dispose()
+  }
+  const ownsSession = (sender: WebContents, sessionId: string): boolean =>
+    owner?.sender === sender && owner.sessionId === sessionId
   const removeStart = registerTrustedHandler({
     channel: VOCABULARY_PRACTICE_CHANNELS.start,
     inputSchema: vocabularyPracticeStartInputSchema,
@@ -38,8 +50,13 @@ export function registerVocabularyPracticeIpc(
     invalidInputError: () => ({ code: 'INVALID_INPUT' }),
     mapError: toSafeVocabularyPracticeError,
     fallbackError: { code: 'UNKNOWN_ERROR' },
-    handler: (input) => {
+    handler: (input, { sender }) => {
+      if (owner && owner.sender !== sender) return { status: 'error', error: { code: 'BUSY' } }
       const outcome = service.start(input.count)
+      releaseOwner()
+      const onDestroyed = (): void => releaseOwner(true)
+      owner = { sender, sessionId: outcome.sessionId, onDestroyed }
+      sender.once('destroyed', onDestroyed)
       return {
         status: 'ok',
         sessionId: outcome.sessionId,
@@ -60,7 +77,9 @@ export function registerVocabularyPracticeIpc(
     invalidInputError: () => ({ code: 'INVALID_INPUT' }),
     mapError: toSafeVocabularyPracticeError,
     fallbackError: { code: 'UNKNOWN_ERROR' },
-    handler: async (input) => {
+    handler: async (input, { sender }) => {
+      if (!ownsSession(sender, input.sessionId))
+        return { status: 'error', error: { code: 'SESSION_NOT_FOUND' } }
       const outcome = await service.review(
         input.sessionId,
         input.requestId,
@@ -86,13 +105,17 @@ export function registerVocabularyPracticeIpc(
     invalidInputError: () => ({ code: 'INVALID_INPUT' }),
     mapError: toSafeVocabularyPracticeError,
     fallbackError: { code: 'UNKNOWN_ERROR' },
-    handler: (input) => ({ status: 'ok', cancelled: service.cancel(input.sessionId) })
+    handler: (input, { sender }) => ({
+      status: 'ok',
+      cancelled: ownsSession(sender, input.sessionId) && service.cancel(input.sessionId)
+    })
   } satisfies TrustedHandlerConfig<
     typeof vocabularyPracticeCancelInputSchema,
     typeof vocabularyPracticeCancelResultSchema
   >)
 
   return () => {
+    releaseOwner(true)
     removeStart()
     removeReview()
     removeCancel()

@@ -44,7 +44,7 @@ class Client:
         threading.Thread(target=read, daemon=True).start()
 
     def send(self, kind, **payload):
-        data = {"v": 9, "instanceId": self.instance, "type": kind, **payload}
+        data = {"v": 10, "instanceId": self.instance, "type": kind, **payload}
         self.process.stdin.write((json.dumps(data) + "\n").encode())
         self.process.stdin.flush()
 
@@ -62,6 +62,33 @@ class Client:
         return (time.monotonic() - started) * 1000
 
     def run(self, run_id, task="conversation", content="Hi", output_language="zh-CN"):
+        if task == "vocabulary-practice-review":
+            self.send(
+                "run",
+                runId=run_id,
+                snapshot={
+                    "task": task,
+                    "messages": [{"role": "user", "content": "Bound vocabulary practice"}],
+                    "outputLanguage": output_language,
+                    "targetLanguage": "en",
+                    "allowedOperations": [
+                        "vocabulary-practice.prepare",
+                        "model.vocabulary-practice-review",
+                        "vocabulary-practice.apply",
+                        "vocabulary-practice.correct",
+                        "vocabulary-practice.finish",
+                    ],
+                    "budget": {
+                        "timeoutMs": 120000,
+                        "maxModelCalls": 8,
+                        "maxToolCalls": 10,
+                        "maxSteps": 18,
+                        "maxInputChars": 65536,
+                        "maxOutputChars": 4096,
+                    },
+                },
+            )
+            return self.receive("host_call")
         if task in ("sentence-practice-hints", "sentence-practice-review"):
             self.send(
                 "run",
@@ -172,6 +199,60 @@ with tempfile.TemporaryDirectory(prefix="lingo-bundle-") as cwd:
         else:
             idle_rss_kib = None
             idle_cpu_percent = None
+        for locale, language in (("zh-CN", "Simplified Chinese"), ("en", "English")):
+            for kinds in (("complete",), ("missing_marks", "tools", "complete")):
+                run_id = f"vocabulary-practice-{locale}-{len(kinds)}"
+                call = client.run(run_id, task="vocabulary-practice-review", output_language=locale)
+                assert call["operation"] == "vocabulary-practice.prepare"
+                client.send(
+                    "host_result", runId=run_id, callId=call["callId"], result={"inputChars": 1000}
+                )
+                for round_, kind in enumerate(kinds, 1):
+                    call = client.receive("host_call")
+                    assert call["operation"] == "model.vocabulary-practice-review"
+                    assert call["args"]["round"] == round_
+                    assert language in call["args"]["systemPrompt"]
+                    client.send(
+                        "host_result",
+                        runId=run_id,
+                        callId=call["callId"],
+                        result={"round": round_, "kind": kind, "inputChars": 3000},
+                    )
+                    call = client.receive("host_call")
+                    suffix = {"complete": "finish", "tools": "apply", "missing_marks": "correct"}[
+                        kind
+                    ]
+                    assert call["operation"] == f"vocabulary-practice.{suffix}"
+                    if kind == "complete":
+                        assert call["args"] == {"round": round_, "reason": "terminal"}
+                        receipt = {"completed": True, "rounds": round_}
+                    else:
+                        if kind == "missing_marks":
+                            assert language in call["args"]["instruction"]
+                        receipt = {"round": round_, "applied": True}
+                    client.send("host_result", runId=run_id, callId=call["callId"], result=receipt)
+                assert client.receive("vocabulary_practice_result")["result"] == {
+                    "completed": True,
+                    "rounds": len(kinds),
+                }
+        call = client.run("vocabulary-practice-cancel", task="vocabulary-practice-review")
+        client.send(
+            "host_result", runId=call["runId"], callId=call["callId"], result={"inputChars": 1000}
+        )
+        call = client.receive("host_call")
+        client.send("cancel", runId=call["runId"])
+        client.receive("cancelled")
+        client.send(
+            "host_result",
+            runId=call["runId"],
+            callId=call["callId"],
+            result={"round": 1, "kind": "complete", "inputChars": 3000},
+        )
+        call = client.run("vocabulary-practice-failed", task="vocabulary-practice-review")
+        client.send(
+            "host_error", runId=call["runId"], callId=call["callId"], code="AGENT_HOST_ERROR"
+        )
+        assert client.receive("error")["code"] == "AGENT_HOST_ERROR"
         for task in ("sentence-practice-hints", "sentence-practice-review"):
             for locale, language in (("zh-CN", "Simplified Chinese"), ("en", "English")):
                 run_id = f"{task}-{locale}"
@@ -477,6 +558,8 @@ print(
             "checks": [
                 "empty-PATH",
                 "handshake",
+                "vocabulary-practice-languages-tool-loop-correction",
+                "vocabulary-practice-cancel-late-result-failure",
                 "sentence-practice-languages",
                 "sentence-practice-cancel-late-result",
                 "sentence-practice-failure",
