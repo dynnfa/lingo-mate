@@ -122,3 +122,26 @@ it('supports bound exploration attempts without accepting host data overrides', 
     ).toBe(false)
   }
 })
+
+it('supports bound vocabulary exploration attempts without accepting host data overrides', () => {
+  const frame = {
+    v: AGENT_PROTOCOL_VERSION,
+    instanceId: 'p',
+    runId: 'r',
+    callId: 'r:c',
+    type: 'host_call',
+    operation: 'model.explore-vocabulary',
+    args: { attempt: 1, systemPrompt: 'Explain in English.' }
+  }
+  expect(agentFrameSchema.safeParse(frame).success).toBe(true)
+  for (const extra of [
+    { count: 1 },
+    { excludedTerms: [] },
+    { sessionId: 'outer' },
+    { attempt: 4 }
+  ]) {
+    expect(
+      agentFrameSchema.safeParse({ ...frame, args: { ...frame.args, ...extra } }).success
+    ).toBe(false)
+  }
+})

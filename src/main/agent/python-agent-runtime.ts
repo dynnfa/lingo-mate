@@ -4,6 +4,8 @@ import { AgentHost, type AgentTestOperations } from '../../core/agent/agent-host
 import {
   AgentRuntimeError,
   createAgentSnapshot,
+  type ExploreVocabularyAgentRunInput,
+  type ExploreVocabularyHostOperations,
   type ExplorePhraseAgentRunInput,
   type ExplorePhraseHostOperations,
   type AgentRunInput,
@@ -18,12 +20,13 @@ import {
 import type { AgentFrame } from '../../core/agent/agent-protocol'
 import { PythonAgentProcess } from './python-agent-process'
 
-type BatchTask = 'vocabulary' | 'phrase' | 'synonym' | 'explore-phrase'
+type BatchTask = 'vocabulary' | 'phrase' | 'synonym' | 'explore-phrase' | 'explore-vocabulary'
 
 interface RunHosts {
   vocabulary?: VocabularyHostOperations
   phrase?: PhraseHostOperations
   synonym?: SynonymHostOperations
+  exploreVocabulary?: ExploreVocabularyHostOperations
   explorePhrase?: ExplorePhraseHostOperations
 }
 
@@ -32,7 +35,8 @@ const BATCH_MESSAGE: Record<BatchTask, string> = {
   vocabulary: 'Vocabulary batch',
   phrase: 'Phrase batch',
   synonym: 'Synonym batch',
-  'explore-phrase': 'Exploration batch'
+  'explore-phrase': 'Exploration batch',
+  'explore-vocabulary': 'Vocabulary exploration batch'
 }
 
 interface Run {
@@ -79,7 +83,8 @@ export class PythonAgentRuntime implements AgentRuntime {
       input.task === 'vocabulary' ||
       input.task === 'phrase' ||
       input.task === 'synonym' ||
-      input.task === 'explore-phrase'
+      input.task === 'explore-phrase' ||
+      input.task === 'explore-vocabulary'
     )
       throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
     yield* this.run(input)
@@ -107,12 +112,20 @@ export class PythonAgentRuntime implements AgentRuntime {
     await this.runBatch(input, 'explore-phrase', { explorePhrase: host })
   }
 
+  async runExploreVocabulary(
+    input: ExploreVocabularyAgentRunInput,
+    host: ExploreVocabularyHostOperations
+  ): Promise<void> {
+    await this.runBatch(input, 'explore-vocabulary', { exploreVocabulary: host })
+  }
+
   private async runBatch(
     input:
       | VocabularyAgentRunInput
       | PhraseAgentRunInput
       | SynonymAgentRunInput
-      | ExplorePhraseAgentRunInput,
+      | ExplorePhraseAgentRunInput
+      | ExploreVocabularyAgentRunInput,
     task: BatchTask,
     hosts: RunHosts
   ): Promise<void> {
@@ -145,7 +158,8 @@ export class PythonAgentRuntime implements AgentRuntime {
         hosts.vocabulary,
         hosts.phrase,
         hosts.synonym,
-        hosts.explorePhrase
+        hosts.explorePhrase,
+        hosts.exploreVocabulary
       ),
       queue: [],
       wake: () => {},
@@ -215,6 +229,7 @@ export class PythonAgentRuntime implements AgentRuntime {
       frame.type === 'phrase_result' ||
       frame.type === 'synonym_result' ||
       frame.type === 'explore_phrase_result' ||
+      frame.type === 'explore_vocabulary_result' ||
       frame.type === 'result' ||
       frame.type === 'error' ||
       frame.type === 'cancelled'
@@ -255,7 +270,8 @@ export class PythonAgentRuntime implements AgentRuntime {
           run.hosts.vocabulary ||
           run.hosts.phrase ||
           run.hosts.synonym ||
-          run.hosts.explorePhrase
+          run.hosts.explorePhrase ||
+          run.hosts.exploreVocabulary
         ) {
           this.finish(frame.runId, run, new AgentRuntimeError('AGENT_PROTOCOL_ERROR'))
           return
@@ -292,6 +308,15 @@ export class PythonAgentRuntime implements AgentRuntime {
           this.finish(frame.runId, run, error)
         }
         return
+      case 'explore_vocabulary_result':
+        try {
+          if (!run.hosts.exploreVocabulary) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+          run.hosts.exploreVocabulary.verifyCompletion(frame.result)
+          this.finish(frame.runId, run)
+        } catch (error) {
+          this.finish(frame.runId, run, error)
+        }
+        return
       case 'synonym_result':
         try {
           if (!run.hosts.synonym) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
@@ -315,7 +340,8 @@ export class PythonAgentRuntime implements AgentRuntime {
           run.hosts.vocabulary ||
           run.hosts.phrase ||
           run.hosts.synonym ||
-          run.hosts.explorePhrase
+          run.hosts.explorePhrase ||
+          run.hosts.exploreVocabulary
         ) {
           this.finish(frame.runId, run, new AgentRuntimeError('AGENT_PROTOCOL_ERROR'))
           return

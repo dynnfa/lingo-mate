@@ -123,6 +123,7 @@ function makeModule(
     new ExploreVocabularyModule(
       store,
       () => makeGenerator(responses, options.onGenerate),
+      createTestBatchRuntime(),
       undefined,
       {
         requestMs: 5_000,
@@ -254,8 +255,10 @@ describe('explore vocabulary conversation integration', () => {
       }
     }
     const vocabularySkill = new ExploreVocabularyConversationSkill(
-      new ExploreVocabularyModule(new JsonFileExploreVocabularyHistoryStore(vocabularyPath), () =>
-        makeGenerator([wordCandidates('vocab', 10)], vocabularyGenerate)
+      new ExploreVocabularyModule(
+        new JsonFileExploreVocabularyHistoryStore(vocabularyPath),
+        () => makeGenerator([wordCandidates('vocab', 10)], vocabularyGenerate),
+        createTestBatchRuntime()
       ),
       createExploreVocabularyFeedbackFormatter()
     )
@@ -359,13 +362,17 @@ describe('explore vocabulary conversation integration', () => {
       let locale: 'zh-CN' | 'en' = 'zh-CN'
       const repository = new SqliteConversationRepository(database)
       const skill = new ExploreVocabularyConversationSkill(
-        new ExploreVocabularyModule(new JsonFileExploreVocabularyHistoryStore(historyPath), () => ({
-          generate: async (input) => {
-            onGenerate(input)
-            if (fail) throw new ExploreVocabularyError(failure)
-            return wordCandidates('retried', 10)
-          }
-        })),
+        new ExploreVocabularyModule(
+          new JsonFileExploreVocabularyHistoryStore(historyPath),
+          () => ({
+            generate: async (input) => {
+              onGenerate(input)
+              if (fail) throw new ExploreVocabularyError(failure)
+              return wordCandidates('retried', 10)
+            }
+          }),
+          createTestBatchRuntime()
+        ),
         createExploreVocabularyFeedbackFormatter()
       )
       const module = createTestConversationModule(
