@@ -44,7 +44,7 @@ class Client:
         threading.Thread(target=read, daemon=True).start()
 
     def send(self, kind, **payload):
-        data = {"v": 7, "instanceId": self.instance, "type": kind, **payload}
+        data = {"v": 8, "instanceId": self.instance, "type": kind, **payload}
         self.process.stdin.write((json.dumps(data) + "\n").encode())
         self.process.stdin.flush()
 
@@ -79,9 +79,11 @@ class Client:
                 if task == "synonym"
                 else [f"{task}.prepare", f"model.{task}"]
                 if task in ("vocabulary", "phrase", "explore-phrase", "explore-vocabulary")
+                else ["model.title"]
+                if task == "conversation-title"
                 else ["model.reply"],
                 "budget": {
-                    "timeoutMs": 5000,
+                    "timeoutMs": 120000 if task == "conversation-title" else 5000,
                     "maxModelCalls": 3
                     if task in ("explore-phrase", "explore-vocabulary")
                     else 1040
@@ -100,12 +102,16 @@ class Client:
                     if task == "synonym"
                     else 32
                     if task in ("vocabulary", "phrase", "explore-phrase", "explore-vocabulary")
+                    else 1
+                    if task == "conversation-title"
                     else 4,
-                    "maxInputChars": 8192,
+                    "maxInputChars": 32768 if task == "conversation-title" else 8192,
                     "maxOutputChars": 524288
                     if task == "synonym"
                     else 32768
                     if task in ("vocabulary", "phrase", "explore-phrase", "explore-vocabulary")
+                    else 80
+                    if task == "conversation-title"
                     else 100,
                 },
             },
@@ -145,6 +151,28 @@ with tempfile.TemporaryDirectory(prefix="lingo-bundle-") as cwd:
         else:
             idle_rss_kib = None
             idle_cpu_percent = None
+        for locale, language in (("zh-CN", "Simplified Chinese"), ("en", "English")):
+            run_id = f"title-{locale}"
+            call = client.run(
+                run_id, task="conversation-title", content="/concept coffee", output_language=locale
+            )
+            assert call["operation"] == "model.title"
+            assert f"Write the title in {language} ({locale})" in call["args"]["systemPrompt"]
+            client.send(
+                "host_result", runId=run_id, callId=call["callId"], result={"text": "Coffee"}
+            )
+            assert client.receive("result")["text"] == "Coffee"
+        call = client.run("title-cancel", task="conversation-title")
+        client.send("cancel", runId="title-cancel")
+        client.receive("cancelled")
+        client.send(
+            "host_result", runId="title-cancel", callId=call["callId"], result={"text": "late"}
+        )
+        call = client.run("title-failed", task="conversation-title")
+        client.send(
+            "host_error", runId="title-failed", callId=call["callId"], code="AGENT_HOST_ERROR"
+        )
+        assert client.receive("error")["code"] == "AGENT_HOST_ERROR"
         for task, field in (("explore-phrase", "phrase"), ("explore-vocabulary", "term")):
             for locale, language in (("zh-CN", "Simplified Chinese"), ("en", "English")):
                 run_id = f"{task}-{locale}"
@@ -397,6 +425,9 @@ print(
             "checks": [
                 "empty-PATH",
                 "handshake",
+                "title-languages",
+                "title-cancel-late-result",
+                "title-failure",
                 "stream",
                 "concept-languages-stream",
                 "concept-failure",

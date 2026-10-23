@@ -47,12 +47,7 @@ describe('Python LangGraph process', () => {
           yield { type: 'text', delta: 'Python reply' }
         }
       }))
-      const legacyModel = {
-        streamReply: vi.fn(() => {
-          throw new Error('TS reply path used')
-        })
-      }
-      const module = new ConversationModule(legacyModel, repository, runtime)
+      const module = new ConversationModule(repository, runtime)
       try {
         const sessionId = randomUUID()
         const now = new Date().toISOString()
@@ -83,7 +78,7 @@ describe('Python LangGraph process', () => {
         expect(seen[0].systemPrompt).toContain('Simplified Chinese (zh-CN)')
         expect(seen[0].systemPrompt).toContain('English (en)')
         expect(seen[0].messages).toEqual([{ role: 'user', content: text }])
-        expect(legacyModel.streamReply).not.toHaveBeenCalled()
+
         expect(
           events.filter((event) => ['completed', 'failed', 'cancelled'].includes(event.type))
         ).toHaveLength(1)
@@ -442,4 +437,141 @@ describe('Python LangGraph process', () => {
       await runtime.dispose()
     }
   })
+})
+
+it.each(['zh-CN', 'en'])(
+  'generates first-message titles through the real Python pipe in %s',
+  async (outputLanguage) => {
+    const database = openDatabase(':memory:')
+    const repository = new SqliteConversationRepository(database)
+    const seen: import('../../src/core/llm/language-model').StreamReplyInput[] = []
+    let finishTitle!: () => void
+    const gate = new Promise<void>((resolve) => {
+      finishTitle = resolve
+    })
+    const runtime = new PythonAgentRuntime(launch(), () => ({
+      async *streamReply(input) {
+        seen.push(input)
+        if (input.purpose === 'conversation-title') {
+          await gate
+          yield { type: 'reasoning', delta: 'ignored'.repeat(100) }
+          yield { type: 'text', delta: 'Coffee practice' }
+        } else yield { type: 'text', delta: 'A concept explanation.' }
+      }
+    }))
+    const module = new ConversationModule(repository, runtime, () => ({
+      outputLanguage,
+      targetLanguage: 'en'
+    }))
+    try {
+      const { sessionId } = await module.createConversation()
+      const events: ConversationEvent[] = []
+      await module.sendMessage(
+        { sessionId, requestId: randomUUID(), text: '/concept coffee' },
+        (e) => events.push(e)
+      )
+      await vi.waitFor(() => expect(events.some((e) => e.type === 'completed')).toBe(true))
+      expect((await repository.find(sessionId))?.title).toBe('/concept coffee')
+      await vi.waitFor(() =>
+        expect(seen.filter((i) => i.purpose === 'conversation-title')).toHaveLength(1)
+      )
+
+      const title = seen.find((i) => i.purpose === 'conversation-title')!
+      expect(title.systemPrompt).toContain(
+        `Write the title in ${outputLanguage === 'en' ? 'English (en)' : 'Simplified Chinese (zh-CN)'}`
+      )
+      expect(title.systemPrompt).not.toContain('the /concept command')
+      expect(title.messages).toEqual([{ role: 'user', content: '/concept coffee' }])
+      finishTitle()
+      await vi.waitFor(() => expect(events.some((e) => e.type === 'titleUpdated')).toBe(true))
+      expect((await repository.find(sessionId))?.title).toBe('Coffee practice')
+      expect(events.filter((e) => e.type === 'reasoningChunk')).toHaveLength(0)
+    } finally {
+      finishTitle()
+      await module.shutdown()
+      await runtime.dispose()
+      database.close()
+    }
+  }
+)
+
+it.each(['', '   ', 'a'.repeat(41), 'first\nsecond', '😀'.repeat(41), 'provider-failure'])(
+  'keeps the input title after Python title generation returns invalid output or fails: %j',
+  async (title) => {
+    const database = openDatabase(':memory:')
+    const repository = new SqliteConversationRepository(database)
+    const report = vi.fn()
+    let titleCalls = 0
+    const runtime = new PythonAgentRuntime(launch(), () => ({
+      async *streamReply(input) {
+        if (input.purpose === 'conversation-title') {
+          titleCalls++
+          if (title === 'provider-failure') throw new Error('provider failed')
+          yield { type: 'text', delta: title }
+        } else yield { type: 'text', delta: 'Reply' }
+      }
+    }))
+    const module = new ConversationModule(repository, runtime, undefined, undefined, undefined, {
+      report
+    })
+    try {
+      const { sessionId } = await module.createConversation()
+      const events: ConversationEvent[] = []
+      await module.sendMessage({ sessionId, requestId: randomUUID(), text: 'Coffee' }, (e) =>
+        events.push(e)
+      )
+      await vi.waitFor(() => expect(events.some((e) => e.type === 'completed')).toBe(true))
+      await vi.waitFor(() =>
+        expect(report).toHaveBeenCalledWith(expect.objectContaining({ operation: 'update-title' }))
+      )
+      expect((await repository.find(sessionId))?.title).toBe('Coffee')
+      expect(events.filter((e) => e.type === 'titleUpdated' || e.type === 'failed')).toEqual([])
+      expect(titleCalls).toBe(1)
+    } finally {
+      await module.shutdown()
+      await runtime.dispose()
+      database.close()
+    }
+  }
+)
+
+it('aborts a pending Python title during shutdown and discards late model text', async () => {
+  const database = openDatabase(':memory:')
+  const repository = new SqliteConversationRepository(database)
+  let finishTitle!: () => void
+  let titleSignal: AbortSignal | undefined
+  const gate = new Promise<void>((resolve) => {
+    finishTitle = resolve
+  })
+  const runtime = new PythonAgentRuntime(launch(), () => ({
+    async *streamReply(input) {
+      if (input.purpose === 'conversation-title') {
+        titleSignal = input.signal
+        await gate
+        yield { type: 'text', delta: 'Late title' }
+      } else yield { type: 'text', delta: 'Reply' }
+    }
+  }))
+  const module = new ConversationModule(repository, runtime)
+  try {
+    const { sessionId } = await module.createConversation()
+    const events: ConversationEvent[] = []
+    await module.sendMessage({ sessionId, requestId: randomUUID(), text: 'Coffee' }, (e) =>
+      events.push(e)
+    )
+    await vi.waitFor(() =>
+      expect(events.some((e) => e.type === 'completed') && titleSignal).toBeTruthy()
+    )
+    await module.shutdown()
+    expect(titleSignal?.aborted).toBe(true)
+    finishTitle()
+    await runtime.dispose()
+    expect((await repository.find(sessionId))?.title).toBe('Coffee')
+    expect(events.some((e) => e.type === 'titleUpdated')).toBe(false)
+  } finally {
+    finishTitle()
+    await module.shutdown()
+    await runtime.dispose()
+    database.close()
+  }
 })

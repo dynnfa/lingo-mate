@@ -1,10 +1,11 @@
 import { z } from 'zod'
 
-export const AGENT_PROTOCOL_VERSION = 7
+export const AGENT_PROTOCOL_VERSION = 8
 export const MAX_AGENT_SYSTEM_PROMPT_CHARS = 4096
 export const MAX_AGENT_FRAME_BYTES = 262_144
 export const AGENT_OPERATIONS = [
   'model.reply',
+  'model.title',
   'model.decide',
   'learning.lookup',
   'vocabulary.prepare',
@@ -42,6 +43,20 @@ const snapshotFields = {
   allowedOperations: z.array(agentOperationSchema).max(11)
 }
 export const agentSnapshotSchema = z.discriminatedUnion('task', [
+  z.strictObject({
+    ...snapshotFields,
+    task: z.literal('conversation-title'),
+    messages: z.array(z.strictObject({ role: z.literal('user'), content: text })).length(1),
+    allowedOperations: z.tuple([z.literal('model.title')]),
+    budget: z.strictObject({
+      timeoutMs: z.literal(120_000),
+      maxModelCalls: z.literal(1),
+      maxToolCalls: z.literal(0),
+      maxSteps: z.literal(1),
+      maxInputChars: z.literal(32_768),
+      maxOutputChars: z.literal(80)
+    })
+  }),
   z.strictObject({
     ...snapshotFields,
     task: z.enum(['conversation', 'tool-loop', 'vocabulary', 'phrase']),
@@ -314,6 +329,7 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
       .array(
         z.enum([
           'conversation',
+          'conversation-title',
           'tool-loop',
           'vocabulary',
           'phrase',
@@ -322,10 +338,16 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
           'explore-vocabulary'
         ])
       )
-      .max(7)
+      .max(8)
   }),
   z.strictObject({ ...run, type: z.literal('run'), snapshot: agentSnapshotSchema }),
   z.discriminatedUnion('operation', [
+    z.strictObject({
+      ...call,
+      type: z.literal('host_call'),
+      operation: z.literal('model.title'),
+      args: agentReplyArgsSchema
+    }),
     z.strictObject({
       ...call,
       type: z.literal('host_call'),
