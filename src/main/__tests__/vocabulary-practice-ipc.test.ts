@@ -1,3 +1,4 @@
+import { AgentRuntimeError } from '../../core/agent/agent-runtime'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { VocabularyError } from '../../core/learning/vocabulary/parse-vocabulary-input'
 import { VocabularyPracticeError } from '../../core/learning/vocabulary-practice/parse-vocabulary-practice-input'
@@ -43,6 +44,7 @@ function fakeService(
   start: ReturnType<typeof vi.fn>
   review: ReturnType<typeof vi.fn>
   cancel: ReturnType<typeof vi.fn>
+  dispose: ReturnType<typeof vi.fn>
 } {
   return {
     start: vi.fn(
@@ -61,7 +63,8 @@ function fakeService(
           marks: []
         }))
     ),
-    cancel: vi.fn(overrides.cancel ?? (() => true))
+    cancel: vi.fn(overrides.cancel ?? (() => true)),
+    dispose: vi.fn()
   }
 }
 
@@ -181,8 +184,10 @@ describe('vocabulary practice IPC', () => {
         })
       })
     )
+    const sender = new FakeSender()
+    await registeredHandler(VOCABULARY_PRACTICE_CHANNELS.start)({ sender }, START_INPUT)
     const result = (await registeredHandler(VOCABULARY_PRACTICE_CHANNELS.review)(
-      { sender: new FakeSender() },
+      { sender },
       {
         requestId: START_INPUT.requestId,
         sessionId: SESSION_ID,
@@ -217,11 +222,18 @@ describe('vocabulary practice IPC', () => {
     expect(stored).toEqual({ status: 'error', error: { code: 'STORAGE_FAILED' } })
     expect(JSON.stringify(stored)).not.toContain('sqlite')
 
+    const sender = new FakeSender()
+    service.start.mockReturnValue({
+      sessionId: SESSION_ID,
+      requestedCount: 10,
+      entries: [{ entryId: ENTRY_ID, term: 'apple' }]
+    })
+    await registeredHandler(VOCABULARY_PRACTICE_CHANNELS.start)({ sender }, START_INPUT)
     service.review.mockImplementation(async () => {
       throw new VocabularyPracticeError('MODEL_NOT_CONFIGURED')
     })
     const unconfigured = (await registeredHandler(VOCABULARY_PRACTICE_CHANNELS.review)(
-      { sender: new FakeSender() },
+      { sender },
       {
         requestId: START_INPUT.requestId,
         sessionId: SESSION_ID,
@@ -234,7 +246,7 @@ describe('vocabulary practice IPC', () => {
       throw new Error('http://secret.internal/v1 blew up')
     })
     const unknown = (await registeredHandler(VOCABULARY_PRACTICE_CHANNELS.review)(
-      { sender: new FakeSender() },
+      { sender },
       {
         requestId: START_INPUT.requestId,
         sessionId: SESSION_ID,
@@ -247,6 +259,7 @@ describe('vocabulary practice IPC', () => {
 
   it('reports protocol-violating results as safe errors', async () => {
     const service = register()
+    const sender = new FakeSender()
     // 实际数量(2)超过请求数量(1)：出口 schema 拒绝
     service.start.mockReturnValue({
       sessionId: SESSION_ID,
@@ -257,15 +270,17 @@ describe('vocabulary practice IPC', () => {
       ]
     })
     expect(
-      await registeredHandler(VOCABULARY_PRACTICE_CHANNELS.start)(
-        { sender: new FakeSender() },
-        START_INPUT
-      )
+      await registeredHandler(VOCABULARY_PRACTICE_CHANNELS.start)({ sender }, START_INPUT)
     ).toEqual({
       status: 'error',
       error: { code: 'UNKNOWN_ERROR' }
     })
 
+    service.start.mockReturnValue({
+      sessionId: SESSION_ID,
+      requestedCount: 10,
+      entries: [{ entryId: ENTRY_ID, term: 'apple' }]
+    })
     // all_correct 与标记矛盾：出口 schema 拒绝
     service.review.mockResolvedValue({
       verdict: 'all_correct',
@@ -274,7 +289,7 @@ describe('vocabulary practice IPC', () => {
     })
     expect(
       await registeredHandler(VOCABULARY_PRACTICE_CHANNELS.review)(
-        { sender: new FakeSender() },
+        { sender },
         {
           requestId: START_INPUT.requestId,
           sessionId: SESSION_ID,
@@ -286,8 +301,10 @@ describe('vocabulary practice IPC', () => {
 
   it('returns the cancel outcome for trusted callers', async () => {
     const service = register(fakeService({ cancel: () => false }))
+    const sender = new FakeSender()
+    await registeredHandler(VOCABULARY_PRACTICE_CHANNELS.start)({ sender }, START_INPUT)
     const result = (await registeredHandler(VOCABULARY_PRACTICE_CHANNELS.cancel)(
-      { sender: new FakeSender() },
+      { sender },
       { sessionId: SESSION_ID }
     )) as VocabularyPracticeCancelResult
     expect(result).toEqual({ status: 'ok', cancelled: false })
@@ -322,4 +339,54 @@ describe('vocabulary practice IPC', () => {
     expect(toSafeVocabularyPracticeError(new Error('boom'))).toEqual({ code: 'UNKNOWN_ERROR' })
     expect(toSafeVocabularyPracticeError('str')).toEqual({ code: 'UNKNOWN_ERROR' })
   })
+})
+
+it('binds review and cancellation to the window that started the session', async () => {
+  const service = register()
+  const owner = new FakeSender()
+  const other = new FakeSender()
+  await registeredHandler(VOCABULARY_PRACTICE_CHANNELS.start)({ sender: owner }, START_INPUT)
+  const input = {
+    sessionId: SESSION_ID,
+    requestId: START_INPUT.requestId,
+    answers: [{ entryId: ENTRY_ID, meaning: 'x' }]
+  }
+  expect(
+    await registeredHandler(VOCABULARY_PRACTICE_CHANNELS.review)({ sender: other }, input)
+  ).toEqual({ status: 'error', error: { code: 'SESSION_NOT_FOUND' } })
+  expect(
+    await registeredHandler(VOCABULARY_PRACTICE_CHANNELS.cancel)(
+      { sender: other },
+      { sessionId: SESSION_ID }
+    )
+  ).toEqual({ status: 'ok', cancelled: false })
+  expect(
+    await registeredHandler(VOCABULARY_PRACTICE_CHANNELS.start)({ sender: other }, START_INPUT)
+  ).toEqual({ status: 'error', error: { code: 'BUSY' } })
+  expect(service.review).not.toHaveBeenCalled()
+  expect(service.cancel).not.toHaveBeenCalled()
+})
+
+it.each(['AGENT_UNAVAILABLE', 'AGENT_PROTOCOL_ERROR', 'AGENT_LIMIT', 'AGENT_HOST_ERROR'] as const)(
+  'maps %s without leaking internal causes',
+  (code) => {
+    expect(
+      toSafeVocabularyPracticeError(
+        new AgentRuntimeError(code, { cause: new Error('secret internal failure') })
+      )
+    ).toEqual({ code })
+  }
+)
+
+it('aborts practice work when the owning window is destroyed and releases ownership', async () => {
+  const service = register()
+  const sender = new FakeSender()
+  await registeredHandler(VOCABULARY_PRACTICE_CHANNELS.start)({ sender }, START_INPUT)
+  sender.destroy()
+  expect(service.dispose).toHaveBeenCalledTimes(1)
+  expect(sender.listenerCount('destroyed')).toBe(0)
+  const next = new FakeSender()
+  expect(
+    await registeredHandler(VOCABULARY_PRACTICE_CHANNELS.start)({ sender: next }, START_INPUT)
+  ).toMatchObject({ status: 'ok' })
 })

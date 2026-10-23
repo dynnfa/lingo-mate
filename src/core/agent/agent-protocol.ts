@@ -1,9 +1,14 @@
 import { z } from 'zod'
 
-export const AGENT_PROTOCOL_VERSION = 9
+export const AGENT_PROTOCOL_VERSION = 10
 export const MAX_AGENT_SYSTEM_PROMPT_CHARS = 4096
 export const MAX_AGENT_FRAME_BYTES = 262_144
 export const AGENT_OPERATIONS = [
+  'vocabulary-practice.prepare',
+  'model.vocabulary-practice-review',
+  'vocabulary-practice.apply',
+  'vocabulary-practice.correct',
+  'vocabulary-practice.finish',
   'sentence-practice.prepare',
   'model.sentence-practice-hints',
   'model.sentence-practice-review',
@@ -51,6 +56,18 @@ export const sentencePracticeTaskSchema = z.enum([
 ])
 export type SentencePracticeTask = z.infer<typeof sentencePracticeTaskSchema>
 export const agentSnapshotSchema = z.discriminatedUnion('task', [
+  z.strictObject({
+    ...snapshotFields,
+    task: z.literal('vocabulary-practice-review'),
+    budget: z.strictObject({
+      timeoutMs: z.literal(120_000),
+      maxModelCalls: z.literal(8),
+      maxToolCalls: z.literal(10),
+      maxSteps: z.literal(18),
+      maxInputChars: z.literal(65_536),
+      maxOutputChars: z.literal(4096)
+    })
+  }),
   z.strictObject({
     ...snapshotFields,
     task: sentencePracticeTaskSchema,
@@ -261,7 +278,29 @@ export const sentencePracticePreparedSchema = z.strictObject({
 export const sentencePracticeCompletionSchema = z.strictObject({ completed: z.literal(true) })
 export type SentencePracticePrepared = z.infer<typeof sentencePracticePreparedSchema>
 export type SentencePracticeCompletion = z.infer<typeof sentencePracticeCompletionSchema>
+const practiceRound = z.number().int().min(1).max(8)
+export const vocabularyPracticePreparedSchema = z.strictObject({
+  inputChars: z.number().int().min(0).max(65_536)
+})
+export const vocabularyPracticeTurnSchema = z.strictObject({
+  round: practiceRound,
+  kind: z.enum(['tools', 'complete', 'missing_marks']),
+  inputChars: z.number().int().min(0).max(65_536)
+})
+export const vocabularyPracticeAppliedSchema = z.strictObject({
+  round: practiceRound,
+  applied: z.literal(true)
+})
+export const vocabularyPracticeCompletionSchema = z.strictObject({
+  completed: z.literal(true),
+  rounds: practiceRound
+})
+export type VocabularyPracticeTurn = z.infer<typeof vocabularyPracticeTurnSchema>
+export type VocabularyPracticeCompletion = z.infer<typeof vocabularyPracticeCompletionSchema>
 export const agentHostResultSchema = z.union([
+  vocabularyPracticeTurnSchema,
+  vocabularyPracticeAppliedSchema,
+  vocabularyPracticeCompletionSchema,
   sentencePracticePreparedSchema,
   sentencePracticeCompletionSchema,
   z.strictObject({ text }),
@@ -288,17 +327,35 @@ const systemPromptSchema = z
   .refine((value) => value.length <= MAX_AGENT_SYSTEM_PROMPT_CHARS)
 export const agentCallArgsSchema = z.strictObject({
   systemPrompt: systemPromptSchema.optional(),
+  instruction: systemPromptSchema.optional(),
   inputIndex: vocabularyIndex.optional(),
   round: synonymRound.optional(),
   attempt: explorePhraseAttempt.optional(),
   action: z.enum(['execute', 'reject_parallel']).optional(),
-  reason: z.enum(['terminal', 'failed', 'round_limit']).optional(),
+  reason: z.enum(['terminal', 'failed', 'round_limit', 'correction_limit']).optional(),
   query: z.string().min(1).max(256).optional(),
   results: z
     .array(z.strictObject({ entries: z.array(z.string().max(1024)).max(10) }))
     .max(8)
     .optional()
 })
+export const vocabularyPracticeModelArgsSchema = z.strictObject({
+  round: practiceRound,
+  systemPrompt: systemPromptSchema
+})
+export const vocabularyPracticeApplyArgsSchema = z.strictObject({ round: practiceRound })
+export const vocabularyPracticeCorrectArgsSchema = z.strictObject({
+  round: practiceRound,
+  instruction: systemPromptSchema
+})
+export const vocabularyPracticeFinishArgsSchema = z.strictObject({
+  round: practiceRound,
+  reason: z.enum(['terminal', 'round_limit', 'correction_limit'])
+})
+export type VocabularyPracticeModelArgs = z.infer<typeof vocabularyPracticeModelArgsSchema>
+export type VocabularyPracticeApplyArgs = z.infer<typeof vocabularyPracticeApplyArgsSchema>
+export type VocabularyPracticeCorrectArgs = z.infer<typeof vocabularyPracticeCorrectArgsSchema>
+export type VocabularyPracticeFinishArgs = z.infer<typeof vocabularyPracticeFinishArgsSchema>
 export const agentReplyArgsSchema = z.strictObject({
   systemPrompt: systemPromptSchema
 })
@@ -356,6 +413,7 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
     capabilities: z
       .array(
         z.enum([
+          'vocabulary-practice-review',
           'sentence-practice-hints',
           'sentence-practice-review',
           'conversation',
@@ -368,10 +426,40 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
           'explore-vocabulary'
         ])
       )
-      .max(10)
+      .max(11)
   }),
   z.strictObject({ ...run, type: z.literal('run'), snapshot: agentSnapshotSchema }),
   z.discriminatedUnion('operation', [
+    z.strictObject({
+      ...call,
+      type: z.literal('host_call'),
+      operation: z.literal('vocabulary-practice.prepare'),
+      args: z.strictObject({})
+    }),
+    z.strictObject({
+      ...call,
+      type: z.literal('host_call'),
+      operation: z.literal('model.vocabulary-practice-review'),
+      args: vocabularyPracticeModelArgsSchema
+    }),
+    z.strictObject({
+      ...call,
+      type: z.literal('host_call'),
+      operation: z.literal('vocabulary-practice.apply'),
+      args: vocabularyPracticeApplyArgsSchema
+    }),
+    z.strictObject({
+      ...call,
+      type: z.literal('host_call'),
+      operation: z.literal('vocabulary-practice.correct'),
+      args: vocabularyPracticeCorrectArgsSchema
+    }),
+    z.strictObject({
+      ...call,
+      type: z.literal('host_call'),
+      operation: z.literal('vocabulary-practice.finish'),
+      args: vocabularyPracticeFinishArgsSchema
+    }),
     z.strictObject({
       ...call,
       type: z.literal('host_call'),
@@ -524,6 +612,11 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
     ...run,
     type: z.literal('sentence_practice_result'),
     result: sentencePracticeCompletionSchema
+  }),
+  z.strictObject({
+    ...run,
+    type: z.literal('vocabulary_practice_result'),
+    result: vocabularyPracticeCompletionSchema
   }),
   z.strictObject({ ...run, type: z.literal('cancelled') }),
   z.strictObject({ ...base, type: z.literal('shutdown') }),

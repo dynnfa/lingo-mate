@@ -15,6 +15,7 @@ from lingo_agent.graphs.phrase import PhraseState
 from lingo_agent.graphs.sentence_practice import SentencePracticeState
 from lingo_agent.graphs.synonym import SynonymState
 from lingo_agent.graphs.vocabulary import VocabularyState
+from lingo_agent.graphs.vocabulary_practice import VocabularyPracticeState
 from lingo_agent.protocol import MAX_FRAME_BYTES, PROTOCOL_VERSION, encode_frame, parse_frame
 from lingo_agent.state import LearningState
 
@@ -83,7 +84,13 @@ class Server:
                         seq=self.sequences[run_id],
                         event={"type": "text", "delta": cast(LearningState, state)["text"]},
                     )
-                if snapshot["task"] in ("sentence-practice-hints", "sentence-practice-review"):
+                if snapshot["task"] == "vocabulary-practice-review":
+                    await self.send(
+                        "vocabulary_practice_result",
+                        runId=run_id,
+                        result=cast(VocabularyPracticeState, state)["vocabularyPractice"],
+                    )
+                elif snapshot["task"] in ("sentence-practice-hints", "sentence-practice-review"):
                     await self.send(
                         "sentence_practice_result",
                         runId=run_id,
@@ -148,6 +155,7 @@ class Server:
             await self.send(
                 "ready",
                 capabilities=[
+                    "vocabulary-practice-review",
                     "sentence-practice-hints",
                     "sentence-practice-review",
                     "conversation",

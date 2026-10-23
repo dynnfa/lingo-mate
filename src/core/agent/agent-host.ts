@@ -2,6 +2,14 @@ import { phraseInsertTools } from '../tools/phrase-tools'
 import { vocabularyInsertTools } from '../learning/vocabulary/vocabulary-insert'
 import type { LanguageModel, ModelStreamEvent } from '../llm/language-model'
 import {
+  vocabularyPracticePreparedSchema,
+  vocabularyPracticeTurnSchema,
+  vocabularyPracticeAppliedSchema,
+  vocabularyPracticeCompletionSchema,
+  vocabularyPracticeModelArgsSchema,
+  vocabularyPracticeApplyArgsSchema,
+  vocabularyPracticeCorrectArgsSchema,
+  vocabularyPracticeFinishArgsSchema,
   sentencePracticePreparedSchema,
   sentencePracticeCompletionSchema,
   exploreVocabularyModelArgsSchema,
@@ -37,6 +45,7 @@ import {
 } from './agent-protocol'
 import {
   AgentRuntimeError,
+  type VocabularyPracticeHostOperations,
   type SentencePracticeHostOperations,
   type VocabularyHostOperations,
   type PhraseHostOperations,
@@ -79,7 +88,8 @@ export class AgentHost {
     private readonly synonym?: SynonymHostOperations,
     private readonly explorePhrase?: ExplorePhraseHostOperations,
     private readonly exploreVocabulary?: ExploreVocabularyHostOperations,
-    private readonly sentencePractice?: SentencePracticeHostOperations
+    private readonly sentencePractice?: SentencePracticeHostOperations,
+    private readonly vocabularyPractice?: VocabularyPracticeHostOperations
   ) {
     this.snapshot = structuredClone(snapshot)
   }
@@ -103,6 +113,44 @@ export class AgentHost {
       throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR', { cause: parsedArgs.error })
     const args = parsedArgs.data
     if (this.calls.size > this.snapshot.budget.maxSteps) throw new AgentRuntimeError('AGENT_LIMIT')
+    if (this.snapshot.task === 'vocabulary-practice-review') {
+      if (!this.vocabularyPractice) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+      let result: AgentHostResult
+      if (operation === 'model.vocabulary-practice-review') {
+        if (++this.modelCalls > this.snapshot.budget.maxModelCalls)
+          throw new AgentRuntimeError('AGENT_LIMIT')
+        result = vocabularyPracticeTurnSchema.parse(
+          await this.vocabularyPractice.model(
+            vocabularyPracticeModelArgsSchema.parse(args),
+            signal,
+            this.snapshot.budget.maxInputChars
+          )
+        )
+      } else {
+        if (++this.toolCalls > this.snapshot.budget.maxToolCalls)
+          throw new AgentRuntimeError('AGENT_LIMIT')
+        if (operation === 'vocabulary-practice.prepare' && !Object.keys(args).length)
+          result = vocabularyPracticePreparedSchema.parse(this.vocabularyPractice.prepare())
+        else if (operation === 'vocabulary-practice.apply')
+          result = vocabularyPracticeAppliedSchema.parse(
+            this.vocabularyPractice.apply(vocabularyPracticeApplyArgsSchema.parse(args), signal)
+          )
+        else if (operation === 'vocabulary-practice.correct')
+          result = vocabularyPracticeAppliedSchema.parse(
+            this.vocabularyPractice.correct(vocabularyPracticeCorrectArgsSchema.parse(args), signal)
+          )
+        else if (operation === 'vocabulary-practice.finish')
+          result = vocabularyPracticeCompletionSchema.parse(
+            this.vocabularyPractice.finish(vocabularyPracticeFinishArgsSchema.parse(args))
+          )
+        else throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+      }
+      signal.throwIfAborted()
+      this.outputChars += JSON.stringify(result).length
+      if (this.outputChars > this.snapshot.budget.maxOutputChars)
+        throw new AgentRuntimeError('AGENT_LIMIT')
+      return result
+    }
     if (
       this.snapshot.task === 'sentence-practice-hints' ||
       this.snapshot.task === 'sentence-practice-review'

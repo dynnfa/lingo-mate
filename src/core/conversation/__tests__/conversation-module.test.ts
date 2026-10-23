@@ -168,6 +168,9 @@ describe('ConversationModule', () => {
       const conversation = await repository.seedConversation()
       const inputs: unknown[] = []
       const runtime: import('../../agent/agent-runtime').AgentRuntime = {
+        runVocabularyPractice: async () => {
+          throw new Error('Unused vocabulary practice runtime')
+        },
         runSentencePractice: async () => {
           throw new Error('Unused sentence practice runtime')
         },
