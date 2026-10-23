@@ -197,3 +197,51 @@ it('budgets vocabulary from the bound term and tool definitions rather than a fi
   ).resolves.toEqual({ inputIndex: 0, status: 'staged' })
   expect(analyze).toHaveBeenCalledTimes(1)
 })
+
+it('generates a title through its own permission and ignores all reasoning', async () => {
+  const seen: unknown[] = []
+  const chunks: unknown[] = []
+  const snapshot = createAgentSnapshot({ ...input(), task: 'conversation-title' })
+  const host = new AgentHost(snapshot, () => ({
+    async *streamReply(input) {
+      seen.push(input)
+      yield { type: 'reasoning', delta: 'thought'.repeat(1000) }
+      yield { type: 'text', delta: 'Coffee practice' }
+    }
+  }))
+  expect(snapshot.budget).toEqual({
+    timeoutMs: 120_000,
+    maxModelCalls: 1,
+    maxToolCalls: 0,
+    maxSteps: 1,
+    maxInputChars: 32_768,
+    maxOutputChars: 80
+  })
+  const signal = new AbortController().signal
+  expect(
+    await host.call(
+      'title',
+      'model.title',
+      { systemPrompt: 'Title in English.' },
+      (e) => {
+        chunks.push(e)
+      },
+      signal
+    )
+  ).toEqual({ text: 'Coffee practice' })
+  expect(chunks).toEqual([{ type: 'text', delta: 'Coffee practice' }])
+  expect(seen).toEqual([
+    expect.objectContaining({
+      purpose: 'conversation-title',
+      systemPrompt: 'Title in English.',
+      messages: snapshot.messages
+    })
+  ])
+  await expect(
+    host.call('reply', 'model.reply', { systemPrompt: 'English' }, () => {}, signal)
+  ).rejects.toMatchObject({ code: 'AGENT_PROTOCOL_ERROR' })
+  const conversation = new AgentHost(createAgentSnapshot(input()), vi.fn())
+  await expect(
+    conversation.call('title', 'model.title', { systemPrompt: 'English' }, () => {}, signal)
+  ).rejects.toMatchObject({ code: 'AGENT_PROTOCOL_ERROR' })
+})

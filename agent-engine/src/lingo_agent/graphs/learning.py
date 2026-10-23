@@ -36,6 +36,10 @@ async def execute(
     | ExplorePhraseState
     | ExploreVocabularyState
 ):
+    if snapshot["task"] == "conversation-title":
+        from lingo_agent.graphs.title import execute_title
+
+        return await execute_title(run_id, snapshot, host)
     if snapshot["task"] == "explore-vocabulary":
         from lingo_agent.graphs.explore_vocabulary import execute_explore_vocabulary
 

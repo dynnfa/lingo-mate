@@ -142,6 +142,7 @@ class Server:
                 "ready",
                 capabilities=[
                     "conversation",
+                    "conversation-title",
                     "tool-loop",
                     "vocabulary",
                     "phrase",

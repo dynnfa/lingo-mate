@@ -155,6 +155,19 @@ export class AgentRuntimeError extends Error {
 // Reserve space for the fixed host prompt/operation definitions. Persisted history
 // is never edited; only this execution's copied context is trimmed.
 export function createAgentSnapshot(input: AgentTask): AgentSnapshot {
+  if (input.task === 'conversation-title')
+    return agentSnapshotSchema.parse({
+      ...input,
+      budget: {
+        timeoutMs: 120_000,
+        maxModelCalls: 1,
+        maxToolCalls: 0,
+        maxSteps: 1,
+        maxInputChars: 32_768,
+        maxOutputChars: 80
+      },
+      allowedOperations: ['model.title']
+    })
   if (input.task === 'explore-phrase' || input.task === 'explore-vocabulary')
     return agentSnapshotSchema.parse({
       ...input,
