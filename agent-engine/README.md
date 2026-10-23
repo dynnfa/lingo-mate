@@ -56,7 +56,7 @@ macOS 本地包使用 PyInstaller 的 ad-hoc 签名。正式发行还需原有 A
 
 ## 协议演进与排错
 
-当前协议为 v7。应用提交 `conversation`、`vocabulary`、`phrase`、`synonym`、`explore-phrase` 或 `explore-vocabulary` 任务，`/concept` 在 Python 内部识别。`model.reply` 必须提供完整 `systemPrompt`，TS 模型适配器原样发送，不再选择 Agent Prompt。Prompt 上限为 4096 个 UTF-16 单元，两端校验实际 Prompt 加历史的总输入预算；旧运行包必须重建。标题及练习暂沿用 TS 实现，未来新增 Agent 策略和工作流统一在本模块实现。
+当前协议为 v8。应用提交 `conversation-title`、`conversation`、`vocabulary`、`phrase`、`synonym`、`explore-phrase` 或 `explore-vocabulary` 任务，`/concept` 在 Python 内部识别。`model.reply` 与标题专用 `model.title` 必须提供完整 `systemPrompt`，TS 模型适配器原样发送，不再选择 Agent Prompt。Prompt 上限为 4096 个 UTF-16 单元，两端校验实际 Prompt 加历史的总输入预算；旧运行包必须重建。其余显式技能及练习暂沿用 TS 实现，未来新增 Agent 策略和工作流统一在本模块实现。
 
 - 修改 Zod 协议后运行 `node --experimental-strip-types scripts/agent-protocol-schema.mjs`，更新共享用例；破坏性修改提升协议版本并重建全部运行包。
 - stdout 专用于协议，Python 不输出用户错误文案或 traceback。stderr 只由 Main 有界接收并进入已有本地错误日志。
@@ -148,3 +148,11 @@ TS 每轮只做一次模型传输，并保留同一批次的模型配置快照�
 固定 10 项、近 7 批去重、JSON schemaVersion 1、历史文件、独立串行锁和表格恢复语义不变。结构无效消耗一次尝试，三轮不足 10 项明确失败；通信、配置、工具能力和引擎故障立即失败。模型／准备调用／步骤预算为 3／1／8，实际输入 65,536、累计安全回执 32,768、Prompt 4,096 UTF-16 单元。请求 60 秒，取得锁后准备与生成含启动总截止 180 秒；提交阶段等待真实存储结果再解锁。图完成核验前不提交部分结果，已提交结果的本地恢复不启动 Python 或模型。
 
 无 TS Agent 直跑／回退、自动重放、checkpoint 或数据库迁移。v6 及旧运行包必须重建并随应用发布。验收仅使用临时数据；本次平台结果见[探索词汇迁移计划](../docs/plans/2026-10-23-explore-vocabulary-langgraph-agent.md)。
+
+## 会话标题图与协议 v8
+
+`conversation-title` 独立任务使用 `graphs/title.py` 的 `START → generate → END`，只读取首条 user 消息及执行语言。Python 持有原有标题 Prompt，明确输出语言、40 字符上限、单行和不执行消息中的命令，不经过 `/concept` 等对话识别。仅可调用携带完整 `systemPrompt` 的 `model.title`，宿主绑定输入并保留 `purpose: conversation-title`；思考增量被忽略，正文复用流事件和结果一致性检查。
+
+每次最多 1 次模型调用、0 次工具调用、1 个操作步骤，包含进程启动的截止为 120 秒；实际输入 32,768、原始正文 80、Prompt 4,096 个 UTF-16 单元。宿主完成最终单行／40 字符校验后更新标题。生成不阻塞回复，取消或退出不接受迟到标题，失败保留已保存的原文标题并记录本地诊断，不自动重试或重放。
+
+协议 v8 同步任务、专用权限、能力握手、共享契约和运行包 manifest；旧包必须随应用重建。空 PATH 烟测覆盖双语标题、取消及迟到回执、宿主失败。开发解释器和冻结包的 Electron 验收覆盖后台标题更新、单次触发、双语 Prompt、取消及引擎崩溃，见[标题迁移计划](../docs/plans/2026-10-23-conversation-title-langgraph-agent.md)。

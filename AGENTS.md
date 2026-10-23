@@ -10,7 +10,7 @@ Lingo Mate 是一个桌面端语言学习助手 Agent。它通过对话、记忆
 2. React 用户界面层
 3. Agent Engine 核心能力层（Python 策略与编排、TypeScript 宿主能力）
 
-Python 是唯一 Agent 运行时；普通对话、`/concept`、`/vocabulary`、`/phrase`、`/synonym`、`/explore-phrase` 与 `/explore-vocabulary` 始终经过 Python，任务识别、Prompt 与执行流程由 Python 持有。未来新增 Agent 策略和工作流统一在 `agent-engine/` 实现，TypeScript 不再维护并行 Agent 执行路径。其余现有显式技能、标题及练习暂沿用 TS 实现，后续迁移。启动、协议或执行故障必须明确失败，不得静默回退或重放失败请求。架构边界见 [Python Agent ADR](docs/adr/2026-10-21-python-langgraph-agent-engine.md)。
+Python 是唯一 Agent 运行时；普通对话、会话标题生成、`/concept`、`/vocabulary`、`/phrase`、`/synonym`、`/explore-phrase` 与 `/explore-vocabulary` 始终经过 Python，任务识别、Prompt 与执行流程由 Python 持有。未来新增 Agent 策略和工作流统一在 `agent-engine/` 实现，TypeScript 不再维护并行 Agent 执行路径。其余现有显式技能及练习暂沿用 TS 实现，后续迁移。启动、协议或执行故障必须明确失败，不得静默回退或重放失败请求。架构边界见 [Python Agent ADR](docs/adr/2026-10-21-python-langgraph-agent-engine.md)。
 
 ## 目录职责
 
@@ -23,7 +23,7 @@ src/
 │   ├── llm/        # 模型客户端、模型配置与流式响应
 │   ├── memory/     # 规划模块，尚未实现：长期学习记忆与检索
 │   ├── tools/      # Agent 工具定义与执行
-│   ├── prompt/     # 尚未迁移的技能、标题及练习 Prompt
+│   ├── prompt/     # 尚未迁移的技能及练习 Prompt
 │   ├── learning/   # 语言学习领域逻辑
 │   └── conversation/ # 会话模型、消息流与上下文组装
 ├── database/       # SQLite schema、迁移、连接与数据访问
@@ -90,7 +90,7 @@ src/core/
 ├── llm/            # 模型配置、传输适配和流式响应
 ├── memory/         # 规划模块，尚未实现：长期学习记忆与检索
 ├── tools/          # Agent 工具定义与执行
-├── prompt/         # 尚未迁移的技能、标题及练习 Prompt
+├── prompt/         # 尚未迁移的技能及练习 Prompt
 ├── learning/       # 语言学习领域逻辑
 └── conversation/   # 会话模型、消息流和上下文组装
 ```
@@ -105,7 +105,7 @@ src/core/
 
 - Main 使用固定可执行路径、`shell: false` 和环境白名单启动进程；Renderer 不得指定命令、路径或环境。生产运行包不依赖系统 Python、uv 或 PATH。
 - Main 与 Python 通过私有 UTF-8 JSONL 管道通信，stdout 专用于协议；stderr 仅由 Main 有界接收并写入本地诊断日志，不进入 Renderer 或控制台。
-- Python 不得接收 API Key、数据库连接信息或外层会话/消息 ID；宿主调用必须经过白名单、运行归属及预算校验。生产普通对话仅开放携带 `systemPrompt` 的 `model.reply`；词汇任务另开放 `vocabulary.prepare` 与携带 `systemPrompt`、绑定词项索引的 `model.vocabulary`；短语任务仅开放 `phrase.prepare` 与 `model.phrase`，同样通过绑定索引和完整 `systemPrompt` 分析。分析内容与入库元数据留在宿主；Prompt 上限为 4096 个 UTF-16 单元，宿主与 Python 均校验输入预算（对话为 Prompt 加历史；词汇及短语为 Prompt、绑定词项与工具定义）。词汇及短语每批最多 20 项、并发 2、分析窗口 120 秒，硬截止 180 秒；图完成核验后才由宿主同步提交。近义词任务独立开放 `synonym.prepare`、`model.synonym`、`synonym.apply` 和 `synonym.finish`，仅交换绑定索引、轮次、完整 Prompt 与安全回执，完整模型消息和工具参数／结果留在宿主。Python 顺序驱动多轮工具流程，宿主校验待执行决策、查询授权和逐词事务；已提交词在取消或故障后保留。近义词每批最多 20 项、每词 60 秒／52 轮／50 页，取得串行执行权后总硬截止 180 秒（包含启动）；模型／非模型宿主调用／步骤预算为 1040／1061／2200，单轮实际模型输入 65,536、累计安全回执 524,288 UTF-16 单元。词汇和短语预算保持原样。探索短语任务仅开放 `explore-phrase.prepare` 与 `model.explore-phrase`，Python 持有完整 Prompt 和最多三轮串行补足；TS 保留最近 7 批历史、候选校验与内容。Python 只取得轮次、已接受数量和输入大小回执，不接收历史与候选正文。每批固定 10 项，最多 3 次模型调用／1 次准备调用／8 个步骤，单次请求 60 秒，取得串行锁后准备与生成总截止 180 秒（包含启动）；实际输入 65,536、累计安全回执 32,768 UTF-16 单元。核验图终态且凑齐 10 项后才原子替换 JSON 历史；提交阶段等待实际存储结果再释放锁。探索词汇使用独立的 `explore-vocabulary.prepare` 与 `model.explore-vocabulary`，由 Python 持有 `explore-vocabulary-tools-v1` Prompt 和独立三轮补足图；宿主保留单词词形、规范化、去重及完整词形例句校验。其计数回执、10 项、7 批历史、调用与字符预算、截止时间及提交边界与探索短语相同；两者的权限、锁、历史文件和恢复身份相互隔离。测试扩展不等于生产授权。
+- Python 不得接收 API Key、数据库连接信息或外层会话/消息 ID；宿主调用必须经过白名单、运行归属及预算校验。生产普通对话仅开放携带 `systemPrompt` 的 `model.reply`；独立 `conversation-title` 任务仅开放 `model.title`，Python 持有标题 Prompt 和单节点图，宿主忽略思考并以 `conversation-title` 用途调用模型；只携带首条 user 消息，最多 1 次模型调用、0 次工具调用、1 个操作步骤，含启动总截止 120 秒，实际输入／原始正文上限为 32,768／80 个 UTF-16 单元，TS 仍校验最多 40 字符的单行标题并保存；词汇任务另开放 `vocabulary.prepare` 与携带 `systemPrompt`、绑定词项索引的 `model.vocabulary`；短语任务仅开放 `phrase.prepare` 与 `model.phrase`，同样通过绑定索引和完整 `systemPrompt` 分析。分析内容与入库元数据留在宿主；Prompt 上限为 4096 个 UTF-16 单元，宿主与 Python 均校验输入预算（对话为 Prompt 加历史；词汇及短语为 Prompt、绑定词项与工具定义）。词汇及短语每批最多 20 项、并发 2、分析窗口 120 秒，硬截止 180 秒；图完成核验后才由宿主同步提交。近义词任务独立开放 `synonym.prepare`、`model.synonym`、`synonym.apply` 和 `synonym.finish`，仅交换绑定索引、轮次、完整 Prompt 与安全回执，完整模型消息和工具参数／结果留在宿主。Python 顺序驱动多轮工具流程，宿主校验待执行决策、查询授权和逐词事务；已提交词在取消或故障后保留。近义词每批最多 20 项、每词 60 秒／52 轮／50 页，取得串行执行权后总硬截止 180 秒（包含启动）；模型／非模型宿主调用／步骤预算为 1040／1061／2200，单轮实际模型输入 65,536、累计安全回执 524,288 UTF-16 单元。词汇和短语预算保持原样。探索短语任务仅开放 `explore-phrase.prepare` 与 `model.explore-phrase`，Python 持有完整 Prompt 和最多三轮串行补足；TS 保留最近 7 批历史、候选校验与内容。Python 只取得轮次、已接受数量和输入大小回执，不接收历史与候选正文。每批固定 10 项，最多 3 次模型调用／1 次准备调用／8 个步骤，单次请求 60 秒，取得串行锁后准备与生成总截止 180 秒（包含启动）；实际输入 65,536、累计安全回执 32,768 UTF-16 单元。核验图终态且凑齐 10 项后才原子替换 JSON 历史；提交阶段等待实际存储结果再释放锁。探索词汇使用独立的 `explore-vocabulary.prepare` 与 `model.explore-vocabulary`，由 Python 持有 `explore-vocabulary-tools-v1` Prompt 和独立三轮补足图；宿主保留单词词形、规范化、去重及完整词形例句校验。其计数回执、10 项、7 批历史、调用与字符预算、截止时间及提交边界与探索短语相同；两者的权限、锁、历史文件和恢复身份相互隔离。测试扩展不等于生产授权。
 - 协议唯一来源为 `src/core/agent/agent-protocol.ts` 中的 Zod schema。`agent-engine/src/lingo_agent/protocol/schema.json` 为生成物，不得手改；协议变更需同步共享契约用例，破坏性变更还需提升协议版本、同步握手与运行包 manifest 并重建运行包。
 
 开发环境、协议演进、构建与分发细节见 [Agent Engine README](agent-engine/README.md)。
@@ -160,7 +160,8 @@ React Renderer -> Preload API -> Electron Main -> TypeScript Core
 - 测试应通过公开接口验证行为，避免绑定私有实现细节；涉及 LLM 时使用可控替身验证应用逻辑，不依赖真实模型输出。
 - 不改变行为的重构优先复用现有测试；覆盖不足时先补充行为测试。
 - 纯样式、文案、文档及探索性原型不强制 TDD。其他不适合测试先行的情况，应说明原因和替代验证方式。
-- 完成后运行相关测试；按影响范围运行 `pnpm test`，涉及 Electron 端到端行为时运行 `pnpm test:electron`。
+- 完成后运行相关测试；按影响范围运行 `pnpm test`。涉及 Electron 端到端行为时，须遵循下述 E2E 测试许可规则。
+- 执行任何 E2E（端到端）测试前，必须先询问用户，并取得明确许可后才能执行；此规则适用于 `pnpm test:electron` 及其他直接或间接启动 E2E 测试的命令，不得通过其他命令绕过许可要求。用户不允许执行或尚未明确许可时，不执行 E2E 测试，默认 E2E 没有问题，不将未执行 E2E 视为阻塞项；交付时应如实注明“E2E 未执行，按约定默认无问题”，不得表述为已执行或测试通过。
 
 ### 测试文件组织
 
@@ -209,7 +210,7 @@ pnpm agent:smoke
 
 PyInstaller 运行包必须在目标 OS/CPU 原生构建；安装布局验证及跨平台验收步骤见 `agent-engine/README.md`，不能以单机检查通过代替其他平台验收。
 
-涉及 Electron 端到端行为时运行：
+涉及 Electron 端到端行为时，先询问用户并取得明确许可，再运行（未获许可时按上述 E2E 测试许可规则处理）：
 
 ```bash
 pnpm test:electron

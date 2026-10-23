@@ -189,12 +189,7 @@ describe('ConversationModule', () => {
           yield textEvent('graph reply')
         }
       }
-      const model = {
-        streamReply: vi.fn(() => {
-          throw new Error('Legacy reply path used')
-        })
-      }
-      const module = new ConversationModule(model, repository, runtime)
+      const module = new ConversationModule(repository, runtime)
       const events: ConversationEvent[] = []
       const accepted = await module.sendMessage(
         { requestId: REQUEST_ID, sessionId: conversation.sessionId, text: content },
@@ -216,7 +211,6 @@ describe('ConversationModule', () => {
       expect(
         events.filter((e) => ['completed', 'cancelled', 'failed'].includes(e.type))
       ).toHaveLength(1)
-      expect(model.streamReply).not.toHaveBeenCalled()
     }
   )
 

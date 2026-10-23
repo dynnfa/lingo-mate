@@ -23,9 +23,8 @@ import type {
 } from '../../shared/conversation'
 import { runConversationSkillInputSchema } from '../../shared/conversation'
 import type { SupportedLocale, TargetLanguage } from '../../shared/preferences'
-import type { LanguageModel, ModelMessage } from '../llm/language-model'
+import type { ModelMessage } from '../llm/language-model'
 import { ModelConfigValidationError, ModelNotConfiguredError } from '../llm/model-config'
-import { conversationTitleSystemMessage } from '../prompt/conversation-title'
 import { VocabularyError } from '../learning/vocabulary/parse-vocabulary-input'
 import { PhraseError } from '../learning/phrase/parse-phrase-input'
 import { ExplorePhraseError } from '../learning/explore-phrase/explore-phrase-error'
@@ -136,7 +135,6 @@ export class ConversationModule {
   >()
 
   constructor(
-    private readonly model: LanguageModel,
     private readonly repository: ConversationRepository,
     private readonly agentRuntime: AgentRuntime,
     // 每次生成开始时解析当前语言配置并显式传给模型，语言切换不重建本模块。
@@ -775,10 +773,11 @@ export class ConversationModule {
     const signal = active.controller.signal
     let title = ''
     try {
-      for await (const event of this.model.streamReply({
+      for await (const event of this.agentRuntime.stream({
         messages: [{ role: 'user', content: message.content }],
-        systemPrompt: conversationTitleSystemMessage(active.languages.outputLanguage),
-        purpose: 'conversation-title',
+        sessionId: message.sessionId,
+        task: 'conversation-title',
+        ...active.languages,
         signal
       })) {
         signal.throwIfAborted()
@@ -791,6 +790,7 @@ export class ConversationModule {
     } catch (error) {
       signal.throwIfAborted()
       if (
+        error instanceof AgentRuntimeError ||
         error instanceof ModelNotConfiguredError ||
         error instanceof ModelConfigValidationError ||
         error instanceof ModelRequestError
