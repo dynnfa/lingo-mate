@@ -522,7 +522,6 @@ app.whenReady().then(() => {
     [exploreVocabularySkill.skillId, exploreVocabularySkill]
   ])
   conversationModule = new ConversationModule(
-    conversationModel,
     conversationRepository,
     agentRuntime,
     resolveLanguages,

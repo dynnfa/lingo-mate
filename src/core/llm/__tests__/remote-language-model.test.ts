@@ -1,4 +1,3 @@
-import { conversationTitleSystemMessage } from '../../prompt/conversation-title'
 import { getEventListeners } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RemoteLanguageModel } from '../remote-language-model'
@@ -190,7 +189,7 @@ describe('RemoteLanguageModel protocol and lifecycle', () => {
       await collect(
         new RemoteLanguageModel(CONFIG, 1_000, createClient).streamReply({
           messages: [{ role: 'user', content: '/concept coffee' }],
-          systemPrompt: conversationTitleSystemMessage(outputLanguage),
+          systemPrompt: `Return only the title. Write the title in ${outputLanguage === 'en' ? 'English (en)' : 'Simplified Chinese (zh-CN)'}.`,
           purpose: 'conversation-title',
           signal: new AbortController().signal
         })

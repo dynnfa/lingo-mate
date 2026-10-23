@@ -56,3 +56,14 @@ it('gives vocabulary exploration its own bounded operations without forwarding b
     maxOutputChars: 32768
   })
 })
+
+it('keeps the complete first skill message including its command prefix for a title', () => {
+  const content = `/vocabulary ${'x'.repeat(4000)}`
+  const snapshot = createAgentSnapshot({
+    task: 'conversation-title',
+    messages: [{ role: 'user', content }],
+    outputLanguage: 'en',
+    targetLanguage: 'en'
+  })
+  expect(snapshot.messages).toEqual([{ role: 'user', content }])
+})

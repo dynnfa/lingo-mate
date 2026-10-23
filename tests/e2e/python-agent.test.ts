@@ -8,6 +8,7 @@ import {
   writeLocalePreference,
   writeModelsConfig
 } from './helpers'
+import { startTitleServer } from '../integration/fixtures/title-server'
 import { startConceptServer } from '../integration/fixtures/concept-server'
 
 function childPid(parent: number): number | undefined {
@@ -118,4 +119,102 @@ for (const target of ['development', 'bundled', 'packaged']) {
       if (pid) expect(() => process.kill(pid!, 0)).toThrow()
     })
   })
+}
+
+for (const agentBundle of [false, true]) {
+  for (const locale of ['zh-CN', 'en'] as const) {
+    test(`Python title ${agentBundle ? 'bundled' : 'development'} ${locale}: independent background update`, async () => {
+      const server = await startTitleServer()
+      try {
+        await withTempUserData(async (userData) => {
+          await writeLocalePreference(userData, locale)
+          await writeModelsConfig(userData, server.baseUrl, 'title-fixture')
+          const app = await launchApp(userData, { model: 'remote', agentBundle })
+          try {
+            const window = await app.firstWindow()
+            await waitForReady(window)
+            await window.fill('#message', '/concept coffee')
+            await window.press('#message', 'Enter')
+            await expect(window.locator('.status')).toHaveText(
+              locale === 'en' ? 'Reply complete' : '回复完成',
+              { timeout: 40_000 }
+            )
+            await expect.poll(() => server.titles.length).toBe(1)
+            const title = (): Promise<string | null | undefined> =>
+              window.evaluate(async () => {
+                const listed = await window.api.conversation.list()
+                return listed.status === 'ok' ? listed.conversations[0]?.title : undefined
+              })
+            expect(await title()).toBe('/concept coffee')
+            const language = locale === 'en' ? 'English (en)' : 'Simplified Chinese (zh-CN)'
+            expect(server.titles[0].messages[0].content).toContain(`Write the title in ${language}`)
+            expect(server.titles[0].messages).toHaveLength(2)
+            expect(server.titles[0].messages[1]).toEqual({
+              role: 'user',
+              content: '/concept coffee'
+            })
+            server.finishTitle()
+            await expect.poll(title).toBe('Coffee practice')
+            await expect(window.locator('.message.assistant .markdown-message')).toHaveText(
+              'A reply.'
+            )
+            await expect(window.locator('.thinking-preview')).toHaveCount(0)
+            await window.fill('#message', 'Another question')
+            await window.press('#message', 'Enter')
+            await expect(window.locator('.message.assistant')).toHaveCount(2)
+            await expect(window.locator('.status')).toHaveText(
+              locale === 'en' ? 'Reply complete' : '回复完成'
+            )
+            expect(server.titles).toHaveLength(1)
+          } finally {
+            await app.close()
+          }
+        })
+      } finally {
+        await server.close()
+      }
+    })
+  }
+  for (const mode of ['cancel', 'crash'] as const) {
+    test(`Python title ${agentBundle ? 'bundled' : 'development'}: ${mode} preserves input title`, async () => {
+      const server = await startTitleServer(mode === 'cancel')
+      try {
+        await withTempUserData(async (userData) => {
+          await writeLocalePreference(userData, 'en')
+          await writeModelsConfig(userData, server.baseUrl, 'title-fixture')
+          const app = await launchApp(userData, { model: 'remote', agentBundle })
+          try {
+            const window = await app.firstWindow()
+            await waitForReady(window)
+            await window.fill('#message', 'Coffee')
+            await window.press('#message', 'Enter')
+            await expect.poll(() => server.titles.length, { timeout: 40_000 }).toBe(1)
+            await expect.poll(() => server.replies.length).toBe(1)
+            if (mode === 'cancel') {
+              await window.getByRole('button', { name: 'Cancel', exact: true }).click()
+              await expect(window.locator('.status')).toHaveText('Cancelled. You can retry.')
+            } else {
+              await expect(window.locator('.status')).toHaveText('Reply complete')
+              const pid = childPid(app.process().pid!)
+              test.skip(!pid, 'Requires native child process inspection')
+              process.kill(pid!, 'SIGKILL')
+            }
+            await expect.poll(server.titleClosed).toBe(true)
+            server.finishTitle()
+            server.finishReply()
+            const listed = await window.evaluate(() => window.api.conversation.list())
+            expect(listed.status === 'ok' && listed.conversations[0].title).toBe('Coffee')
+            expect(server.titles).toHaveLength(1)
+            await expect(window.locator('.status')).toHaveText(
+              mode === 'cancel' ? 'Cancelled. You can retry.' : 'Reply complete'
+            )
+          } finally {
+            await app.close()
+          }
+        })
+      } finally {
+        await server.close()
+      }
+    })
+  }
 }

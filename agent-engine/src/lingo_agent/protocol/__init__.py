@@ -5,7 +5,7 @@ from typing import Any, cast
 from jsonschema import Draft202012Validator
 
 MAX_FRAME_BYTES = 262_144
-PROTOCOL_VERSION = 7
+PROTOCOL_VERSION = 8
 _validator = Draft202012Validator(json.loads(Path(__file__).with_name("schema.json").read_text()))
 
 
@@ -14,6 +14,7 @@ def _validate_frame(frame: Any) -> None:
     # JSON Schema maxLength uses code points; enforce the wire's UTF-16 budget too.
     if frame["type"] == "host_call" and frame["operation"] in (
         "model.reply",
+        "model.title",
         "model.vocabulary",
         "model.phrase",
         "model.synonym",

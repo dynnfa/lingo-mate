@@ -69,7 +69,7 @@ type AppView = 'conversation' | 'settings' | 'recorded' | 'practice' | 'mistakes
 
 ## 对话技能执行边界
 
-`/phrase` 与 `/vocabulary` 的显式命令入口继续使用现有会话界面和 Preload API；它们不是页面路由。两者的分析 Prompt 和批量执行由 Python / LangGraph 持有，Renderer 仅展示原有阶段、报告和安全错误。词条内容与报告在可信宿主统一提交，不把图状态或内部工具载荷暴露给界面。运行时职责与协议 v7 见 [Python Agent ADR](adr/2026-10-21-python-langgraph-agent-engine.md)。
+`/phrase` 与 `/vocabulary` 的显式命令入口继续使用现有会话界面和 Preload API；它们不是页面路由。两者的分析 Prompt 和批量执行由 Python / LangGraph 持有，Renderer 仅展示原有阶段、报告和安全错误。词条内容与报告在可信宿主统一提交，不把图状态或内部工具载荷暴露给界面。运行时职责与协议 v8 见 [Python Agent ADR](adr/2026-10-21-python-langgraph-agent-engine.md)。
 
 ### 近义词 Agent
 

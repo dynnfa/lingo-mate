@@ -86,7 +86,10 @@ export class AgentHost {
     signal: AbortSignal
   ): Promise<AgentHostResult> {
     signal.throwIfAborted()
-    if (!this.snapshot.allowedOperations.includes(operation) || this.calls.has(callId))
+    if (
+      !this.snapshot.allowedOperations.some((allowed) => allowed === operation) ||
+      this.calls.has(callId)
+    )
       throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
     this.calls.add(callId)
     const parsedArgs = agentCallArgsSchema.safeParse(rawArgs)
@@ -317,7 +320,9 @@ export class AgentHost {
         throw new AgentRuntimeError('AGENT_LIMIT')
       return result
     }
-    if (operation !== 'model.reply') throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+    const isTitle = this.snapshot.task === 'conversation-title'
+    if (operation !== (isTitle ? 'model.title' : 'model.reply'))
+      throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
     const reply = agentReplyArgsSchema.safeParse(args)
     if (!reply.success) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR', { cause: reply.error })
     if (
@@ -333,10 +338,11 @@ export class AgentHost {
     for await (const event of this.model.streamReply({
       messages: this.snapshot.messages.map((m) => ({ ...m })),
       systemPrompt: reply.data.systemPrompt,
-      purpose: 'conversation',
+      purpose: isTitle ? 'conversation-title' : 'conversation',
       signal
     })) {
       signal.throwIfAborted()
+      if (isTitle && event.type !== 'text') continue
       this.outputChars += event.delta.length
       if (this.outputChars > this.snapshot.budget.maxOutputChars)
         throw new AgentRuntimeError('AGENT_LIMIT')

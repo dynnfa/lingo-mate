@@ -126,6 +126,7 @@ export class PythonAgentProcess {
                 !(
                   [
                     'conversation',
+                    'conversation-title',
                     'tool-loop',
                     'vocabulary',
                     'phrase',
