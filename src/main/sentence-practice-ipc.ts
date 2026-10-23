@@ -1,4 +1,5 @@
 import type { WebContents } from 'electron'
+import { AgentRuntimeError } from '../core/agent/agent-runtime'
 import type { RegisterTrustedHandler, TrustedHandlerConfig } from './ipc-guard'
 import type { SupportedLocale, TargetLanguage } from '../shared/preferences'
 import {
@@ -22,6 +23,7 @@ import type { SentencePracticeService } from '../core/learning/sentence-practice
 // 在进程边界把 Core 错误转换为对用户安全的结构：只保留练习协议的
 // 安全错误码，不携带数据库路径、SQL、模型地址或异常堆栈。
 export function toSafeSentencePracticeError(error: unknown): SentencePracticeError {
+  if (error instanceof AgentRuntimeError) return { code: error.code }
   if (error instanceof CoreSentencePracticeError) return { code: error.code }
   if (error instanceof VocabularyError && error.code === 'STORAGE_FAILED') {
     return { code: 'STORAGE_FAILED' }

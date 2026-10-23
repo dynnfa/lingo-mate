@@ -1,3 +1,4 @@
+import { AgentRuntimeError } from '../../core/agent/agent-runtime'
 import { SentencePracticeService } from '../../core/learning/sentence-practice/sentence-practice-service'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { VocabularyError } from '../../core/learning/vocabulary/parse-vocabulary-input'
@@ -482,3 +483,15 @@ describe('sentence practice IPC', () => {
     expect(toSafeSentencePracticeError('str')).toEqual({ code: 'UNKNOWN_ERROR' })
   })
 })
+
+// Engine diagnostics remain local; Renderer receives only stable error codes.
+it.each(['AGENT_UNAVAILABLE', 'AGENT_PROTOCOL_ERROR', 'AGENT_LIMIT', 'AGENT_HOST_ERROR'] as const)(
+  'maps %s to a safe sentence practice error',
+  (code) => {
+    expect(
+      toSafeSentencePracticeError(
+        new AgentRuntimeError(code, { cause: new Error('private diagnostic') })
+      )
+    ).toEqual({ code })
+  }
+)

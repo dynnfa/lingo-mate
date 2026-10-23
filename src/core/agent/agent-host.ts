@@ -2,6 +2,8 @@ import { phraseInsertTools } from '../tools/phrase-tools'
 import { vocabularyInsertTools } from '../learning/vocabulary/vocabulary-insert'
 import type { LanguageModel, ModelStreamEvent } from '../llm/language-model'
 import {
+  sentencePracticePreparedSchema,
+  sentencePracticeCompletionSchema,
   exploreVocabularyModelArgsSchema,
   exploreVocabularyPreparedSchema,
   exploreVocabularyReceiptSchema,
@@ -35,6 +37,7 @@ import {
 } from './agent-protocol'
 import {
   AgentRuntimeError,
+  type SentencePracticeHostOperations,
   type VocabularyHostOperations,
   type PhraseHostOperations,
   type SynonymHostOperations,
@@ -54,6 +57,8 @@ export interface AgentTestOperations {
 }
 
 export class AgentHost {
+  private sentencePrepared = false
+  private sentenceModelStarted = false
   private phrasePrepared?: PhrasePrepared
   private readonly phraseIndices = new Set<number>()
   private prepared?: VocabularyPrepared
@@ -73,7 +78,8 @@ export class AgentHost {
     private readonly phrase?: PhraseHostOperations,
     private readonly synonym?: SynonymHostOperations,
     private readonly explorePhrase?: ExplorePhraseHostOperations,
-    private readonly exploreVocabulary?: ExploreVocabularyHostOperations
+    private readonly exploreVocabulary?: ExploreVocabularyHostOperations,
+    private readonly sentencePractice?: SentencePracticeHostOperations
   ) {
     this.snapshot = structuredClone(snapshot)
   }
@@ -97,6 +103,38 @@ export class AgentHost {
       throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR', { cause: parsedArgs.error })
     const args = parsedArgs.data
     if (this.calls.size > this.snapshot.budget.maxSteps) throw new AgentRuntimeError('AGENT_LIMIT')
+    if (
+      this.snapshot.task === 'sentence-practice-hints' ||
+      this.snapshot.task === 'sentence-practice-review'
+    ) {
+      if (!this.sentencePractice) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+      let result: AgentHostResult
+      if (operation === 'sentence-practice.prepare' && !Object.keys(args).length) {
+        if (this.sentencePrepared) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+        if (++this.toolCalls > this.snapshot.budget.maxToolCalls)
+          throw new AgentRuntimeError('AGENT_LIMIT')
+        this.sentencePrepared = true
+        result = sentencePracticePreparedSchema.parse(this.sentencePractice.prepare())
+      } else if (operation === `model.${this.snapshot.task}`) {
+        if (!this.sentencePrepared || this.sentenceModelStarted)
+          throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+        this.sentenceModelStarted = true
+        if (++this.modelCalls > this.snapshot.budget.maxModelCalls)
+          throw new AgentRuntimeError('AGENT_LIMIT')
+        result = sentencePracticeCompletionSchema.parse(
+          await this.sentencePractice.model(
+            agentReplyArgsSchema.parse(args),
+            signal,
+            this.snapshot.budget.maxInputChars
+          )
+        )
+      } else throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+      signal.throwIfAborted()
+      this.outputChars += JSON.stringify(result).length
+      if (this.outputChars > this.snapshot.budget.maxOutputChars)
+        throw new AgentRuntimeError('AGENT_LIMIT')
+      return result
+    }
     if (this.explorePhrase && this.snapshot.task === 'explore-phrase') {
       let result: AgentHostResult
       if (operation === 'explore-phrase.prepare' && !Object.keys(args).length) {

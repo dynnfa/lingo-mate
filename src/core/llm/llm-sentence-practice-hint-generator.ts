@@ -7,9 +7,9 @@ import {
 import { SentencePracticeError } from '../learning/sentence-practice/parse-sentence-practice-input'
 import type {
   SentenceHint,
-  SentenceHintGenerator
+  SentenceHintGenerator,
+  SentencePracticeHintModel
 } from '../learning/sentence-practice/sentence-practice-models'
-import { sentencePracticeHintsSystemMessage } from '../prompt/sentence-practice-hints'
 import type { RuntimeModelConfig } from './model-config'
 import type { CreateLlmClient } from './llm-client'
 import { completeSentencePracticeJson } from './llm-sentence-practice-completion'
@@ -23,24 +23,23 @@ const hintsPayloadSchema = z.strictObject({
 })
 
 // 造句提示生成适配器：单次完成调用，本地严格校验条数、ID 归属与覆盖。
-export class LlmSentencePracticeHintGenerator implements SentenceHintGenerator {
+export class LlmSentencePracticeHintGenerator implements SentencePracticeHintModel {
   constructor(
     private readonly config: RuntimeModelConfig,
     private readonly timeoutMs: number,
     private readonly createClient: CreateLlmClient
   ) {}
 
-  async generate(input: Parameters<SentenceHintGenerator['generate']>[0]): Promise<SentenceHint[]> {
+  async generate(
+    input: Parameters<SentenceHintGenerator['generate']>[0] & { systemPrompt: string }
+  ): Promise<SentenceHint[]> {
     const entryIds = new Set(input.entries.map((entry) => entry.entryId))
     return completeSentencePracticeJson({
       config: this.config,
       createClient: this.createClient,
       timeoutMs: this.timeoutMs,
       signal: input.signal,
-      systemMessage: sentencePracticeHintsSystemMessage(
-        input.explanationLanguage,
-        input.practiceLanguage
-      ),
+      systemMessage: input.systemPrompt,
       userPayload: { entries: input.entries },
       parse: (value) => {
         const parsed = hintsPayloadSchema.safeParse(value)

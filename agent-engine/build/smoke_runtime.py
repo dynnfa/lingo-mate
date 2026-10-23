@@ -44,7 +44,7 @@ class Client:
         threading.Thread(target=read, daemon=True).start()
 
     def send(self, kind, **payload):
-        data = {"v": 8, "instanceId": self.instance, "type": kind, **payload}
+        data = {"v": 9, "instanceId": self.instance, "type": kind, **payload}
         self.process.stdin.write((json.dumps(data) + "\n").encode())
         self.process.stdin.flush()
 
@@ -62,6 +62,27 @@ class Client:
         return (time.monotonic() - started) * 1000
 
     def run(self, run_id, task="conversation", content="Hi", output_language="zh-CN"):
+        if task in ("sentence-practice-hints", "sentence-practice-review"):
+            self.send(
+                "run",
+                runId=run_id,
+                snapshot={
+                    "task": task,
+                    "messages": [{"role": "user", "content": "Bound sentence practice"}],
+                    "outputLanguage": output_language,
+                    "targetLanguage": "en",
+                    "allowedOperations": ["sentence-practice.prepare", f"model.{task}"],
+                    "budget": {
+                        "timeoutMs": 120000,
+                        "maxModelCalls": 1,
+                        "maxToolCalls": 1,
+                        "maxSteps": 2,
+                        "maxInputChars": 65536,
+                        "maxOutputChars": 1024,
+                    },
+                },
+            )
+            return self.receive("host_call")
         self.send(
             "run",
             runId=run_id,
@@ -151,6 +172,37 @@ with tempfile.TemporaryDirectory(prefix="lingo-bundle-") as cwd:
         else:
             idle_rss_kib = None
             idle_cpu_percent = None
+        for task in ("sentence-practice-hints", "sentence-practice-review"):
+            for locale, language in (("zh-CN", "Simplified Chinese"), ("en", "English")):
+                run_id = f"{task}-{locale}"
+                call = client.run(run_id, task=task, output_language=locale)
+                assert call["operation"] == "sentence-practice.prepare"
+                client.send(
+                    "host_result", runId=run_id, callId=call["callId"], result={"inputChars": 1000}
+                )
+                call = client.receive("host_call")
+                assert call["operation"] == f"model.{task}"
+                assert language in call["args"]["systemPrompt"]
+                assert "English" in call["args"]["systemPrompt"]
+                client.send(
+                    "host_result", runId=run_id, callId=call["callId"], result={"completed": True}
+                )
+                assert client.receive("sentence_practice_result")["result"] == {"completed": True}
+            cancel_id = f"{task}-cancel"
+            call = client.run(cancel_id, task=task)
+            client.send(
+                "host_result", runId=cancel_id, callId=call["callId"], result={"inputChars": 1000}
+            )
+            call = client.receive("host_call")
+            client.send("cancel", runId=cancel_id)
+            client.receive("cancelled")
+            client.send(
+                "host_result", runId=cancel_id, callId=call["callId"], result={"completed": True}
+            )
+            fail_id = f"{task}-failed"
+            call = client.run(fail_id, task=task)
+            client.send("host_error", runId=fail_id, callId=call["callId"], code="AGENT_HOST_ERROR")
+            assert client.receive("error")["code"] == "AGENT_HOST_ERROR"
         for locale, language in (("zh-CN", "Simplified Chinese"), ("en", "English")):
             run_id = f"title-{locale}"
             call = client.run(
@@ -425,6 +477,9 @@ print(
             "checks": [
                 "empty-PATH",
                 "handshake",
+                "sentence-practice-languages",
+                "sentence-practice-cancel-late-result",
+                "sentence-practice-failure",
                 "title-languages",
                 "title-cancel-late-result",
                 "title-failure",
