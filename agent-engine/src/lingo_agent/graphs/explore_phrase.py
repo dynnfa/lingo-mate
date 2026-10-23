@@ -6,6 +6,9 @@ from langgraph.graph import END, START, StateGraph
 from lingo_agent.graphs.common import HostCall, LimitError, chars
 from lingo_agent.prompts import explore_phrase_system_message
 
+ITEM_COUNT = 10
+MAX_ATTEMPTS = 3
+
 
 class ExplorePhraseState(TypedDict):
     acceptedCount: int
@@ -28,7 +31,7 @@ async def execute_explore_phrase(snapshot: dict[str, Any], host: HostCall) -> Ex
         size = result["inputChars"]
         if (
             type(accepted) is not int
-            or not previous <= accepted <= 10
+            or not previous <= accepted <= ITEM_COUNT
             or type(size) is not int
             or not 0 <= size <= 65536
         ):
@@ -49,7 +52,7 @@ async def execute_explore_phrase(snapshot: dict[str, Any], host: HostCall) -> Ex
     async def generate(state: ExplorePhraseState) -> dict[str, Any]:
         attempt = state["attempts"] + 1
         if (
-            attempt > min(3, budget["maxModelCalls"])
+            attempt > min(MAX_ATTEMPTS, budget["maxModelCalls"])
             or attempt + 2 > budget["maxSteps"]
             or state["inputChars"] + chars(prompt) > budget["maxInputChars"]
         ):
@@ -79,7 +82,9 @@ async def execute_explore_phrase(snapshot: dict[str, Any], host: HostCall) -> Ex
     graph.add_conditional_edges(
         "generate",
         lambda state: (
-            "finalize" if state["acceptedCount"] == 10 or state["attempts"] == 3 else "generate"
+            "finalize"
+            if state["acceptedCount"] == ITEM_COUNT or state["attempts"] == MAX_ATTEMPTS
+            else "generate"
         ),
     )
     graph.add_edge("finalize", END)
