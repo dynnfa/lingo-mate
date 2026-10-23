@@ -54,6 +54,7 @@ function setup(response: unknown): {
     complete,
     run: () =>
       reviewer.review({
+        systemPrompt: 'Python-owned prompt. Explain in English.',
         entries: ENTRIES,
         hints: HINTS,
         answer: ANSWER,
@@ -65,19 +66,12 @@ function setup(response: unknown): {
 }
 
 describe('llm sentence practice reviewer', () => {
-  it('returns the validated review and sends explicit language rules', async () => {
+  it('returns the validated review and forwards the Python system prompt', async () => {
     const { run, complete } = setup(finalResponse(JSON.stringify(REVIEW_PAYLOAD)))
     const review = await run()
     expect(review).toEqual(REVIEW_PAYLOAD)
     const [params, context] = complete.mock.calls[0]
-    const system = params.messages[0].content as string
-    // 两种语言显式写入系统指令：解释字段用简体中文，改写字段用英语
-    expect(system).toContain('Simplified Chinese')
-    expect(system).toContain('English')
-    expect(system).toContain(
-      'feedback, explanation and summary must be written in Simplified Chinese'
-    )
-    expect(system).toContain('original, suggestion and revisedAnswer must be written in English')
+    expect(params.messages[0].content).toBe('Python-owned prompt. Explain in English.')
     // 用户消息携带词条、提示与答案
     expect(JSON.parse(params.messages[1].content)).toEqual({
       entries: ENTRIES,
@@ -94,6 +88,7 @@ describe('llm sentence practice reviewer', () => {
     const reviewer = new LlmSentencePracticeReviewer({ configured: false }, 1000, () => client)
     await expect(
       reviewer.review({
+        systemPrompt: 'Python-owned prompt. Explain in English.',
         entries: ENTRIES,
         hints: HINTS,
         answer: ANSWER,
@@ -180,6 +175,7 @@ describe('llm sentence practice reviewer', () => {
     const reviewer = new LlmSentencePracticeReviewer(config, 1000, () => client)
     await expect(
       reviewer.review({
+        systemPrompt: 'Python-owned prompt. Explain in English.',
         entries: ENTRIES,
         hints: HINTS,
         answer: ANSWER,
@@ -196,6 +192,7 @@ describe('llm sentence practice reviewer', () => {
     const timeoutReviewer = new LlmSentencePracticeReviewer(config, 1000, () => timeoutClient)
     await expect(
       timeoutReviewer.review({
+        systemPrompt: 'Python-owned prompt. Explain in English.',
         entries: ENTRIES,
         hints: HINTS,
         answer: ANSWER,

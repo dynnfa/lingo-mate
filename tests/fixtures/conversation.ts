@@ -18,6 +18,9 @@ export function createTestConversationModule(
   return new ConversationModule(
     repository,
     {
+      runSentencePractice: async () => {
+        throw new Error('Unused sentence practice runtime')
+      },
       runPhrase: async () => {
         throw new Error('Unused phrase runtime')
       },

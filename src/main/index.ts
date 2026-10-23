@@ -81,6 +81,10 @@ import { LlmVocabularyPracticeReviewer } from '../core/llm/llm-vocabulary-practi
 import { registerSentencePracticeIpc } from './sentence-practice-ipc'
 import { SentencePracticeService } from '../core/learning/sentence-practice/sentence-practice-service'
 import { SentencePracticeError } from '../core/learning/sentence-practice/parse-sentence-practice-input'
+import {
+  AgentSentencePracticeHintGenerator,
+  AgentSentencePracticeReviewer
+} from '../core/learning/sentence-practice/sentence-practice-agent'
 import { LlmSentencePracticeHintGenerator } from '../core/llm/llm-sentence-practice-hint-generator'
 import { LlmSentencePracticeReviewer } from '../core/llm/llm-sentence-practice-reviewer'
 import { registerPhraseIpc } from './phrase-ipc'
@@ -403,10 +407,13 @@ app.whenReady().then(() => {
     vocabularyRepository,
     () => {
       try {
-        return new LlmSentencePracticeHintGenerator(
-          modelsService.resolveSnapshot(),
-          60_000,
-          createLlmClient
+        return new AgentSentencePracticeHintGenerator(
+          agentRuntime,
+          new LlmSentencePracticeHintGenerator(
+            modelsService.resolveSnapshot(),
+            60_000,
+            createLlmClient
+          )
         )
       } catch (cause) {
         throw toSentencePracticeModelError(cause)
@@ -414,10 +421,9 @@ app.whenReady().then(() => {
     },
     () => {
       try {
-        return new LlmSentencePracticeReviewer(
-          modelsService.resolveSnapshot(),
-          60_000,
-          createLlmClient
+        return new AgentSentencePracticeReviewer(
+          agentRuntime,
+          new LlmSentencePracticeReviewer(modelsService.resolveSnapshot(), 60_000, createLlmClient)
         )
       } catch (cause) {
         throw toSentencePracticeModelError(cause)
