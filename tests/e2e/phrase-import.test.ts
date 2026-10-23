@@ -46,6 +46,7 @@ function readPhraseRows(directory: string): Array<Record<string, string>> {
 }
 
 test('runs /phrase through the frozen Python bundle with localized instructions', async () => {
+  test.setTimeout(60_000)
   const server = await startPhraseServer()
   try {
     await withTempUserData(async (directory) => {
@@ -57,7 +58,8 @@ test('runs /phrase through the frozen Python bundle with localized instructions'
         await waitForReady(window)
         await submitTypedPhrase(window, 'look forward to\nbreak even\nlook forward to')
         await expect.poll(() => server.phrases.length, { timeout: 40_000 }).toBe(2)
-        await expect(window.locator('.message.assistant')).toHaveCount(1, { timeout: 40_000 })
+        await expect(window.locator('.status')).toHaveText('回复完成', { timeout: 40_000 })
+        await expect(window.locator('.message.assistant')).toHaveCount(1)
         expect(readPhraseRows(directory).map((row) => row.phrase)).toEqual([
           'break even',
           'look forward to'

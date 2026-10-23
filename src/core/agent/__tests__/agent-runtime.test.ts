@@ -35,3 +35,24 @@ it('gives exploration its own bounded operations without forwarding business mes
     maxOutputChars: 32768
   })
 })
+
+it('gives vocabulary exploration its own bounded operations without forwarding business messages', () => {
+  const snapshot = createAgentSnapshot({
+    task: 'explore-vocabulary',
+    messages: [{ role: 'user', content: 'Exploration batch' }],
+    outputLanguage: 'en',
+    targetLanguage: 'en'
+  })
+  expect(snapshot.allowedOperations).toEqual([
+    'explore-vocabulary.prepare',
+    'model.explore-vocabulary'
+  ])
+  expect(snapshot.budget).toEqual({
+    timeoutMs: 180000,
+    maxModelCalls: 3,
+    maxToolCalls: 1,
+    maxSteps: 8,
+    maxInputChars: 65536,
+    maxOutputChars: 32768
+  })
+})

@@ -9,6 +9,7 @@ from langgraph.errors import GraphRecursionError
 
 from lingo_agent.graphs.common import LimitError
 from lingo_agent.graphs.explore_phrase import ExplorePhraseState
+from lingo_agent.graphs.explore_vocabulary import ExploreVocabularyState
 from lingo_agent.graphs.learning import execute
 from lingo_agent.graphs.phrase import PhraseState
 from lingo_agent.graphs.synonym import SynonymState
@@ -87,6 +88,12 @@ class Server:
                         runId=run_id,
                         result=cast(ExplorePhraseState, state)["explorePhrase"],
                     )
+                elif snapshot["task"] == "explore-vocabulary":
+                    await self.send(
+                        "explore_vocabulary_result",
+                        runId=run_id,
+                        result=cast(ExploreVocabularyState, state)["exploreVocabulary"],
+                    )
                 elif snapshot["task"] == "synonym":
                     await self.send(
                         "synonym_result", runId=run_id, result=cast(SynonymState, state)["synonym"]
@@ -140,6 +147,7 @@ class Server:
                     "phrase",
                     "synonym",
                     "explore-phrase",
+                    "explore-vocabulary",
                 ],
             )
             while (line := await incoming.get()) is not None:

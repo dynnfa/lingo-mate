@@ -9,10 +9,7 @@ import {
   SUBMIT_EXPLORED_VOCABULARY_TOOL_NAME,
   validateSubmitExploredVocabularyArguments
 } from '../tools/explore-vocabulary-tools'
-import {
-  EXPLORE_VOCABULARY_PROMPT_VERSION,
-  exploreVocabularySystemMessage
-} from '../prompt/explore-vocabulary'
+import { exploreVocabularyUserContent } from '../learning/explore-vocabulary/explore-vocabulary-generator'
 import type { RuntimeModelConfig } from './model-config'
 import { classifyModelRequestError, type CreateLlmClient } from './llm-client'
 import { isUnsupportedToolCall, parseSingleToolCallResponse } from './tool-protocol'
@@ -21,8 +18,8 @@ import { createAbortableOperation } from '../learning/abortable-operation'
 
 const abortableExploreOperation = createAbortableOperation(ExploreVocabularyError)
 
-// /explore-vocabulary 的 LLM 适配器：复用单次工具调用模式。每次请求要求
-// 恰好调用一次 submit_explored_vocabulary，不返回普通文本或 JSON 代码块；
+// /explore-vocabulary 的 LLM 适配器：复用 vocabulary 技能的单次工具调用模式。每次请求
+// 要求恰好调用一次 submit_explored_vocabulary，不返回普通文本或 JSON 代码块；
 // 不支持工具调用的模型返回明确错误，不静默切换为从自然语言解析数据。
 // 用量沿用 vocabulary_analysis operation，由 LlmClient 自动记账。
 export class LlmExploreVocabularyGenerator implements ExploreVocabularyGenerator {
@@ -43,18 +40,10 @@ export class LlmExploreVocabularyGenerator implements ExploreVocabularyGenerator
           {
             model: config.modelId,
             messages: [
-              {
-                role: 'system',
-                content: exploreVocabularySystemMessage(input.explanationLanguage)
-              },
+              { role: 'system', content: input.systemPrompt },
               {
                 role: 'user',
-                content: JSON.stringify({
-                  count: input.count,
-                  wordLanguage: input.wordLanguage,
-                  explanationLanguage: input.explanationLanguage,
-                  excludedTerms: input.excludedTerms
-                })
+                content: exploreVocabularyUserContent(input)
               }
             ],
             tools: exploreVocabularyTools(),
@@ -72,7 +61,7 @@ export class LlmExploreVocabularyGenerator implements ExploreVocabularyGenerator
           throw new ExploreVocabularyError('INVALID_ANALYSIS')
         }
         const candidates = validateSubmitExploredVocabularyArguments(parsed.arguments)
-        // 超量超过本次所需数量按协议错误处理；缺额由模块走补足流程。
+        // 超量超过本次所需数量按协议错误处理；缺额由 Python 图走补足流程。
         if (candidates.length > input.count) {
           throw new ExploreVocabularyError('INVALID_ANALYSIS')
         }
@@ -90,5 +79,3 @@ export class LlmExploreVocabularyGenerator implements ExploreVocabularyGenerator
     })
   }
 }
-
-export { EXPLORE_VOCABULARY_PROMPT_VERSION }

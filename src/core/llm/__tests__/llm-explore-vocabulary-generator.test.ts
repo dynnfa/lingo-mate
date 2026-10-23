@@ -2,8 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LlmExploreVocabularyGenerator } from '../llm-explore-vocabulary-generator'
 import type { CreateLlmClient, LlmClient } from '../llm-client'
 import type { RuntimeModelConfig } from '../model-config'
-import { exploreVocabularySystemMessage } from '../../prompt/explore-vocabulary'
 import type { ExploreVocabularyCandidate } from '../../learning/explore-vocabulary/explore-vocabulary-generator'
+
+const systemPrompt = 'Python-owned prompt: terms and examples in English; explain in zh-CN.'
 
 // 通过工厂注入 stub 客户端：适配器测试只验证请求参数与协议校验语义，
 // 不经过真实 SDK；通信与记账由 llm-client 测试覆盖。
@@ -65,6 +66,7 @@ describe('LlmExploreVocabularyGenerator', () => {
     complete.mockResolvedValue(submitCompletion(items))
 
     const result = await makeGenerator().generate({
+      systemPrompt,
       count: 10,
       wordLanguage: 'en',
       explanationLanguage: 'zh-CN',
@@ -76,7 +78,7 @@ describe('LlmExploreVocabularyGenerator', () => {
     expect(result[0]).toEqual(candidate('gen0'))
     const request = complete.mock.calls[0][0]
     expect(request.messages[0]).toMatchObject({ role: 'system' })
-    expect(request.messages[0].content).toBe(exploreVocabularySystemMessage('zh-CN'))
+    expect(request.messages[0].content).toBe(systemPrompt)
     expect(JSON.parse(request.messages[1].content)).toEqual({
       count: 10,
       wordLanguage: 'en',
@@ -95,6 +97,7 @@ describe('LlmExploreVocabularyGenerator', () => {
     complete.mockResolvedValue(submitCompletion(items))
     await expect(
       makeGenerator().generate({
+        systemPrompt,
         count: 3,
         wordLanguage: 'en',
         explanationLanguage: 'en',
@@ -111,6 +114,7 @@ describe('LlmExploreVocabularyGenerator', () => {
     complete.mockResolvedValue(response)
     await expect(
       makeGenerator().generate({
+        systemPrompt,
         count: 10,
         wordLanguage: 'en',
         explanationLanguage: 'en',
@@ -129,6 +133,7 @@ describe('LlmExploreVocabularyGenerator', () => {
     complete.mockResolvedValue(response)
     await expect(
       makeGenerator().generate({
+        systemPrompt,
         count: 10,
         wordLanguage: 'en',
         explanationLanguage: 'en',
@@ -142,6 +147,7 @@ describe('LlmExploreVocabularyGenerator', () => {
     complete.mockResolvedValueOnce({ choices: [{ message: null }] })
     await expect(
       makeGenerator().generate({
+        systemPrompt,
         count: 10,
         wordLanguage: 'en',
         explanationLanguage: 'en',
@@ -155,6 +161,7 @@ describe('LlmExploreVocabularyGenerator', () => {
     )
     await expect(
       makeGenerator().generate({
+        systemPrompt,
         count: 10,
         wordLanguage: 'en',
         explanationLanguage: 'en',
@@ -170,6 +177,7 @@ describe('LlmExploreVocabularyGenerator', () => {
     )
     await expect(
       unconfigured.generate({
+        systemPrompt,
         count: 10,
         wordLanguage: 'en',
         explanationLanguage: 'en',

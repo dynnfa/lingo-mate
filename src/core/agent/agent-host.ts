@@ -2,6 +2,9 @@ import { phraseInsertTools } from '../tools/phrase-tools'
 import { vocabularyInsertTools } from '../learning/vocabulary/vocabulary-insert'
 import type { LanguageModel, ModelStreamEvent } from '../llm/language-model'
 import {
+  exploreVocabularyModelArgsSchema,
+  exploreVocabularyPreparedSchema,
+  exploreVocabularyReceiptSchema,
   explorePhraseModelArgsSchema,
   explorePhrasePreparedSchema,
   explorePhraseReceiptSchema,
@@ -35,7 +38,8 @@ import {
   type VocabularyHostOperations,
   type PhraseHostOperations,
   type SynonymHostOperations,
-  type ExplorePhraseHostOperations
+  type ExplorePhraseHostOperations,
+  type ExploreVocabularyHostOperations
 } from './agent-runtime'
 
 export interface AgentTestOperations {
@@ -68,7 +72,8 @@ export class AgentHost {
     private readonly vocabulary?: VocabularyHostOperations,
     private readonly phrase?: PhraseHostOperations,
     private readonly synonym?: SynonymHostOperations,
-    private readonly explorePhrase?: ExplorePhraseHostOperations
+    private readonly explorePhrase?: ExplorePhraseHostOperations,
+    private readonly exploreVocabulary?: ExploreVocabularyHostOperations
   ) {
     this.snapshot = structuredClone(snapshot)
   }
@@ -101,6 +106,29 @@ export class AgentHost {
         result = explorePhraseReceiptSchema.parse(
           await this.explorePhrase.model(
             explorePhraseModelArgsSchema.parse(args),
+            signal,
+            this.snapshot.budget.maxInputChars
+          )
+        )
+      } else throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+      signal.throwIfAborted()
+      this.outputChars += JSON.stringify(result).length
+      if (this.outputChars > this.snapshot.budget.maxOutputChars)
+        throw new AgentRuntimeError('AGENT_LIMIT')
+      return result
+    }
+    if (this.exploreVocabulary && this.snapshot.task === 'explore-vocabulary') {
+      let result: AgentHostResult
+      if (operation === 'explore-vocabulary.prepare' && !Object.keys(args).length) {
+        if (++this.toolCalls > this.snapshot.budget.maxToolCalls)
+          throw new AgentRuntimeError('AGENT_LIMIT')
+        result = exploreVocabularyPreparedSchema.parse(this.exploreVocabulary.prepare())
+      } else if (operation === 'model.explore-vocabulary') {
+        if (++this.modelCalls > this.snapshot.budget.maxModelCalls)
+          throw new AgentRuntimeError('AGENT_LIMIT')
+        result = exploreVocabularyReceiptSchema.parse(
+          await this.exploreVocabulary.model(
+            exploreVocabularyModelArgsSchema.parse(args),
             signal,
             this.snapshot.budget.maxInputChars
           )
