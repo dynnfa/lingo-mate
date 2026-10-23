@@ -130,7 +130,8 @@ export class PythonAgentProcess {
                     'vocabulary',
                     'phrase',
                     'synonym',
-                    'explore-phrase'
+                    'explore-phrase',
+                    'explore-vocabulary'
                   ] as const
                 ).every((c) => frame.capabilities.includes(c))
               )

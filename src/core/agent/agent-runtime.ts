@@ -21,7 +21,11 @@ import {
   type ExplorePhrasePrepared,
   type ExplorePhraseReceipt,
   type ExplorePhraseCompletion,
-  type ExplorePhraseModelArgs
+  type ExplorePhraseModelArgs,
+  type ExploreVocabularyPrepared,
+  type ExploreVocabularyReceipt,
+  type ExploreVocabularyCompletion,
+  type ExploreVocabularyModelArgs
 } from './agent-protocol'
 
 export const DEFAULT_AGENT_BUDGET: AgentBudget = {
@@ -109,12 +113,33 @@ export interface ExplorePhraseAgentRuntime {
     host: ExplorePhraseHostOperations
   ): Promise<void>
 }
+export interface ExploreVocabularyHostOperations {
+  prepare(): ExploreVocabularyPrepared
+  model(
+    args: ExploreVocabularyModelArgs,
+    signal: AbortSignal,
+    maxInputChars: number
+  ): Promise<ExploreVocabularyReceipt>
+  verifyCompletion(result: ExploreVocabularyCompletion): void
+}
+export interface ExploreVocabularyAgentRunInput {
+  outputLanguage: string
+  targetLanguage: string
+  signal: AbortSignal
+}
+export interface ExploreVocabularyAgentRuntime {
+  runExploreVocabulary(
+    input: ExploreVocabularyAgentRunInput,
+    host: ExploreVocabularyHostOperations
+  ): Promise<void>
+}
 export interface AgentRuntime
   extends
     VocabularyAgentRuntime,
     PhraseAgentRuntime,
     SynonymAgentRuntime,
-    ExplorePhraseAgentRuntime {
+    ExplorePhraseAgentRuntime,
+    ExploreVocabularyAgentRuntime {
   stream(input: AgentRunInput): AsyncIterable<ModelStreamEvent>
 }
 export class AgentRuntimeError extends Error {
@@ -130,7 +155,7 @@ export class AgentRuntimeError extends Error {
 // Reserve space for the fixed host prompt/operation definitions. Persisted history
 // is never edited; only this execution's copied context is trimmed.
 export function createAgentSnapshot(input: AgentTask): AgentSnapshot {
-  if (input.task === 'explore-phrase')
+  if (input.task === 'explore-phrase' || input.task === 'explore-vocabulary')
     return agentSnapshotSchema.parse({
       ...input,
       budget: {
@@ -141,7 +166,10 @@ export function createAgentSnapshot(input: AgentTask): AgentSnapshot {
         maxInputChars: 65_536,
         maxOutputChars: 32_768
       },
-      allowedOperations: ['explore-phrase.prepare', 'model.explore-phrase']
+      allowedOperations:
+        input.task === 'explore-phrase'
+          ? ['explore-phrase.prepare', 'model.explore-phrase']
+          : ['explore-vocabulary.prepare', 'model.explore-vocabulary']
     })
   if (input.task === 'synonym')
     return agentSnapshotSchema.parse({

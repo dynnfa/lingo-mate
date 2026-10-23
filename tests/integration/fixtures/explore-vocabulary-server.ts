@@ -18,7 +18,9 @@ export interface ExploreVocabularyServer {
 // submit_explored_vocabulary 工具调用（恰好 count 个不重复候选），
 // 供 /explore-vocabulary 技能端到端验证。词条必须符合词形规则：无空格、
 // 无数字，因此用纯字母的二十六进制序号生成唯一单词。
-export async function startExploreVocabularyServer(): Promise<ExploreVocabularyServer> {
+export async function startExploreVocabularyServer(
+  options: { firstCount?: number; hangAtRequest?: number } = {}
+): Promise<ExploreVocabularyServer> {
   const requests: ExploreVocabularyServerRequest[] = []
   let sequence = 0
 
@@ -77,7 +79,11 @@ export async function startExploreVocabularyServer(): Promise<ExploreVocabularyS
       const data = JSON.parse(
         body.messages.find((message) => message.role === 'user')?.content ?? '{}'
       ) as { count?: number; excludedTerms?: string[] }
-      const count = data.count ?? 10
+      if (requests.length === options.hangAtRequest) return
+      const count =
+        requests.length === 1
+          ? Math.min(data.count ?? 10, options.firstCount ?? 10)
+          : (data.count ?? 10)
       const excluded = new Set(data.excludedTerms ?? [])
       const items: Array<{ term: string; explanation: string; example: string }> = []
       while (items.length < count) {

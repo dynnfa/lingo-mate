@@ -1,3 +1,5 @@
+import type { ExploreVocabularyAgentRunInput } from '../../../agent/agent-runtime'
+import { createTestBatchRuntime } from '../../../../../tests/fixtures/python-agent'
 import { describe, expect, it, vi } from 'vitest'
 import type { SupportedLocale } from '../../../../shared/preferences'
 import {
@@ -123,7 +125,7 @@ function makeModule(
       return response
     }
   }
-  return new ExploreVocabularyModule(store, () => generator, undefined, {
+  return new ExploreVocabularyModule(store, () => generator, createTestBatchRuntime(), undefined, {
     requestMs: 60_000,
     totalMs: 180_000
   })
@@ -162,6 +164,7 @@ describe('ExploreVocabularyModule', () => {
     expect(result.batch.items.map((item) => item.term)).toEqual(candidates.map((item) => item.term))
     expect(onGenerate).toHaveBeenCalledTimes(1)
     expect(onGenerate.mock.calls[0][0]).toMatchObject({
+      systemPrompt: expect.stringContaining('Call submit_explored_vocabulary'),
       count: 10,
       wordLanguage: 'en',
       explanationLanguage: 'zh-CN',
@@ -282,10 +285,16 @@ describe('ExploreVocabularyModule', () => {
           reject(new ExploreVocabularyError('CANCELLED'))
         })
     }
-    const module = new ExploreVocabularyModule(store, () => generator, undefined, {
-      requestMs: 60_000,
-      totalMs: 180_000
-    })
+    const module = new ExploreVocabularyModule(
+      store,
+      () => generator,
+      createTestBatchRuntime(),
+      undefined,
+      {
+        requestMs: 60_000,
+        totalMs: 180_000
+      }
+    )
     const result = await module.explore(makeOptions())
     expect(result).toEqual({ outcome: 'cancelled' })
     expect(store.commits).toHaveLength(0)
@@ -317,6 +326,46 @@ describe('ExploreVocabularyModule', () => {
     expect(store.commits[0].options.isProtected).toBe(isProtected)
   })
 
+  it('waits for an in-flight commit before settling cancellation or releasing the lock', async () => {
+    const store = new MemoryStore()
+    let finishCommit!: () => void
+    const originalCommit = store.commit.bind(store)
+    vi.spyOn(store, 'commit').mockImplementationOnce(async (input, options) => {
+      await new Promise<void>((resolve) => {
+        finishCommit = resolve
+      })
+      return originalCommit(input, options)
+    })
+    const onGenerate = vi.fn()
+    const module = makeModule(
+      store,
+      [
+        WORDS.map((word) => candidate(`first${word}`)),
+        WORDS.map((word) => candidate(`second${word}`))
+      ],
+      { onGenerate }
+    )
+    const controller = new AbortController()
+    const settled = vi.fn()
+    const first = module.explore(makeOptions({ signal: controller.signal })).then((result) => {
+      settled(result)
+      return result
+    })
+    await vi.waitFor(() => expect(finishCommit).toBeDefined())
+    controller.abort()
+    const second = module.explore(makeOptions())
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(settled).not.toHaveBeenCalled()
+      expect(onGenerate).toHaveBeenCalledTimes(1)
+    } finally {
+      finishCommit()
+      await Promise.all([first, second])
+    }
+    expect(await first).toMatchObject({ outcome: 'completed' })
+    expect(store.document.batches).toHaveLength(2)
+  })
+
   it('serializes explorations across its own lock without overlapping commits', async () => {
     const store = new MemoryStore()
     const timeline: string[] = []
@@ -341,11 +390,12 @@ describe('ExploreVocabularyModule', () => {
     const module = new ExploreVocabularyModule(
       store,
       () => (which++ === 0 ? firstGenerator : secondGenerator),
+      createTestBatchRuntime(),
       undefined,
       { requestMs: 60_000, totalMs: 180_000 }
     )
     const first = module.explore(makeOptions())
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await vi.waitFor(() => expect(timeline).toEqual(['first-generate-start']), { timeout: 10_000 })
     const second = module.explore(makeOptions())
     await new Promise((resolve) => setTimeout(resolve, 10))
     expect(timeline).toEqual(['first-generate-start'])
@@ -360,4 +410,32 @@ describe('ExploreVocabularyModule', () => {
     ])
     expect(store.document.batches).toHaveLength(2)
   })
+})
+
+it('includes engine startup in the 180 second deadline and aborts an unresponsive runtime', async () => {
+  vi.useFakeTimers()
+  const store = new MemoryStore()
+  let runSignal: AbortSignal | undefined
+  const runExploreVocabulary = vi.fn(async (input: ExploreVocabularyAgentRunInput) => {
+    runSignal = input.signal
+    await new Promise<void>(() => {})
+  })
+  const module = new ExploreVocabularyModule(
+    store,
+    () => {
+      throw new Error('unused')
+    },
+    { runExploreVocabulary }
+  )
+  try {
+    const pending = module.explore(makeOptions())
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'TIMEOUT' })
+    await vi.advanceTimersByTimeAsync(180_000)
+    await rejected
+    expect(runSignal?.aborted).toBe(true)
+    expect(runExploreVocabulary).toHaveBeenCalledTimes(1)
+    expect(store.commits).toHaveLength(0)
+  } finally {
+    vi.useRealTimers()
+  }
 })
