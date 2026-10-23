@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from lingo_agent.graphs.sentence_practice import SentencePracticeState
     from lingo_agent.graphs.synonym import SynonymState
     from lingo_agent.graphs.vocabulary import VocabularyState
+    from lingo_agent.graphs.vocabulary_practice import VocabularyPracticeState
 
 from langgraph.graph import END, START, StateGraph
 
@@ -37,7 +38,12 @@ async def execute(
     | ExplorePhraseState
     | ExploreVocabularyState
     | SentencePracticeState
+    | VocabularyPracticeState
 ):
+    if snapshot["task"] == "vocabulary-practice-review":
+        from lingo_agent.graphs.vocabulary_practice import execute_vocabulary_practice
+
+        return await execute_vocabulary_practice(snapshot, host)
     if snapshot["task"] in ("sentence-practice-hints", "sentence-practice-review"):
         from lingo_agent.graphs.sentence_practice import execute_sentence_practice
 

@@ -1,3 +1,4 @@
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import type { SupportedLocale } from '../../../shared/preferences'
 
 // 发送给模型的单条审查条目：单词与参考释义由 Core 从快照组装，
@@ -23,4 +24,23 @@ export interface VocabularyPracticeReviewer {
     explanationLanguage: SupportedLocale
     signal: AbortSignal
   }): Promise<PracticeReviewOutcome>
+}
+
+// Transport-only model. Complete assistant messages and tool arguments stay in the host.
+export interface VocabularyPracticeModelMessage {
+  role: 'assistant'
+  content?: string | null
+  refusal?: string | null
+  reasoning_content?: string
+  tool_calls?: Array<{
+    id: string
+    type: 'function'
+    function: { name: string; arguments: string }
+  }>
+}
+export interface VocabularyPracticeModel {
+  complete(input: {
+    messages: ChatCompletionMessageParam[]
+    signal: AbortSignal
+  }): Promise<VocabularyPracticeModelMessage>
 }

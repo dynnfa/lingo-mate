@@ -19,6 +19,10 @@ export const VOCABULARY_PRACTICE_CHANNELS = {
 } as const
 
 export const vocabularyPracticeErrorCodeSchema = z.enum([
+  'AGENT_UNAVAILABLE',
+  'AGENT_PROTOCOL_ERROR',
+  'AGENT_LIMIT',
+  'AGENT_HOST_ERROR',
   'UNTRUSTED_SOURCE',
   'INVALID_INPUT',
   'SESSION_NOT_FOUND',

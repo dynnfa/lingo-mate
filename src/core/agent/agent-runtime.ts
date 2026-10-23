@@ -1,6 +1,12 @@
 import type { ModelMessage, ModelStreamEvent } from '../llm/language-model'
 import {
   agentSnapshotSchema,
+  type VocabularyPracticeModelArgs,
+  type VocabularyPracticeApplyArgs,
+  type VocabularyPracticeCorrectArgs,
+  type VocabularyPracticeFinishArgs,
+  type VocabularyPracticeTurn,
+  type VocabularyPracticeCompletion,
   type SentencePracticeTask,
   type SentencePracticePrepared,
   type SentencePracticeCompletion,
@@ -136,6 +142,27 @@ export interface ExploreVocabularyAgentRuntime {
     host: ExploreVocabularyHostOperations
   ): Promise<void>
 }
+export interface VocabularyPracticeHostOperations {
+  prepare(): { inputChars: number }
+  model(
+    args: VocabularyPracticeModelArgs,
+    signal: AbortSignal,
+    maxInputChars: number
+  ): Promise<VocabularyPracticeTurn>
+  apply(args: VocabularyPracticeApplyArgs, signal: AbortSignal): { round: number; applied: true }
+  correct(
+    args: VocabularyPracticeCorrectArgs,
+    signal: AbortSignal
+  ): { round: number; applied: true }
+  finish(args: VocabularyPracticeFinishArgs): VocabularyPracticeCompletion
+  verifyCompletion(result: VocabularyPracticeCompletion): void
+}
+export interface VocabularyPracticeAgentRuntime {
+  runVocabularyPractice(
+    input: VocabularyAgentRunInput,
+    host: VocabularyPracticeHostOperations
+  ): Promise<void>
+}
 export interface SentencePracticeHostOperations {
   prepare(): SentencePracticePrepared
   model(
@@ -158,6 +185,7 @@ export interface SentencePracticeAgentRuntime {
 }
 export interface AgentRuntime
   extends
+    VocabularyPracticeAgentRuntime,
     SentencePracticeAgentRuntime,
     VocabularyAgentRuntime,
     PhraseAgentRuntime,
@@ -179,6 +207,25 @@ export class AgentRuntimeError extends Error {
 // Reserve space for the fixed host prompt/operation definitions. Persisted history
 // is never edited; only this execution's copied context is trimmed.
 export function createAgentSnapshot(input: AgentTask): AgentSnapshot {
+  if (input.task === 'vocabulary-practice-review')
+    return agentSnapshotSchema.parse({
+      ...input,
+      budget: {
+        timeoutMs: 120_000,
+        maxModelCalls: 8,
+        maxToolCalls: 10,
+        maxSteps: 18,
+        maxInputChars: 65_536,
+        maxOutputChars: 4096
+      },
+      allowedOperations: [
+        'vocabulary-practice.prepare',
+        'model.vocabulary-practice-review',
+        'vocabulary-practice.apply',
+        'vocabulary-practice.correct',
+        'vocabulary-practice.finish'
+      ]
+    })
   if (input.task === 'sentence-practice-hints' || input.task === 'sentence-practice-review')
     return agentSnapshotSchema.parse({
       ...input,

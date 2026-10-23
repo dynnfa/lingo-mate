@@ -5,6 +5,9 @@ type CommonErrorKey = (typeof COMMON_ERROR_KEY_ENTRIES)[keyof typeof COMMON_ERRO
 
 type VocabularyPracticeErrorKey =
   | CommonErrorKey
+  | 'errors:generation.agentUnavailable'
+  | 'errors:generation.agentProtocol'
+  | 'errors:generation.agentLimit'
   | 'errors:vocabularyPractice.sessionNotFound'
   | 'errors:vocabularyPractice.busy'
   | 'errors:vocabularyPractice.modelNotConfigured'
@@ -22,6 +25,10 @@ const VOCABULARY_PRACTICE_ERROR_KEYS: Record<
   VocabularyPracticeErrorKey
 > = {
   ...COMMON_ERROR_KEY_ENTRIES,
+  AGENT_UNAVAILABLE: 'errors:generation.agentUnavailable',
+  AGENT_PROTOCOL_ERROR: 'errors:generation.agentProtocol',
+  AGENT_LIMIT: 'errors:generation.agentLimit',
+  AGENT_HOST_ERROR: 'errors:generation.agentProtocol',
   SESSION_NOT_FOUND: 'errors:vocabularyPractice.sessionNotFound',
   BUSY: 'errors:vocabularyPractice.busy',
   MODEL_NOT_CONFIGURED: 'errors:vocabularyPractice.modelNotConfigured',

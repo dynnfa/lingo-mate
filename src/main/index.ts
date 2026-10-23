@@ -77,6 +77,7 @@ import { VocabularyPracticeError } from '../core/learning/vocabulary-practice/pa
 import { VocabularyMistakeQueryService } from '../core/learning/vocabulary-practice/vocabulary-mistake-query-service'
 import { SqliteVocabularyMistakeRepository } from '../database/sqlite-vocabulary-mistake-repository'
 import { registerVocabularyMistakesIpc } from './vocabulary-mistakes-ipc'
+import { AgentVocabularyPracticeReviewer } from '../core/learning/vocabulary-practice/vocabulary-practice-agent'
 import { LlmVocabularyPracticeReviewer } from '../core/llm/llm-vocabulary-practice-reviewer'
 import { registerSentencePracticeIpc } from './sentence-practice-ipc'
 import { SentencePracticeService } from '../core/learning/sentence-practice/sentence-practice-service'
@@ -363,10 +364,13 @@ app.whenReady().then(() => {
     vocabularyRepository,
     () => {
       try {
-        return new LlmVocabularyPracticeReviewer(
-          modelsService.resolveSnapshot(),
-          60_000,
-          createLlmClient
+        return new AgentVocabularyPracticeReviewer(
+          agentRuntime,
+          new LlmVocabularyPracticeReviewer(
+            modelsService.resolveSnapshot(),
+            60_000,
+            createLlmClient
+          )
         )
       } catch (cause) {
         throw new VocabularyPracticeError(

@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import type { LanguageModel, ModelStreamEvent } from '../../core/llm/language-model'
 import { AgentHost, type AgentTestOperations } from '../../core/agent/agent-host'
 import {
+  type VocabularyPracticeHostOperations,
+  type VocabularyPracticeAgentRuntime,
   type SentencePracticeAgentRuntime,
   type SentencePracticeHostOperations,
   AgentRuntimeError,
@@ -23,6 +25,7 @@ import type { AgentFrame } from '../../core/agent/agent-protocol'
 import { PythonAgentProcess } from './python-agent-process'
 
 type BatchTask =
+  | 'vocabulary-practice-review'
   | 'sentence-practice-hints'
   | 'sentence-practice-review'
   | 'vocabulary'
@@ -32,6 +35,7 @@ type BatchTask =
   | 'explore-vocabulary'
 
 interface RunHosts {
+  vocabularyPractice?: VocabularyPracticeHostOperations
   sentencePractice?: SentencePracticeHostOperations
   vocabulary?: VocabularyHostOperations
   phrase?: PhraseHostOperations
@@ -42,6 +46,7 @@ interface RunHosts {
 
 // Batch snapshots still require one message; the batch graphs never read it.
 const BATCH_MESSAGE: Record<BatchTask, string> = {
+  'vocabulary-practice-review': 'Bound vocabulary practice',
   'sentence-practice-hints': 'Bound sentence practice',
   'sentence-practice-review': 'Bound sentence practice',
   vocabulary: 'Vocabulary batch',
@@ -92,6 +97,7 @@ export class PythonAgentRuntime implements AgentRuntime {
 
   async *stream(input: AgentRunInput): AsyncIterable<ModelStreamEvent> {
     if (
+      input.task === 'vocabulary-practice-review' ||
       input.task === 'sentence-practice-hints' ||
       input.task === 'sentence-practice-review' ||
       input.task === 'vocabulary' ||
@@ -102,6 +108,13 @@ export class PythonAgentRuntime implements AgentRuntime {
     )
       throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
     yield* this.run(input)
+  }
+
+  async runVocabularyPractice(
+    input: Parameters<VocabularyPracticeAgentRuntime['runVocabularyPractice']>[0],
+    host: VocabularyPracticeHostOperations
+  ): Promise<void> {
+    await this.runBatch(input, 'vocabulary-practice-review', { vocabularyPractice: host })
   }
 
   async runSentencePractice(
@@ -182,7 +195,8 @@ export class PythonAgentRuntime implements AgentRuntime {
         hosts.synonym,
         hosts.explorePhrase,
         hosts.exploreVocabulary,
-        hosts.sentencePractice
+        hosts.sentencePractice,
+        hosts.vocabularyPractice
       ),
       queue: [],
       wake: () => {},
@@ -248,6 +262,7 @@ export class PythonAgentRuntime implements AgentRuntime {
     }
     const run = this.runs.get(frame.runId)
     if (
+      frame.type === 'vocabulary_practice_result' ||
       frame.type === 'sentence_practice_result' ||
       frame.type === 'vocabulary_result' ||
       frame.type === 'phrase_result' ||
@@ -291,6 +306,7 @@ export class PythonAgentRuntime implements AgentRuntime {
       }
       case 'event':
         if (
+          run.hosts.vocabularyPractice ||
           run.hosts.sentencePractice ||
           run.hosts.vocabulary ||
           run.hosts.phrase ||
@@ -314,6 +330,16 @@ export class PythonAgentRuntime implements AgentRuntime {
         if (frame.event.type === 'text') run.text += frame.event.delta
         run.queue.push(frame.event)
         run.wake()
+        return
+      case 'vocabulary_practice_result':
+        try {
+          if (!run.hosts.vocabularyPractice || run.openCalls.size)
+            throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+          run.hosts.vocabularyPractice.verifyCompletion(frame.result)
+          this.finish(frame.runId, run)
+        } catch (error) {
+          this.finish(frame.runId, run, error)
+        }
         return
       case 'sentence_practice_result':
         try {
@@ -372,6 +398,7 @@ export class PythonAgentRuntime implements AgentRuntime {
         return
       case 'result':
         if (
+          run.hosts.vocabularyPractice ||
           run.hosts.sentencePractice ||
           run.hosts.vocabulary ||
           run.hosts.phrase ||
