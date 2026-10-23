@@ -17,7 +17,9 @@ export interface ExplorePhraseServer {
 // OpenAI 兼容假服务：解析 user 消息中的 count 与 excludedPhrases，返回
 // submit_explored_phrases 工具调用（恰好 count 个不重复候选），
 // 供 /explore-phrase 技能端到端验证。
-export async function startExplorePhraseServer(): Promise<ExplorePhraseServer> {
+export async function startExplorePhraseServer(
+  options: { firstCount?: number; hangAtRequest?: number } = {}
+): Promise<ExplorePhraseServer> {
   const requests: ExplorePhraseServerRequest[] = []
   let sequence = 0
 
@@ -62,7 +64,11 @@ export async function startExplorePhraseServer(): Promise<ExplorePhraseServer> {
       const data = JSON.parse(
         body.messages.find((message) => message.role === 'user')?.content ?? '{}'
       ) as { count?: number; excludedPhrases?: string[] }
-      const count = data.count ?? 10
+      if (requests.length === options.hangAtRequest) return
+      const count =
+        requests.length === 1
+          ? Math.min(data.count ?? 10, options.firstCount ?? 10)
+          : (data.count ?? 10)
       const excluded = new Set(data.excludedPhrases ?? [])
       const items: Array<{ phrase: string; explanation: string; example: string }> = []
       while (items.length < count) {

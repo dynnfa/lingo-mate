@@ -6,7 +6,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 5
+          "const": 6
         },
         "instanceId": {
           "type": "string",
@@ -30,7 +30,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 5
+          "const": 6
         },
         "instanceId": {
           "type": "string",
@@ -42,7 +42,7 @@
           "const": "ready"
         },
         "capabilities": {
-          "maxItems": 5,
+          "maxItems": 6,
           "type": "array",
           "items": {
             "type": "string",
@@ -51,7 +51,8 @@
               "tool-loop",
               "vocabulary",
               "phrase",
-              "synonym"
+              "synonym",
+              "explore-phrase"
             ]
           }
         }
@@ -69,7 +70,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 5
+          "const": 6
         },
         "instanceId": {
           "type": "string",
@@ -142,7 +143,9 @@
                       "synonym.prepare",
                       "model.synonym",
                       "synonym.apply",
-                      "synonym.finish"
+                      "synonym.finish",
+                      "explore-phrase.prepare",
+                      "model.explore-phrase"
                     ]
                   }
                 },
@@ -265,7 +268,9 @@
                       "synonym.prepare",
                       "model.synonym",
                       "synonym.apply",
-                      "synonym.finish"
+                      "synonym.finish",
+                      "explore-phrase.prepare",
+                      "model.explore-phrase"
                     ]
                   }
                 },
@@ -327,6 +332,126 @@
                 "budget"
               ],
               "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "messages": {
+                  "minItems": 1,
+                  "maxItems": 100,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "user",
+                          "assistant"
+                        ]
+                      },
+                      "content": {
+                        "type": "string",
+                        "maxLength": 65536
+                      }
+                    },
+                    "required": [
+                      "role",
+                      "content"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "outputLanguage": {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 35
+                },
+                "targetLanguage": {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 35
+                },
+                "allowedOperations": {
+                  "maxItems": 11,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "model.reply",
+                      "model.decide",
+                      "learning.lookup",
+                      "vocabulary.prepare",
+                      "model.vocabulary",
+                      "phrase.prepare",
+                      "model.phrase",
+                      "synonym.prepare",
+                      "model.synonym",
+                      "synonym.apply",
+                      "synonym.finish",
+                      "explore-phrase.prepare",
+                      "model.explore-phrase"
+                    ]
+                  }
+                },
+                "task": {
+                  "type": "string",
+                  "const": "explore-phrase"
+                },
+                "budget": {
+                  "type": "object",
+                  "properties": {
+                    "timeoutMs": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 180000
+                    },
+                    "maxModelCalls": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 3
+                    },
+                    "maxToolCalls": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "maxSteps": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 8
+                    },
+                    "maxInputChars": {
+                      "type": "integer",
+                      "minimum": 4096,
+                      "maximum": 65536
+                    },
+                    "maxOutputChars": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 32768
+                    }
+                  },
+                  "required": [
+                    "timeoutMs",
+                    "maxModelCalls",
+                    "maxToolCalls",
+                    "maxSteps",
+                    "maxInputChars",
+                    "maxOutputChars"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "messages",
+                "outputLanguage",
+                "targetLanguage",
+                "allowedOperations",
+                "task",
+                "budget"
+              ],
+              "additionalProperties": false
             }
           ]
         }
@@ -347,7 +472,116 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 5
+              "const": 6
+            },
+            "instanceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "runId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "callId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "type": {
+              "type": "string",
+              "const": "host_call"
+            },
+            "operation": {
+              "type": "string",
+              "const": "explore-phrase.prepare"
+            },
+            "args": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "v",
+            "instanceId",
+            "runId",
+            "callId",
+            "type",
+            "operation",
+            "args"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 6
+            },
+            "instanceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "runId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "callId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "type": {
+              "type": "string",
+              "const": "host_call"
+            },
+            "operation": {
+              "type": "string",
+              "const": "model.explore-phrase"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "attempt": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 3
+                },
+                "systemPrompt": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                }
+              },
+              "required": [
+                "attempt",
+                "systemPrompt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "v",
+            "instanceId",
+            "runId",
+            "callId",
+            "type",
+            "operation",
+            "args"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 6
             },
             "instanceId": {
               "type": "string",
@@ -394,7 +628,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 5
+              "const": 6
             },
             "instanceId": {
               "type": "string",
@@ -462,7 +696,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 5
+              "const": 6
             },
             "instanceId": {
               "type": "string",
@@ -532,7 +766,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 5
+              "const": 6
             },
             "instanceId": {
               "type": "string",
@@ -603,7 +837,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 5
+              "const": 6
             },
             "instanceId": {
               "type": "string",
@@ -650,7 +884,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 5
+              "const": 6
             },
             "instanceId": {
               "type": "string",
@@ -712,7 +946,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 5
+              "const": 6
             },
             "instanceId": {
               "type": "string",
@@ -759,7 +993,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 5
+              "const": 6
             },
             "instanceId": {
               "type": "string",
@@ -821,7 +1055,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 5
+              "const": 6
             },
             "instanceId": {
               "type": "string",
@@ -877,7 +1111,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 5
+              "const": 6
             },
             "instanceId": {
               "type": "string",
@@ -946,7 +1180,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 5
+              "const": 6
             },
             "instanceId": {
               "type": "string",
@@ -1004,7 +1238,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 5
+          "const": 6
         },
         "instanceId": {
           "type": "string",
@@ -1513,6 +1747,51 @@
             {
               "type": "object",
               "properties": {
+                "acceptedCount": {
+                  "type": "number",
+                  "const": 0
+                },
+                "inputChars": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65536
+                }
+              },
+              "required": [
+                "acceptedCount",
+                "inputChars"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "attempt": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 3
+                },
+                "acceptedCount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 10
+                },
+                "inputChars": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 65536
+                }
+              },
+              "required": [
+                "attempt",
+                "acceptedCount",
+                "inputChars"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
                 "entries": {
                   "maxItems": 10,
                   "type": "array",
@@ -1545,7 +1824,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 5
+          "const": 6
         },
         "instanceId": {
           "type": "string",
@@ -1591,7 +1870,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 5
+          "const": 6
         },
         "instanceId": {
           "type": "string",
@@ -1655,7 +1934,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 5
+          "const": 6
         },
         "instanceId": {
           "type": "string",
@@ -1713,7 +1992,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 5
+          "const": 6
         },
         "instanceId": {
           "type": "string",
@@ -1743,7 +2022,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 5
+          "const": 6
         },
         "instanceId": {
           "type": "string",
@@ -1778,7 +2057,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 5
+          "const": 6
         },
         "instanceId": {
           "type": "string",
@@ -1827,7 +2106,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 5
+          "const": 6
         },
         "instanceId": {
           "type": "string",
@@ -1876,7 +2155,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 5
+          "const": 6
         },
         "instanceId": {
           "type": "string",
@@ -1916,7 +2195,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 5
+          "const": 6
         },
         "instanceId": {
           "type": "string",
@@ -1965,7 +2244,58 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 5
+          "const": 6
+        },
+        "instanceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "type": "string",
+          "const": "explore_phrase_result"
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "attempts": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3
+            },
+            "acceptedCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10
+            }
+          },
+          "required": [
+            "attempts",
+            "acceptedCount"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "v",
+        "instanceId",
+        "runId",
+        "type",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "number",
+          "const": 6
         },
         "instanceId": {
           "type": "string",
@@ -1995,7 +2325,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 5
+          "const": 6
         },
         "instanceId": {
           "type": "string",
@@ -2019,7 +2349,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 5
+          "const": 6
         },
         "instanceId": {
           "type": "string",

@@ -4,6 +4,7 @@ import json
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
+    from lingo_agent.graphs.explore_phrase import ExplorePhraseState
     from lingo_agent.graphs.phrase import PhraseState
     from lingo_agent.graphs.synonym import SynonymState
     from lingo_agent.graphs.vocabulary import VocabularyState
@@ -26,7 +27,11 @@ from lingo_agent.state import LearningState
 
 async def execute(
     run_id: str, snapshot: dict[str, Any], host: HostCall
-) -> LearningState | VocabularyState | PhraseState | SynonymState:
+) -> LearningState | VocabularyState | PhraseState | SynonymState | ExplorePhraseState:
+    if snapshot["task"] == "explore-phrase":
+        from lingo_agent.graphs.explore_phrase import execute_explore_phrase
+
+        return await execute_explore_phrase(snapshot, host)
     if snapshot["task"] == "synonym":
         from lingo_agent.graphs.synonym import execute_synonym
 

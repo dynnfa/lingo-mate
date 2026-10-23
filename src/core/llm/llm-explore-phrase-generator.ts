@@ -9,7 +9,7 @@ import {
   SUBMIT_EXPLORED_PHRASES_TOOL_NAME,
   validateSubmitExploredPhrasesArguments
 } from '../tools/explore-phrase-tools'
-import { EXPLORE_PHRASE_PROMPT_VERSION, explorePhraseSystemMessage } from '../prompt/explore-phrase'
+import { explorePhraseUserContent } from '../learning/explore-phrase/explore-phrase-generator'
 import type { RuntimeModelConfig } from './model-config'
 import { classifyModelRequestError, type CreateLlmClient } from './llm-client'
 import { isUnsupportedToolCall, parseSingleToolCallResponse } from './tool-protocol'
@@ -40,15 +40,10 @@ export class LlmExplorePhraseGenerator implements ExplorePhraseGenerator {
           {
             model: config.modelId,
             messages: [
-              { role: 'system', content: explorePhraseSystemMessage(input.explanationLanguage) },
+              { role: 'system', content: input.systemPrompt },
               {
                 role: 'user',
-                content: JSON.stringify({
-                  count: input.count,
-                  wordLanguage: input.wordLanguage,
-                  explanationLanguage: input.explanationLanguage,
-                  excludedPhrases: input.excludedPhrases
-                })
+                content: explorePhraseUserContent(input)
               }
             ],
             tools: explorePhraseTools(),
@@ -66,7 +61,7 @@ export class LlmExplorePhraseGenerator implements ExplorePhraseGenerator {
           throw new ExplorePhraseError('INVALID_ANALYSIS')
         }
         const candidates = validateSubmitExploredPhrasesArguments(parsed.arguments)
-        // 超量超过本次所需数量按协议错误处理；缺额由模块走补足流程。
+        // 超量超过本次所需数量按协议错误处理；缺额由 Python 图走补足流程。
         if (candidates.length > input.count) {
           throw new ExplorePhraseError('INVALID_ANALYSIS')
         }
@@ -84,5 +79,3 @@ export class LlmExplorePhraseGenerator implements ExplorePhraseGenerator {
     })
   }
 }
-
-export { EXPLORE_PHRASE_PROMPT_VERSION }
