@@ -38,7 +38,7 @@ pnpm agent:smoke
 pnpm build:unpack
 ```
 
-`build:unpack`、`build:mac`、`build:win` 和 `build:linux` 均先构建原生运行包。PyInstaller 必须在目标 OS/CPU 原生构建；不能通过指定 electron-builder 架构来交叉编译 Python。原始目录在 `agent-engine/dist/<platform>-<arch>/lingo-agent/`，归档位于 `agent-engine/dist/lingo-agent-<platform>-<arch>.tar.gz`，保存执行权限及符号链接。下载 CI 产物后先解压到相应架构目录，再用于桌面打包。生成物全部忽略，不提交仓库。
+`build:unpack`、`build:mac`、`build:win` 和 `build:linux` 均先构建原生运行包。PyInstaller 必须在目标 OS/CPU 原生构建；不能通过指定 electron-builder 架构来交叉编译 Python。原始目录在 `agent-engine/dist/<platform>-<arch>/lingo-agent/`，归档位于 `agent-engine/dist/lingo-agent-<platform>-<arch>.tar.gz`，保存执行权限及符号链接。取得目标平台的归档后先解压到相应架构目录，再用于桌面打包。生成物全部忽略，不提交仓库。
 
 electron-builder 复制该目录至 `resources/agent-engine/`，置于 ASAR 外。manifest 中应用版本、协议、OS 与 CPU 任一不匹配都会安全拒绝启动。应用启动不安装依赖，也不读取 Renderer 指定的命令、路径或环境。
 
@@ -49,8 +49,6 @@ electron-builder 复制该目录至 `resources/agent-engine/`，置于 ASAR 外�
 ```sh
 LINGO_MATE_TEST_PACKAGED=1 pnpm exec playwright test tests/e2e/python-agent.test.ts
 ```
-
-CI 为 macOS arm64/x64、Linux arm64/x64、Windows arm64/x64 配置原生 Python 检查、真实管道集成、生产包烟测、桌面目录构建及 Electron 默认运行时测试。CI 配置见 `.github/workflows/agent-engine.yml`；配置存在不等于对应平台通过。
 
 macOS 本地包使用 PyInstaller 的 ad-hoc 签名。正式发行还需原有 Apple Developer ID、嵌套二进制签名与 notarization 验收；本仓库未配置发行证书，本次未改变 `notarize: false`。Windows 正式发行签名亦需发布环境验证。
 
@@ -75,7 +73,7 @@ macOS 本地包使用 PyInstaller 的 ad-hoc 签名。正式发行还需原有 A
 - 就绪后 RSS 87,136–87,712 KiB（约 85–86 MiB）；随后 0.5 秒采样的空闲 CPU 为 0%。这些是本机有限次观测，不是性能承诺。
 - TypeScript 全量、Python 静态/行为检查与 Electron 结果以最终 plan 实施记录为准。
 
-尚未验收：其余 OS/CPU 的 CI 运行、正式签名/公证及干净机器安装。空 PATH 烟测证明独立运行包不依赖系统 Python，不能代替所有平台的完整安装验收。因此计划保留“实施中”状态。
+尚未验收：其余 OS/CPU 的原生构建与实际运行、正式签名/公证及干净机器安装。空 PATH 烟测证明独立运行包不依赖系统 Python，不能代替所有平台的完整安装验收。因此计划保留“实施中”状态。
 
 ## 参考
 
