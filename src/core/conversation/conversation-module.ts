@@ -766,10 +766,11 @@ export class ConversationModule {
   private prepareConversation(message: StoredMessage): StoredConversation | undefined {
     const draft = this.drafts.get(message.sessionId)
     if (!draft) return undefined
+    const command = /^\/tts\s/u.exec(message.content)
     return {
       ...draft,
-      title: (message.content.startsWith('/tts ')
-        ? message.content.slice(5).replace(/\s+/gu, ' ')
+      title: (command
+        ? message.content.slice(command[0].length).replace(/\s+/gu, ' ')
         : message.content
       )
         .trim()

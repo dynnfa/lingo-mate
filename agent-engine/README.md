@@ -2,7 +2,7 @@
 
 本模块是唯一 Agent 运行时，负责任务识别、Prompt、工具决策与内存中的 LangGraph 编排。会话与消息持久化、语言学习规则、模型凭据、供应商请求和用量统计均由 TypeScript 宿主负责。生产接入普通对话、`/concept`、`/vocabulary`、`/phrase`、`/synonym`、`/explore-phrase`、`/explore-vocabulary` 与句子练习（提示和点评）；模型决策/只读工具循环通过测试扩展验证。无 checkpoint、业务数据库访问、云端 tracing 或模型 SDK 请求。
 
-决策与限制见 [ADR](../docs/adr/2026-10-21-python-langgraph-agent-engine.md)。本文命令与文件路径均以仓库根目录为基准。协议源位于 `src/core/agent/agent-protocol.ts`；生成的 `agent-engine/src/lingo_agent/protocol/schema.json` 随包发布，不能手改。共享契约样例在 `tests/integration/fixtures/agent/protocol-cases.json`。
+架构边界与任务权限约定见 [AGENTS.md](../AGENTS.md)。本文命令与文件路径均以仓库根目录为基准。协议源位于 `src/core/agent/agent-protocol.ts`；生成的 `agent-engine/src/lingo_agent/protocol/schema.json` 随包发布，不能手改。共享契约样例在 `tests/integration/fixtures/agent/protocol-cases.json`。
 
 ## 开发
 
@@ -175,7 +175,7 @@ TS 每轮只做一次模型传输，并保留同一批次的模型配置快照�
 
 模型／非模型宿主调用／步骤上限为 8／10／18；含启动总截止 120 秒、供应商请求 60 秒。每轮实际输入包含完整消息和工具定义，上限 65,536 UTF-16 单元；累计回执／单个 Prompt 上限均为 4,096，单轮原始模型消息上限 65,536。两端校验预算；宿主另行拒绝错序、重复、越权、并发调用和伪造完成。IPC 将开始练习的窗口绑定为 owner，跨窗口无法批改或取消，owner 销毁时中止练习。
 
-协议 v10 同步生成 schema、共享契约、能力握手及运行包 manifest，v9 及旧运行包须随应用重建。空 PATH 烟测覆盖双语全对／标红／补标、取消／迟到回执与宿主故障。不改变数据库结构，不访问真实用户数据库；验收见[词汇练习批改迁移计划](../docs/plans/2026-10-23-vocabulary-practice-langgraph-agent.md)。
+协议 v10 同步生成 schema、共享契约、能力握手及运行包 manifest，v9 及旧运行包须随应用重建。空 PATH 烟测覆盖双语全对／标红／补标、取消／迟到回执与宿主故障。不改变数据库结构，不访问真实用户数据库。
 
 ## 文本转语音图与协议 v11
 
