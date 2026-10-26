@@ -1,9 +1,10 @@
 import { z } from 'zod'
 
-export const AGENT_PROTOCOL_VERSION = 10
+export const AGENT_PROTOCOL_VERSION = 11
 export const MAX_AGENT_SYSTEM_PROMPT_CHARS = 4096
 export const MAX_AGENT_FRAME_BYTES = 262_144
 export const AGENT_OPERATIONS = [
+  'tts.synthesize',
   'vocabulary-practice.prepare',
   'model.vocabulary-practice-review',
   'vocabulary-practice.apply',
@@ -56,6 +57,19 @@ export const sentencePracticeTaskSchema = z.enum([
 ])
 export type SentencePracticeTask = z.infer<typeof sentencePracticeTaskSchema>
 export const agentSnapshotSchema = z.discriminatedUnion('task', [
+  z.strictObject({
+    ...snapshotFields,
+    task: z.literal('tts'),
+    allowedOperations: z.tuple([z.literal('tts.synthesize')]),
+    budget: z.strictObject({
+      timeoutMs: z.literal(180_000),
+      maxModelCalls: z.literal(0),
+      maxToolCalls: z.literal(1),
+      maxSteps: z.literal(1),
+      maxInputChars: z.literal(4096),
+      maxOutputChars: z.literal(1024)
+    })
+  }),
   z.strictObject({
     ...snapshotFields,
     task: z.literal('vocabulary-practice-review'),
@@ -275,6 +289,9 @@ export type ExploreVocabularyCompletion = z.infer<typeof exploreVocabularyComple
 export const sentencePracticePreparedSchema = z.strictObject({
   inputChars: z.number().int().min(0).max(65_536)
 })
+export const ttsCompletionSchema = z.strictObject({ completed: z.literal(true) })
+export type TtsCompletion = z.infer<typeof ttsCompletionSchema>
+
 export const sentencePracticeCompletionSchema = z.strictObject({ completed: z.literal(true) })
 export type SentencePracticePrepared = z.infer<typeof sentencePracticePreparedSchema>
 export type SentencePracticeCompletion = z.infer<typeof sentencePracticeCompletionSchema>
@@ -298,6 +315,7 @@ export const vocabularyPracticeCompletionSchema = z.strictObject({
 export type VocabularyPracticeTurn = z.infer<typeof vocabularyPracticeTurnSchema>
 export type VocabularyPracticeCompletion = z.infer<typeof vocabularyPracticeCompletionSchema>
 export const agentHostResultSchema = z.union([
+  ttsCompletionSchema,
   vocabularyPracticeTurnSchema,
   vocabularyPracticeAppliedSchema,
   vocabularyPracticeCompletionSchema,
@@ -413,6 +431,7 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
     capabilities: z
       .array(
         z.enum([
+          'tts',
           'vocabulary-practice-review',
           'sentence-practice-hints',
           'sentence-practice-review',
@@ -426,10 +445,16 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
           'explore-vocabulary'
         ])
       )
-      .max(11)
+      .max(12)
   }),
   z.strictObject({ ...run, type: z.literal('run'), snapshot: agentSnapshotSchema }),
   z.discriminatedUnion('operation', [
+    z.strictObject({
+      ...call,
+      type: z.literal('host_call'),
+      operation: z.literal('tts.synthesize'),
+      args: z.strictObject({})
+    }),
     z.strictObject({
       ...call,
       type: z.literal('host_call'),
@@ -618,6 +643,7 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
     type: z.literal('vocabulary_practice_result'),
     result: vocabularyPracticeCompletionSchema
   }),
+  z.strictObject({ ...run, type: z.literal('tts_result'), result: ttsCompletionSchema }),
   z.strictObject({ ...run, type: z.literal('cancelled') }),
   z.strictObject({ ...base, type: z.literal('shutdown') }),
   z.strictObject({ ...base, type: z.literal('shutdown_ack') })

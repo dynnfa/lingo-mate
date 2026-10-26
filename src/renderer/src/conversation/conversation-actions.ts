@@ -3,9 +3,9 @@
 // 类型化会话 skill 提交，不作为普通聊天发送。
 
 export type ConversationActionId =
-  'concept' | 'vocabulary' | 'phrase' | 'explore-phrase' | 'explore-vocabulary' | 'synonym'
+  'tts' | 'concept' | 'vocabulary' | 'phrase' | 'explore-phrase' | 'explore-vocabulary' | 'synonym'
 export type SelectedConversationSkillId =
-  'vocabulary' | 'phrase' | 'explore-phrase' | 'explore-vocabulary' | 'synonym'
+  'tts' | 'vocabulary' | 'phrase' | 'explore-phrase' | 'explore-vocabulary' | 'synonym'
 
 export const VOCABULARY_COMMAND_PREFIX = '/vocabulary'
 export const PHRASE_COMMAND_PREFIX = '/phrase'
@@ -15,6 +15,7 @@ export const EXPLORE_VOCABULARY_COMMAND_PREFIX = '/explore-vocabulary'
 // 各技能命令（含斜杠）的前缀与完整命令模式：选择器建立的技能据此校验草稿，
 // 支持直接输入的技能据此判定提交。命令元数据只在此处维护。
 const SKILL_COMMANDS: Record<SelectedConversationSkillId, { prefix: string; pattern: RegExp }> = {
+  tts: { prefix: '/tts', pattern: /^\/tts\s/u },
   synonym: { prefix: '/synonym', pattern: /^\/synonym\s/u },
   'explore-phrase': {
     prefix: EXPLORE_PHRASE_COMMAND_PREFIX,
@@ -29,7 +30,13 @@ const SKILL_COMMANDS: Record<SelectedConversationSkillId, { prefix: string; patt
 }
 
 // 支持直接输入完整命令提交的技能；vocabulary 仍需从选择器选择。
-const TYPED_SKILL_IDS = ['synonym', 'phrase', 'explore-phrase', 'explore-vocabulary'] as const
+const TYPED_SKILL_IDS = [
+  'tts',
+  'synonym',
+  'phrase',
+  'explore-phrase',
+  'explore-vocabulary'
+] as const
 
 // /explore-phrase 与 /explore-vocabulary 是无参数命令：仅允许命令本身加末尾
 // 空白；带任何额外参数的输入都不再是合法命令（由 composer 提示输入无效）。
@@ -58,11 +65,13 @@ export function extractSkillDraft(
   selectedSkillId: SelectedConversationSkillId | null
 ): SkillDraftResult {
   if (selectedSkillId === null) return { status: 'invalid-prefix' }
+  if (draft === SKILL_COMMANDS[selectedSkillId].prefix) return { status: 'empty' }
   const prefix = SKILL_COMMANDS[selectedSkillId].pattern.exec(draft)?.[0]
   if (!prefix) return { status: 'invalid-prefix' }
   // 短语参数支持多行：trim 只去掉首尾空白，行结构与行内空格原样保留。
-  const text = draft.slice(prefix.length).trim()
-  return text ? { status: 'ok', text } : { status: 'empty' }
+  const body = draft.slice(prefix.length)
+  const text = selectedSkillId === 'tts' ? body : body.trim()
+  return text.trim() ? { status: 'ok', text } : { status: 'empty' }
 }
 
 // 提交时的技能判定：优先沿用选择器建立的技能；未选择时，完整输入的
@@ -84,6 +93,8 @@ export function resolveSkillSubmission(
 // 文案 key 显式枚举：类型以 zh-CN 资源为基准，拼错在类型检查阶段暴露，
 // 双语 key 集合一致性由 resources.test.ts 保证。
 export type ConversationActionTextKey =
+  | 'conversation:actionPicker.actions.tts.name'
+  | 'conversation:actionPicker.actions.tts.description'
   | 'conversation:actionPicker.actions.vocabulary.name'
   | 'conversation:actionPicker.actions.vocabulary.description'
   | 'conversation:actionPicker.actions.synonym.name'
@@ -144,6 +155,12 @@ export const CONVERSATION_ACTIONS: readonly ConversationActionMeta[] = [
     command: 'synonym',
     nameKey: 'conversation:actionPicker.actions.synonym.name',
     descriptionKey: 'conversation:actionPicker.actions.synonym.description'
+  },
+  {
+    id: 'tts',
+    command: 'tts',
+    nameKey: 'conversation:actionPicker.actions.tts.name',
+    descriptionKey: 'conversation:actionPicker.actions.tts.description'
   }
 ]
 

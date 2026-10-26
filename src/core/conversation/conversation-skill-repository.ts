@@ -1,4 +1,5 @@
 import type { SynonymBatch } from '../../shared/synonym'
+import type { TtsReport } from '../../shared/speech'
 import type { SupportedLocale } from '../../shared/preferences'
 import type { RunConversationSkillInput } from '../../shared/conversation'
 import type { VocabularyBatch } from '../../shared/vocabulary'
@@ -30,6 +31,7 @@ interface StoredSkillExecutionBase {
 
 // 技能执行按 skillId 判别：报告结构与后续分派依赖该字段，不混用各技能的报告。
 export type StoredConversationSkillExecution =
+  | (StoredSkillExecutionBase & { skillId: 'tts'; batch?: TtsReport })
   | (StoredSkillExecutionBase & { skillId: 'vocabulary'; batch?: VocabularyBatch })
   | (StoredSkillExecutionBase & { skillId: 'phrase'; batch?: PhraseBatch })
   | (StoredSkillExecutionBase & { skillId: 'synonym'; batch?: SynonymBatch })

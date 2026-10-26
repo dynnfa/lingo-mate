@@ -259,6 +259,7 @@ function installApiMock(
 
   const api: LingoMateApi = {
     speech: {
+      loadConversationAudio: async () => ({ status: 'error', error: { code: 'AUDIO_NOT_FOUND' } }),
       synthesize: async () => ({ status: 'error', error: { code: 'NOT_INSTALLED' } }),
       cancel: async () => ({ status: 'ok' }),
       getSettings: async () => ({ status: 'ok', settings: { voice: 'af_bella', speed: 1 } }),

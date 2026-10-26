@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type SyntheticEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { translateConversationStatus } from './status-messages'
+import { TtsMessage } from './TtsMessage'
 import { MarkdownMessage } from './MarkdownMessage'
 import { ThinkingPreview } from './ThinkingPreview'
 import { ACTION_PICKER_ID, ConversationActionPicker } from './ConversationActionPicker'
@@ -19,6 +20,7 @@ import {
 import type { ConversationStatus, DisplayMessage } from './conversation-state'
 
 interface ConversationPanelProps {
+  sessionId?: string
   messages: DisplayMessage[]
   status: ConversationStatus
   generating: boolean
@@ -40,6 +42,7 @@ type PickerDismissal = 'none' | 'soft' | 'latched'
 // 右侧对话区：消息与状态全部来自 props，未发送草稿归本组件所有；
 // 回调只表达交互意图，异步结果经 Controller 的状态投影反馈回来。
 export function ConversationPanel({
+  sessionId,
   messages,
   status,
   generating,
@@ -233,11 +236,13 @@ export function ConversationPanel({
       if (parsed.status !== 'ok') {
         setComposerError(
           t(
-            activeSkillId === 'synonym'
-              ? 'conversation:composer.synonymRequired'
-              : activeSkillId === 'phrase'
-                ? 'conversation:composer.phraseRequired'
-                : 'conversation:composer.vocabularyRequired'
+            activeSkillId === 'tts'
+              ? 'conversation:composer.ttsRequired'
+              : activeSkillId === 'synonym'
+                ? 'conversation:composer.synonymRequired'
+                : activeSkillId === 'phrase'
+                  ? 'conversation:composer.phraseRequired'
+                  : 'conversation:composer.vocabularyRequired'
           )
         )
         return
@@ -309,7 +314,16 @@ export function ConversationPanel({
                   reasoning={message.reasoning}
                 />
               ) : null}
-              <MarkdownMessage content={message.content} generating={message.streaming} />
+              {message.speech && sessionId ? (
+                <TtsMessage
+                  sessionId={sessionId}
+                  messageId={message.messageId}
+                  text={message.content}
+                  speech={message.speech}
+                />
+              ) : (
+                <MarkdownMessage content={message.content} generating={message.streaming} />
+              )}
               {message.role === 'user' && message.retryable && !composerLocked ? (
                 <button
                   className="secondary retry"
@@ -362,15 +376,17 @@ export function ConversationPanel({
             }}
             onKeyDown={handleInputKeyDown}
             placeholder={
-              activeSkillId === 'synonym'
-                ? t('conversation:composer.synonymHint')
-                : activeSkillId === 'phrase'
-                  ? t('conversation:composer.phraseHint')
-                  : activeSkillId === 'explore-phrase'
-                    ? t('conversation:composer.explorePhraseHint')
-                    : activeSkillId === 'explore-vocabulary'
-                      ? t('conversation:composer.exploreVocabularyHint')
-                      : t('common:composer.placeholder')
+              activeSkillId === 'tts'
+                ? t('conversation:composer.ttsHint')
+                : activeSkillId === 'synonym'
+                  ? t('conversation:composer.synonymHint')
+                  : activeSkillId === 'phrase'
+                    ? t('conversation:composer.phraseHint')
+                    : activeSkillId === 'explore-phrase'
+                      ? t('conversation:composer.explorePhraseHint')
+                      : activeSkillId === 'explore-vocabulary'
+                        ? t('conversation:composer.exploreVocabularyHint')
+                        : t('common:composer.placeholder')
             }
             ref={inputRef}
             role="combobox"

@@ -1,6 +1,7 @@
 import type { ModelMessage, ModelStreamEvent } from '../llm/language-model'
 import {
   agentSnapshotSchema,
+  type TtsCompletion,
   type VocabularyPracticeModelArgs,
   type VocabularyPracticeApplyArgs,
   type VocabularyPracticeCorrectArgs,
@@ -183,8 +184,21 @@ export interface SentencePracticeAgentRuntime {
     host: SentencePracticeHostOperations
   ): Promise<void>
 }
+export interface TtsAgentRunInput {
+  outputLanguage: string
+  targetLanguage: string
+  signal: AbortSignal
+}
+export interface TtsHostOperations {
+  synthesize(signal: AbortSignal): Promise<TtsCompletion>
+  verifyCompletion(result: TtsCompletion): void
+}
+export interface TtsAgentRuntime {
+  runTts(input: TtsAgentRunInput, host: TtsHostOperations): Promise<void>
+}
 export interface AgentRuntime
   extends
+    TtsAgentRuntime,
     VocabularyPracticeAgentRuntime,
     SentencePracticeAgentRuntime,
     VocabularyAgentRuntime,
@@ -207,6 +221,19 @@ export class AgentRuntimeError extends Error {
 // Reserve space for the fixed host prompt/operation definitions. Persisted history
 // is never edited; only this execution's copied context is trimmed.
 export function createAgentSnapshot(input: AgentTask): AgentSnapshot {
+  if (input.task === 'tts')
+    return agentSnapshotSchema.parse({
+      ...input,
+      budget: {
+        timeoutMs: 180_000,
+        maxModelCalls: 0,
+        maxToolCalls: 1,
+        maxSteps: 1,
+        maxInputChars: 4096,
+        maxOutputChars: 1024
+      },
+      allowedOperations: ['tts.synthesize']
+    })
   if (input.task === 'vocabulary-practice-review')
     return agentSnapshotSchema.parse({
       ...input,

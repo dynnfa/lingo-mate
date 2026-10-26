@@ -30,7 +30,9 @@
     "generatingExploreVocabulary": "正在生成单词…",
     "committingExploreVocabulary": "正在保存生成的单词…",
     "descriptionFailedExploreVocabulary": "单词已生成并保存，但结果展示失败。你可以重试恢复展示。",
-    "descriptionCancelledExploreVocabulary": "单词已生成并保存，但结果展示已取消。你可以重试恢复展示。"
+    "descriptionCancelledExploreVocabulary": "单词已生成并保存，但结果展示已取消。你可以重试恢复展示。",
+    "synthesizingTts": "正在生成语音…",
+    "committingTts": "正在保存语音…"
   },
   "composer": {
     "vocabularyRequired": "请在 /vocabulary 后输入一个或多个英语单词或短语。",
@@ -41,7 +43,9 @@
     "explorePhraseInvalid": "/explore-phrase 不需要参数，请直接发送。",
     "explorePhraseHint": "直接发送即可生成 10 个常用英语短语；近 7 次结果不会重复。",
     "exploreVocabularyInvalid": "/explore-vocabulary 不需要参数，请直接发送。",
-    "exploreVocabularyHint": "直接发送即可生成 10 个常用英语单词、释义与例句；近 7 次结果不会重复。"
+    "exploreVocabularyHint": "直接发送即可生成 10 个常用英语单词、释义与例句；近 7 次结果不会重复。",
+    "ttsRequired": "请在 /tts 后输入英语纯文本。",
+    "ttsHint": "例如：/tts Hello, world! 最多 4,000 个字符。"
   },
   "thinking": {
     "label": "模型思考过程",
@@ -77,6 +81,10 @@
       "synonym": {
         "name": "近义词分组",
         "description": "按共同语义收录英语单词，使用逗号分隔。"
+      },
+      "tts": {
+        "name": "文本转语音",
+        "description": "在本地生成语音，点击原文单词跳转播放位置。"
       }
     }
   }
