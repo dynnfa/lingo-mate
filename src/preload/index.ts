@@ -10,6 +10,7 @@ import {
   importTaskSchema
 } from '../shared/vocabulary-transfer'
 import { contextBridge, ipcRenderer } from 'electron'
+import { createSpeechApi } from './speech-api'
 import {
   cancelMessageInputSchema,
   cancelMessageResultSchema,
@@ -124,6 +125,7 @@ const issueSummary = (issues: ZodIssue[]): Array<{ path: PropertyKey[]; code: st
   issues.map(({ path, code }) => ({ path, code }))
 
 const api: LingoMateApi = {
+  speech: createSpeechApi(),
   reportError: async (rawInput) => {
     const input = rendererErrorReportSchema.parse(rawInput)
     const result: unknown = await ipcRenderer.invoke(ERROR_LOG_CHANNELS.report, input)
