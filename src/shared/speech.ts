@@ -5,8 +5,8 @@ export const SPEECH_LIMITS = {
   segmentUnits: 350,
   segments: 20,
   tokens: 511,
-  seconds: 120,
-  audioBytes: 8 * 1024 * 1024,
+  seconds: 360,
+  audioBytes: 24 * 1024 * 1024,
   words: 2000,
   totalMs: 180_000,
   loadMs: 120_000,
@@ -91,6 +91,48 @@ export const speechAudioSchema = z
     }
   })
 export type SpeechAudio = z.infer<typeof speechAudioSchema>
+export const conversationSpeechSchema = z.strictObject({
+  kind: z.literal('tts'),
+  durationSeconds: z.number().positive().max(SPEECH_LIMITS.seconds),
+  words: z.array(speechWordSchema).min(1).max(SPEECH_LIMITS.words)
+})
+export type ConversationSpeech = z.infer<typeof conversationSpeechSchema>
+export const ttsReportSchema = z
+  .strictObject({
+    skillId: z.literal('tts'),
+    text: speechInputSchema.shape.text,
+    speech: conversationSpeechSchema
+  })
+  .superRefine((report, context) => {
+    let end = 0
+    let time = 0
+    for (const [index, word] of report.speech.words.entries()) {
+      if (
+        word.index !== index ||
+        word.charStart < end ||
+        word.charEnd <= word.charStart ||
+        report.text.slice(word.charStart, word.charEnd) !== word.text ||
+        word.charEnd > report.text.length ||
+        word.startSeconds < time ||
+        word.endSeconds <= word.startSeconds ||
+        word.endSeconds > report.speech.durationSeconds
+      )
+        context.addIssue({ code: 'custom', message: 'Invalid speech report alignment' })
+      end = word.charEnd
+      time = word.endSeconds
+    }
+  })
+export type TtsReport = z.infer<typeof ttsReportSchema>
+export function isTtsReport(report: unknown): report is TtsReport {
+  return (
+    typeof report === 'object' && report !== null && 'skillId' in report && report.skillId === 'tts'
+  )
+}
+export const conversationAudioInputSchema = z.strictObject({
+  sessionId: z.string().uuid(),
+  messageId: z.string().uuid()
+})
+export type ConversationAudioInput = z.infer<typeof conversationAudioInputSchema>
 export const speechErrorCodeSchema = z.enum([
   'UNTRUSTED_SOURCE',
   'INVALID_INPUT',
@@ -106,6 +148,8 @@ export const speechErrorCodeSchema = z.enum([
   'TOKEN_LIMIT',
   'NOT_OWNER',
   'SETTINGS_FAILED',
+  'AUDIO_NOT_FOUND',
+  'STORAGE_FAILED',
   'CLOCK_FAILED'
 ])
 export type SpeechErrorCode = z.infer<typeof speechErrorCodeSchema>
@@ -137,6 +181,7 @@ export const speechStatusResultSchema = z.discriminatedUnion('status', [
 ])
 export const SPEECH_CHANNELS = {
   synthesize: 'speech:synthesize',
+  loadConversationAudio: 'speech:loadConversationAudio',
   cancel: 'speech:cancel',
   getSettings: 'speech:getSettings',
   updateSettings: 'speech:updateSettings',
@@ -146,6 +191,9 @@ export const SPEECH_CHANNELS = {
   status: 'speech:status'
 } as const
 export interface SpeechApi {
+  loadConversationAudio(
+    input: ConversationAudioInput
+  ): Promise<z.infer<typeof speechSynthesisResultSchema>>
   synthesize(input: SpeechInput): Promise<z.infer<typeof speechSynthesisResultSchema>>
   cancel(
     input: z.infer<typeof speechRequestSchema>

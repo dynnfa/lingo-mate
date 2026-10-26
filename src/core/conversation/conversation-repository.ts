@@ -1,3 +1,4 @@
+import type { ConversationSpeech } from '../../shared/speech'
 import type { ModelRole } from '../llm/language-model'
 
 export interface StoredConversation {
@@ -13,6 +14,7 @@ export interface StoredMessage {
   role: ModelRole
   content: string
   createdAt: string
+  speech?: ConversationSpeech
   retryable?: boolean
 }
 

@@ -3,11 +3,57 @@ import { SpeechService } from '../speech-service'
 import type { SpeechSynthesizer } from '../speech-synthesizer'
 import { SpeechError } from '../speech-synthesizer'
 import { DEFAULT_SPEECH_SETTINGS } from '../../../shared/speech'
+import { readSpeechWav } from '../speech-audio'
 
 import { wav } from './fixtures/wav'
 
 const requestId = 'a5c2281c-b5de-4f88-809e-04cab8af2c87'
 describe('speech synthesis', () => {
+  it('synthesizes and joins 360 seconds of audio with word timestamps beyond 120 seconds', async () => {
+    const text = 'Hello. '.repeat(200)
+    const service = new SpeechService({
+      async synthesize(part) {
+        const words = part.match(/Hello\. /g)!
+        return {
+          audio: wav(90),
+          words,
+          wtimes: words.map((_, i) => i * 1000),
+          wdurations: words.map(() => 500)
+        }
+      }
+    })
+    const audio = await service.synthesize(
+      { requestId, text, language: 'en' },
+      DEFAULT_SPEECH_SETTINGS,
+      new AbortController().signal
+    )
+    expect(audio.durationSeconds).toBe(360)
+    expect(audio.audio.byteLength).toBe(44 + 360 * 48000)
+    expect(readSpeechWav(audio.audio).seconds).toBe(360)
+    expect(audio.words).toHaveLength(200)
+    expect(audio.words.at(-1)).toMatchObject({
+      charStart: 1393,
+      charEnd: 1398,
+      startSeconds: 319,
+      endSeconds: 319.5
+    })
+  })
+
+  it('rejects cumulative audio exceeding 360 seconds', async () => {
+    const service = new SpeechService({
+      async synthesize(part) {
+        return { audio: wav(90.25), words: [part], wtimes: [0], wdurations: [500] }
+      }
+    })
+    await expect(
+      service.synthesize(
+        { requestId, text: 'Hello. '.repeat(200), language: 'en' },
+        DEFAULT_SPEECH_SETTINGS,
+        new AbortController().signal
+      )
+    ).rejects.toMatchObject({ code: 'INVALID_AUDIO' })
+  })
+
   it('adds actual preceding audio duration to subsequent words, retaining all tail silence', async () => {
     const text = 'Hello. '.repeat(60)
     const synthesizer: SpeechSynthesizer = {

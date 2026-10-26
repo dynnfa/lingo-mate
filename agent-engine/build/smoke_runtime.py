@@ -44,7 +44,7 @@ class Client:
         threading.Thread(target=read, daemon=True).start()
 
     def send(self, kind, **payload):
-        data = {"v": 10, "instanceId": self.instance, "type": kind, **payload}
+        data = {"v": 11, "instanceId": self.instance, "type": kind, **payload}
         self.process.stdin.write((json.dumps(data) + "\n").encode())
         self.process.stdin.flush()
 
@@ -62,6 +62,27 @@ class Client:
         return (time.monotonic() - started) * 1000
 
     def run(self, run_id, task="conversation", content="Hi", output_language="zh-CN"):
+        if task == "tts":
+            self.send(
+                "run",
+                runId=run_id,
+                snapshot={
+                    "task": "tts",
+                    "messages": [{"role": "user", "content": "Bound speech synthesis"}],
+                    "outputLanguage": output_language,
+                    "targetLanguage": "en",
+                    "allowedOperations": ["tts.synthesize"],
+                    "budget": {
+                        "timeoutMs": 180000,
+                        "maxModelCalls": 0,
+                        "maxToolCalls": 1,
+                        "maxSteps": 1,
+                        "maxInputChars": 4096,
+                        "maxOutputChars": 1024,
+                    },
+                },
+            )
+            return self.receive("host_call")
         if task == "vocabulary-practice-review":
             self.send(
                 "run",
@@ -199,6 +220,10 @@ with tempfile.TemporaryDirectory(prefix="lingo-bundle-") as cwd:
         else:
             idle_rss_kib = None
             idle_cpu_percent = None
+        call = client.run("tts", task="tts")
+        assert call["operation"] == "tts.synthesize" and call["args"] == {}
+        client.send("host_result", runId="tts", callId=call["callId"], result={"completed": True})
+        assert client.receive("tts_result")["result"] == {"completed": True}
         for locale, language in (("zh-CN", "Simplified Chinese"), ("en", "English")):
             for kinds in (("complete",), ("missing_marks", "tools", "complete")):
                 run_id = f"vocabulary-practice-{locale}-{len(kinds)}"
@@ -558,6 +583,7 @@ print(
             "checks": [
                 "empty-PATH",
                 "handshake",
+                "tts-no-model",
                 "vocabulary-practice-languages-tool-loop-correction",
                 "vocabulary-practice-cancel-late-result-failure",
                 "sentence-practice-languages",

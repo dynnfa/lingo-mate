@@ -1,3 +1,4 @@
+import { SpeechError } from '../core/speech/speech-synthesizer'
 import { SynonymError } from '../core/learning/synonym/parse-synonym-input'
 import { ExplorePhraseError } from '../core/learning/explore-phrase/explore-phrase-error'
 import { ExploreVocabularyError } from '../core/learning/explore-vocabulary/explore-vocabulary-error'
@@ -18,6 +19,8 @@ import type { ConversationRequestError } from '../shared/conversation'
 // 在进程边界把 Core 错误转换为对用户安全的结构：只保留错误码与受约束的
 // 判别字段，不携带内部原因和展示文案；文案由 Renderer 翻译。
 export function toSafeRequestError(error: unknown): ConversationRequestError {
+  if (error instanceof SpeechError && error.code === 'INVALID_INPUT')
+    return { code: 'INVALID_INPUT' }
   if (error instanceof ConversationNotFoundError) {
     return { code: 'NOT_FOUND', resource: 'conversation' }
   }

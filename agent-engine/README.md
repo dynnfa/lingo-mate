@@ -2,7 +2,7 @@
 
 本模块是唯一 Agent 运行时，负责任务识别、Prompt、工具决策与内存中的 LangGraph 编排。会话与消息持久化、语言学习规则、模型凭据、供应商请求和用量统计均由 TypeScript 宿主负责。生产接入普通对话、`/concept`、`/vocabulary`、`/phrase`、`/synonym`、`/explore-phrase`、`/explore-vocabulary` 与句子练习（提示和点评）；模型决策/只读工具循环通过测试扩展验证。无 checkpoint、业务数据库访问、云端 tracing 或模型 SDK 请求。
 
-决策与限制见 [ADR](../docs/adr/2026-10-21-python-langgraph-agent-engine.md)。本文命令与文件路径均以仓库根目录为基准。协议源位于 `src/core/agent/agent-protocol.ts`；生成的 `agent-engine/src/lingo_agent/protocol/schema.json` 随包发布，不能手改。共享契约样例在 `tests/integration/fixtures/agent/protocol-cases.json`。
+架构边界与任务权限约定见 [AGENTS.md](../AGENTS.md)。本文命令与文件路径均以仓库根目录为基准。协议源位于 `src/core/agent/agent-protocol.ts`；生成的 `agent-engine/src/lingo_agent/protocol/schema.json` 随包发布，不能手改。共享契约样例在 `tests/integration/fixtures/agent/protocol-cases.json`。
 
 ## 开发
 
@@ -56,7 +56,7 @@ macOS 本地包使用 PyInstaller 的 ad-hoc 签名。正式发行还需原有 A
 
 ## 协议演进与排错
 
-当前协议为 v10。应用提交 `conversation-title`、`conversation`、`vocabulary`、`phrase`、`synonym`、`explore-phrase`、`explore-vocabulary`、`sentence-practice-hints`、`sentence-practice-review` 或 `vocabulary-practice-review` 任务，`/concept` 在 Python 内部识别。`model.reply` 与标题专用 `model.title` 必须提供完整 `systemPrompt`，TS 模型适配器原样发送，不再选择 Agent Prompt。Prompt 上限为 4096 个 UTF-16 单元，两端校验实际 Prompt 加历史的总输入预算；旧运行包必须重建。其余显式技能及练习暂沿用 TS 实现，未来新增 Agent 策略和工作流统一在本模块实现。
+当前协议为 v11。应用提交 `conversation-title`、`conversation`、`vocabulary`、`phrase`、`synonym`、`explore-phrase`、`explore-vocabulary`、`sentence-practice-hints`、`sentence-practice-review`、`vocabulary-practice-review` 或 `tts` 任务，`/concept` 在 Python 内部识别。`model.reply` 与标题专用 `model.title` 必须提供完整 `systemPrompt`，TS 模型适配器原样发送，不再选择 Agent Prompt。Prompt 上限为 4096 个 UTF-16 单元，两端校验实际 Prompt 加历史的总输入预算；旧运行包必须重建。其余显式技能及练习暂沿用 TS 实现，未来新增 Agent 策略和工作流统一在本模块实现。
 
 - 修改 Zod 协议后运行 `node --experimental-strip-types scripts/agent-protocol-schema.mjs`，更新共享用例；破坏性修改提升协议版本并重建全部运行包。
 - stdout 专用于协议，Python 不输出用户错误文案或 traceback。stderr 只由 Main 有界接收并进入已有本地错误日志。
@@ -167,7 +167,6 @@ TS 每轮只做一次模型传输，并保留同一批次的模型配置快照�
 
 协议 v9 同步任务、操作、能力握手、共享契约及运行包 manifest，v8 及旧包必须重建。抽词、会话及业务规则仍在 TS，不新增数据库迁移或练习历史。空 PATH 烟测覆盖双语提示与点评、取消／迟到回执及宿主失败，验证记录见[句子练习迁移计划](../docs/plans/2026-10-23-sentence-practice-langgraph-agent.md)。
 
-
 ## 词汇练习批改图与协议 v10
 
 `vocabulary-practice-review` 进入 `graphs/vocabulary_practice.py`，按 `prepare → model → apply / correct → model → finish` 执行有界循环；全部正确时直接结束，不要求调用标红工具。Python 持有原有中英文系统 Prompt、最多两次补标指令及最多八轮策略。TS 模型适配器每次只请求一次供应商，不再选择 Prompt 或驱动循环。补标指令显式指定 summary 与 reason 的输出语言。
@@ -176,4 +175,10 @@ TS 每轮只做一次模型传输，并保留同一批次的模型配置快照�
 
 模型／非模型宿主调用／步骤上限为 8／10／18；含启动总截止 120 秒、供应商请求 60 秒。每轮实际输入包含完整消息和工具定义，上限 65,536 UTF-16 单元；累计回执／单个 Prompt 上限均为 4,096，单轮原始模型消息上限 65,536。两端校验预算；宿主另行拒绝错序、重复、越权、并发调用和伪造完成。IPC 将开始练习的窗口绑定为 owner，跨窗口无法批改或取消，owner 销毁时中止练习。
 
-协议 v10 同步生成 schema、共享契约、能力握手及运行包 manifest，v9 及旧运行包须随应用重建。空 PATH 烟测覆盖双语全对／标红／补标、取消／迟到回执与宿主故障。不改变数据库结构，不访问真实用户数据库；验收见[词汇练习批改迁移计划](../docs/plans/2026-10-23-vocabulary-practice-langgraph-agent.md)。
+协议 v10 同步生成 schema、共享契约、能力握手及运行包 manifest，v9 及旧运行包须随应用重建。空 PATH 烟测覆盖双语全对／标红／补标、取消／迟到回执与宿主故障。不改变数据库结构，不访问真实用户数据库。
+
+## 文本转语音图与协议 v11
+
+`/tts` 是模型调用预算为 0 的确定性任务。单节点图仅调用一次 `tts.synthesize`，宿主绑定原文并复用已有 HeadTTS 服务；Python 不接收原文、音频、时间轴或消息身份，仅接收 `{completed: true}`。宿主核验 `tts_result` 后提交 SQLite 音频与恢复报告；故障与取消不重放请求。
+
+预算为 1 次非模型宿主调用、1 步，含启动总截止 180 秒，安全回执上限 1,024 UTF-16 单元。原文和音频沿用现有 4,000 UTF-16 单元、120 秒、8 MiB 等限制。会话标题使用本地原文摘要；未配置 LLM 时仍能使用。协议 v11 扩展任务、能力握手与专用终态，旧运行包必须随应用重建。空 PATH 运行包烟测覆盖确定性 TTS 图。

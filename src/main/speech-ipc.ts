@@ -1,12 +1,14 @@
 import type { WebContents } from 'electron'
 import { z } from 'zod'
 import { noInputSchema, type RegisterTrustedHandler } from './ipc-guard'
+import type { TtsRepository } from '../core/speech/tts-repository'
 import type { SpeechHost } from './speech/speech-host'
 import { SpeechError } from '../core/speech/speech-synthesizer'
 import {
   SPEECH_CHANNELS as C,
   speechActionResultSchema,
   speechFailureSchema,
+  conversationAudioInputSchema,
   speechInputSchema,
   speechRequestSchema,
   speechRuntimeStatusSchema,
@@ -16,7 +18,11 @@ import {
   speechSynthesisResultSchema
 } from '../shared/speech'
 
-export function registerSpeechIpc(host: SpeechHost, register: RegisterTrustedHandler): () => void {
+export function registerSpeechIpc(
+  host: SpeechHost,
+  register: RegisterTrustedHandler,
+  repository: Pick<TtsRepository, 'loadConversationAudio'>
+): () => void {
   const active = new Map<WebContents, { requestId: string; controller: AbortController }>()
   const senders = new Map<WebContents, () => void>()
   const usedIds = new Set<string>()
@@ -46,6 +52,15 @@ export function registerSpeechIpc(host: SpeechHost, register: RegisterTrustedHan
     fallbackError: { code: 'RUNTIME_FAILED' as const }
   }
   const removes = [
+    register({
+      ...common,
+      channel: C.loadConversationAudio,
+      inputSchema: conversationAudioInputSchema,
+      resultSchema: speechSynthesisResultSchema,
+      handler: async (input) => {
+        return { status: 'ok' as const, result: await repository.loadConversationAudio(input) }
+      }
+    }),
     register({
       ...common,
       channel: C.synthesize,

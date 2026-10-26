@@ -12,7 +12,10 @@
   "voice": "Voice",
   "speed": "Synthesis speed",
   "speedValue": "{{speed}}×",
-  "voices": { "af_bella": "Bella (American English)", "am_michael": "Michael (American English)" },
+  "voices": {
+    "af_bella": "Bella (American English)",
+    "am_michael": "Michael (American English)"
+  },
   "install": "Install speech resources",
   "cancelInstall": "Cancel installation",
   "save": "Save",
@@ -32,7 +35,9 @@
     "paused": "Paused",
     "completed": "Finished",
     "cancelled": "Stopped",
-    "failed": "Speech failed"
+    "failed": "Speech failed",
+    "loading": "Loading audio",
+    "ready": "Ready to play"
   },
   "errors": {
     "UNTRUSTED_SOURCE": "This window cannot request speech.",
@@ -49,6 +54,11 @@
     "TOKEN_LIMIT": "This speech segment exceeds the model token limit.",
     "NOT_OWNER": "This window does not own that speech request.",
     "SETTINGS_FAILED": "Speech settings could not be read or saved.",
-    "CLOCK_FAILED": "The audio output clock is unavailable. Accurate word highlighting requires a valid output clock."
-  }
+    "CLOCK_FAILED": "The audio output clock is unavailable. Accurate word highlighting requires a valid output clock.",
+    "AUDIO_NOT_FOUND": "Saved audio is missing. Submit /tts again.",
+    "STORAGE_FAILED": "Unable to save speech. Please retry."
+  },
+  "play": "Play",
+  "replay": "Replay",
+  "seekWord": "Seek to {{word}}"
 }

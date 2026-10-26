@@ -4,6 +4,92 @@ import { AudioPlayer, type SpeechAudioDevice } from '../audio-player'
 import { SPEECH_IDENTITY, type SpeechApi } from '../../../../shared/speech'
 
 describe('application speech coordination', () => {
+  it('ignores a late saved-audio load after another source replaces it', async () => {
+    let finish!: (result: Awaited<ReturnType<SpeechApi['synthesize']>>) => void
+    const controller = new SpeechController(
+      { synthesize: vi.fn(), cancel: vi.fn() },
+      new AudioPlayer({
+        unlock: async () => {},
+        decode: async () => ({ durationSeconds: 2, start: () => ({ stop: () => {} }) }),
+        currentTime: () => 5,
+        now: () => 1000,
+        getState: () => 'running',
+        getOutputTimestamp: () => ({ contextTime: 5, performanceTime: 1000 }),
+        close: async () => {}
+      }),
+      { request: () => 1, cancel: () => {} }
+    )
+    const old = controller.loadSaved(
+      'old',
+      'Old',
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    await controller.loadSaved('current', 'Current', async () => ({
+      status: 'error',
+      error: { code: 'AUDIO_NOT_FOUND' }
+    }))
+    finish({ status: 'error', error: { code: 'INVALID_AUDIO' } })
+    await old
+    expect(controller.getState()).toMatchObject({
+      sourceId: 'current',
+      status: 'failed',
+      error: 'AUDIO_NOT_FOUND'
+    })
+  })
+  it('loads saved audio without playing and preserves an unplayed word seek until explicit playback', async () => {
+    let outputTime = 5
+    const start = vi.fn(() => ({ stop: () => {} }))
+    const controller = new SpeechController(
+      { synthesize: vi.fn(), cancel: vi.fn() },
+      new AudioPlayer({
+        unlock: async () => {},
+        decode: async () => ({ durationSeconds: 2, start }),
+        currentTime: () => 5,
+        now: () => 1000,
+        getState: () => 'running',
+        getOutputTimestamp: () => ({ contextTime: outputTime, performanceTime: 1000 }),
+        close: async () => {}
+      }),
+      { request: () => 1, cancel: () => {} }
+    )
+    await controller.loadSaved('message', 'Hello', async () => ({
+      status: 'ok',
+      result: {
+        requestId: 'a5c2281c-b5de-4f88-809e-04cab8af2c87',
+        text: 'Hello',
+        language: 'en',
+        identity: SPEECH_IDENTITY.revision,
+        settings: { voice: 'af_bella', speed: 1 },
+        audio: new Uint8Array(46),
+        durationSeconds: 2,
+        words: [
+          { index: 0, text: 'Hello', charStart: 0, charEnd: 5, startSeconds: 0.5, endSeconds: 1.5 }
+        ]
+      }
+    }))
+    await controller.seek(0.5)
+    expect(start).not.toHaveBeenCalled()
+    expect(controller.getState()).toMatchObject({
+      status: 'ready',
+      positionSeconds: 0.5,
+      currentWord: { index: 0 }
+    })
+    await controller.resume()
+    expect(start).toHaveBeenCalledWith(expect.any(Number), 0.5, expect.any(Function))
+    controller.pause()
+    await controller.seek(1)
+    expect(controller.getState()).toMatchObject({ status: 'paused', positionSeconds: 1 })
+    await controller.resume()
+    outputTime = 7.5
+    controller.refresh()
+    expect(controller.getState().status).toBe('completed')
+    await controller.resume()
+    expect(start).toHaveBeenLastCalledWith(expect.any(Number), 0, expect.any(Function))
+    controller.stop()
+  })
   it.each(['resolve', 'reject'] as const)(
     'keeps a paused seek when a superseded resume unlock settles with %s',
     async (settlement) => {

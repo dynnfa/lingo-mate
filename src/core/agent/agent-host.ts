@@ -2,6 +2,7 @@ import { phraseInsertTools } from '../tools/phrase-tools'
 import { vocabularyInsertTools } from '../learning/vocabulary/vocabulary-insert'
 import type { LanguageModel, ModelStreamEvent } from '../llm/language-model'
 import {
+  ttsCompletionSchema,
   vocabularyPracticePreparedSchema,
   vocabularyPracticeTurnSchema,
   vocabularyPracticeAppliedSchema,
@@ -45,6 +46,7 @@ import {
 } from './agent-protocol'
 import {
   AgentRuntimeError,
+  type TtsHostOperations,
   type VocabularyPracticeHostOperations,
   type SentencePracticeHostOperations,
   type VocabularyHostOperations,
@@ -89,7 +91,8 @@ export class AgentHost {
     private readonly explorePhrase?: ExplorePhraseHostOperations,
     private readonly exploreVocabulary?: ExploreVocabularyHostOperations,
     private readonly sentencePractice?: SentencePracticeHostOperations,
-    private readonly vocabularyPractice?: VocabularyPracticeHostOperations
+    private readonly vocabularyPractice?: VocabularyPracticeHostOperations,
+    private readonly tts?: TtsHostOperations
   ) {
     this.snapshot = structuredClone(snapshot)
   }
@@ -113,6 +116,15 @@ export class AgentHost {
       throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR', { cause: parsedArgs.error })
     const args = parsedArgs.data
     if (this.calls.size > this.snapshot.budget.maxSteps) throw new AgentRuntimeError('AGENT_LIMIT')
+    if (this.snapshot.task === 'tts') {
+      if (!this.tts || operation !== 'tts.synthesize' || Object.keys(args).length)
+        throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+      if (++this.toolCalls > this.snapshot.budget.maxToolCalls)
+        throw new AgentRuntimeError('AGENT_LIMIT')
+      const result = ttsCompletionSchema.parse(await this.tts.synthesize(signal))
+      signal.throwIfAborted()
+      return result
+    }
     if (this.snapshot.task === 'vocabulary-practice-review') {
       if (!this.vocabularyPractice) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
       let result: AgentHostResult

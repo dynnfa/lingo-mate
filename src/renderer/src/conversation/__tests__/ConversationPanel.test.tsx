@@ -334,6 +334,18 @@ function pickerOptions(): HTMLElement[] {
 }
 
 describe('ConversationPanel slash trigger and filtering', () => {
+  it('submits /tts as a typed skill and keeps an empty /tts out of ordinary chat', () => {
+    const { callbacks } = renderPanel()
+    const input = typeDraft('/tts ')
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(screen.getByRole('alert')).toHaveTextContent('请在 /tts 后输入英语纯文本。')
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
+    fireEvent.change(input, { target: { value: '/tts Hello,\nworld!' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(callbacks.onRunSkill).toHaveBeenCalledWith({ skillId: 'tts', text: 'Hello,\nworld!' })
+    expect(callbacks.onSend).not.toHaveBeenCalled()
+  })
   it('opens the picker above the composer when the draft starts with a half-width slash', () => {
     renderPanel()
     const input = typeDraft('/')
@@ -346,7 +358,7 @@ describe('ConversationPanel slash trigger and filtering', () => {
 
     const listbox = screen.getByRole('listbox', { name: '可用行动' })
     expect(listbox).toBeInTheDocument()
-    expect(pickerOptions()).toHaveLength(6)
+    expect(pickerOptions()).toHaveLength(7)
     // 首次打开默认高亮第一项
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-concept')
   })
@@ -467,9 +479,11 @@ describe('ConversationPanel picker keyboard selection', () => {
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-synonym')
     fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-tts')
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-concept')
     fireEvent.keyDown(input, { key: 'ArrowUp' })
-    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-synonym')
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-tts')
   })
 
   it('selects the highlighted action with Enter without sending and keeps focus in the input', () => {
@@ -990,7 +1004,7 @@ describe('ConversationPanel picker closing and reopen suppression', () => {
 
     fireEvent.change(input, { target: { value: '/' } })
     expect(input).toHaveAttribute('aria-expanded', 'true')
-    expect(pickerOptions()).toHaveLength(6)
+    expect(pickerOptions()).toHaveLength(7)
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-concept')
 
     fireEvent.keyDown(input, { key: 'Enter' })
@@ -1064,7 +1078,7 @@ describe('ConversationPanel picker input method composition', () => {
     fireEvent.change(input, { target: { value: '/收' } })
 
     // 组合期间不刷新候选
-    expect(pickerOptions()).toHaveLength(6)
+    expect(pickerOptions()).toHaveLength(7)
 
     // 组合确认键不选择候选、不发送
     fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
