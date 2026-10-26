@@ -8,6 +8,7 @@ import { ModelsSettings } from './models/ModelsSettings'
 import { useModelsSettings } from './models/useModelsSettings'
 import { UsageSettings } from './usage/UsageSettings'
 import { useUsageStatistics } from './usage/useUsageStatistics'
+import { SpeechSettings } from './speech/SpeechSettings'
 
 // 设置区块注册表：新增设置时在此追加条目，左侧菜单随之扩展。
 // 详情区各区块保持挂载并用 hidden 隐藏，模型草稿在菜单切换间不丢失。
@@ -31,7 +32,8 @@ const SETTINGS_SECTIONS = [
     id: 'usage',
     labelKey: 'common:settings.sections.usage',
     titleId: 'settings-section-title-usage'
-  }
+  },
+  { id: 'speech', labelKey: 'speech:title', titleId: 'settings-section-title-speech' }
 ] as const
 
 type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id']
@@ -45,7 +47,7 @@ interface SettingsPageProps {
 // 一次按键只触发一个动作；退出后由调用方把焦点还给设置按钮。
 // 模型区块有未保存修改时，返回或 Escape 先经过“继续编辑 / 放弃修改”确认。
 export function SettingsPage({ onExit }: SettingsPageProps): React.JSX.Element {
-  const { t } = useTranslation(['common', 'errors'])
+  const { t } = useTranslation(['common', 'errors', 'speech'])
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false)
   // 活动区块镜像：Escape 分层需要判断模型表单是否可见。
   const [activeSectionId, setActiveSectionId] = useState<SettingsSectionId>('uiLanguage')
@@ -91,6 +93,7 @@ export function SettingsPage({ onExit }: SettingsPageProps): React.JSX.Element {
   }
 
   const sectionBody = (sectionId: SettingsSectionId): React.JSX.Element => {
+    if (sectionId === 'speech') return <SpeechSettings active={activeSectionId === 'speech'} />
     if (sectionId === 'uiLanguage') return <UiLanguageSection />
     if (sectionId === 'targetLanguage') return <TargetLanguageSection />
     if (sectionId === 'models') return <ModelsSettings state={modelsSettings} />

@@ -21,6 +21,11 @@ extraResources:
       - '**/*'
 asarUnpack:
   - resources/**
+  - node_modules/onnxruntime-node/**
+  - node_modules/@huggingface/**
+  - node_modules/@met4citizen/headtts/**
+  - node_modules/sharp/**
+  - node_modules/@img/**
 win:
   executableName: lingo-mate
 nsis:
