@@ -11,6 +11,8 @@ import { MistakesPage } from './mistakes/MistakesPage'
 import { RecordedPage } from './recorded/RecordedPage'
 import { SettingsPage } from './settings/SettingsPage'
 import { PracticePage } from './practice/PracticePage'
+import { SpeechControls } from './speech/SpeechControls'
+import { getSpeechController } from './speech/speech-controller'
 import type { ConversationSummary } from '../../shared/conversation'
 
 type AppTFunction = TFunction<['common', 'conversation', 'errors']>
@@ -38,6 +40,10 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
   const [controller] = useState(() => new ConversationController(window.api.conversation))
   const state = useSyncExternalStore(controller.subscribe, controller.getState)
   const { activeView, openView, returnToConversation, entryButtonRefs } = useAppViewNavigation()
+  useEffect(() => {
+    getSpeechController().stop()
+    return () => getSpeechController().stop()
+  }, [activeView])
   // 先解构为局部标识符再绑定 ref；直接 ref={entryButtonRefs.x} 会被
   // react-hooks/refs 规则判定为渲染期访问 ref。
   const {
@@ -70,6 +76,7 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
 
   return (
     <>
+      <SpeechControls />
       {/* 设置页/已记录页期间保持对话视图挂载并隐藏，未发送草稿与滚动状态不丢失 */}
       <main className="chat-shell" data-phase={state.phase} hidden={activeView !== 'conversation'}>
         {preferenceNoticeVisible ? (

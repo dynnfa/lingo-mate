@@ -258,6 +258,19 @@ function installApiMock(
   }
 
   const api: LingoMateApi = {
+    speech: {
+      synthesize: async () => ({ status: 'error', error: { code: 'NOT_INSTALLED' } }),
+      cancel: async () => ({ status: 'ok' }),
+      getSettings: async () => ({ status: 'ok', settings: { voice: 'af_bella', speed: 1 } }),
+      updateSettings: async (settings) => ({ status: 'ok', settings }),
+      getRuntimeStatus: async () => ({
+        status: 'ok',
+        runtime: { phase: 'not-installed', progress: 0 }
+      }),
+      installResources: async () => ({ status: 'ok' }),
+      cancelInstall: async () => ({ status: 'ok' }),
+      onStatus: () => () => {}
+    },
     preferences,
     // App 测试不触发错误上报；提供静默桩满足接口形状。
     reportError: async () => ({ status: 'ok' }),
