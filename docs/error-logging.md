@@ -36,7 +36,7 @@
 
 主动取消不记录；已在源头记录的错误不因逐层转换重复写入。
 
-Python 的 stdout 仅承载私有 JSONL 协议。Main 接收 stderr 时仅保留最后 8192 个 UTF-16 单元，在进程失败诊断中作为原因交给公共日志序列化层脱敏，不直接转发到 Renderer 或控制台，也不新增 Python 侧业务日志文件。日志记录异常不能阻止进程和在途任务清理。协议、权限及运行包边界见 [Python Agent ADR](adr/2026-10-21-python-langgraph-agent-engine.md)。
+Python 的 stdout 仅承载私有 JSONL 协议。Main 接收 stderr 时仅保留最后 8192 个 UTF-16 单元，在进程失败诊断中作为原因交给公共日志序列化层脱敏，不直接转发到 Renderer 或控制台，也不新增 Python 侧业务日志文件。日志记录异常不能阻止进程和在途任务清理。协议、权限及运行包边界见 [Agent Engine README](../agent-engine/README.md)。
 
 ## Renderer 上报通道
 

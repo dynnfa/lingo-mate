@@ -6,7 +6,14 @@ import { randomUUID } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import type { ConversationEvent, ConversationSummary } from '../../../shared/conversation'
 import { conversationEventSchema } from '../../../shared/conversation'
+import { TtsConversationSkill } from '../../speech/tts-conversation-skill'
 import type { LanguageModel, ModelStreamEvent, StreamReplyInput } from '../../llm/language-model'
+import {
+  SPEECH_IDENTITY,
+  type SpeechAudio,
+  type SpeechInput,
+  type TtsReport
+} from '../../../shared/speech'
 import { ConfiguredLanguageModel } from '../../llm/configured-language-model'
 import { ModelConfigService } from '../../llm/model-config'
 import { LlmClient, type CreateLlmClient } from '../../llm/llm-client'
@@ -24,6 +31,11 @@ import {
   type StoredConversation,
   type StoredMessage
 } from '../conversation-repository'
+import type {
+  ConversationSkillPhase,
+  ConversationSkillRepository,
+  StoredConversationSkillExecution
+} from '../conversation-skill-repository'
 
 const REQUEST_ID = '3f70b8ae-7ad9-4eab-aaf4-1cae54a99708'
 const OTHER_REQUEST_ID = '0d4b2f7e-52c8-4a61-9ac1-30b1e6de9d02'
@@ -69,6 +81,45 @@ class MemoryConversationRepository implements ConversationRepository {
   async appendMessage(message: StoredMessage, conversation?: StoredConversation): Promise<void> {
     if (conversation) this.conversations.push(conversation)
     this.messages.push(message)
+  }
+}
+
+// /tts 标题用例的最小执行仓储：记录执行、透传消息追加并允许阶段推进。
+class MemorySkillExecutionRepository implements ConversationSkillRepository {
+  readonly executions: StoredConversationSkillExecution[] = []
+  constructor(private readonly conversations: MemoryConversationRepository) {}
+
+  async createExecution(
+    execution: StoredConversationSkillExecution,
+    userMessage: StoredMessage,
+    conversation?: StoredConversation
+  ): Promise<void> {
+    this.executions.push(execution)
+    await this.conversations.appendMessage(userMessage, conversation)
+  }
+
+  async findExecutionByUserMessage(
+    sessionId: string,
+    userMessageId: string
+  ): Promise<StoredConversationSkillExecution | undefined> {
+    return this.executions.find(
+      (execution) => execution.sessionId === sessionId && execution.userMessageId === userMessageId
+    )
+  }
+
+  async setExecutionPhase(executionId: string, phase: ConversationSkillPhase): Promise<void> {
+    const execution = this.executions.find((item) => item.id === executionId)
+    if (execution) execution.phase = phase
+  }
+
+  async finishExecution(
+    executionId: string,
+    phase: 'completed' | 'description_failed' | 'description_cancelled',
+    assistantMessage: StoredMessage
+  ): Promise<void> {
+    const execution = this.executions.find((item) => item.id === executionId)
+    if (execution) execution.phase = phase
+    await this.conversations.appendMessage(assistantMessage)
   }
 }
 
@@ -238,6 +289,86 @@ describe('ConversationModule', () => {
     await expect(
       module.sendMessage({ requestId: OTHER_REQUEST_ID, sessionId, text: 'later' }, () => {})
     ).rejects.toMatchObject({ code: 'AGENT_UNAVAILABLE' })
+  })
+
+  it('derives a single-line local title from a /tts command separated by any whitespace', async () => {
+    const repository = new MemoryConversationRepository()
+    const skillRepository = new MemorySkillExecutionRepository(repository)
+    const speechAudio = (input: SpeechInput): SpeechAudio => ({
+      requestId: input.requestId,
+      text: input.text,
+      language: 'en',
+      settings: { voice: 'af_bella', speed: 1 },
+      identity: SPEECH_IDENTITY.revision,
+      audio: new Uint8Array(64),
+      durationSeconds: 1,
+      words: [
+        { index: 0, text: 'Hello', charStart: 0, charEnd: 5, startSeconds: 0, endSeconds: 0.5 }
+      ]
+    })
+    const skill = new TtsConversationSkill(
+      {
+        commit: async (_executionId, audio): Promise<TtsReport> => ({
+          skillId: 'tts',
+          text: audio.text,
+          speech: { kind: 'tts', durationSeconds: audio.durationSeconds, words: audio.words }
+        }),
+        loadConversationAudio: async (): Promise<SpeechAudio> => {
+          throw new Error('Unused speech audio loading')
+        }
+      },
+      { synthesize: async (input) => speechAudio(input) },
+      {
+        runTts: async (input, host) => {
+          host.verifyCompletion(await host.synthesize(input.signal))
+        }
+      }
+    )
+    const runtime: import('../../agent/agent-runtime').AgentRuntime = {
+      runTts: async (input, host) => {
+        host.verifyCompletion(await host.synthesize(input.signal))
+      },
+      runVocabularyPractice: async () => {
+        throw new Error('Unused vocabulary practice runtime')
+      },
+      runSentencePractice: async () => {
+        throw new Error('Unused sentence practice runtime')
+      },
+      runPhrase: async () => {
+        throw new Error('Unused phrase runtime')
+      },
+      runExploreVocabulary: async () => {
+        throw new Error('Unused vocabulary exploration runtime')
+      },
+      runExplorePhrase: async () => {
+        throw new Error('Unused exploration runtime')
+      },
+      runSynonym: async () => {
+        throw new Error('Unused synonym runtime')
+      },
+      runVocabulary: async () => {
+        throw new Error('Unused vocabulary runtime')
+      },
+      stream: (): AsyncIterable<ModelStreamEvent> => {
+        throw new Error('Unexpected model stream for /tts')
+      }
+    }
+    const module = new ConversationModule(
+      repository,
+      runtime,
+      undefined,
+      new Map([['tts', skill]]),
+      skillRepository
+    )
+    const session = await module.createConversation()
+    const events: ConversationEvent[] = []
+    await module.sendMessage(
+      { requestId: REQUEST_ID, sessionId: session.sessionId, text: '/tts\nHello world' },
+      (event) => events.push(event)
+    )
+    await untilTerminal(events)
+    expect(events.at(-1)).toMatchObject({ type: 'completed' })
+    expect((await repository.find(session.sessionId))?.title).toBe('Hello world')
   })
 
   describe('conversation lifecycle', () => {

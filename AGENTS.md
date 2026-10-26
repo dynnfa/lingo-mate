@@ -10,7 +10,7 @@ Lingo Mate 是一个桌面端语言学习助手 Agent。它通过对话、记忆
 2. React 用户界面层
 3. Agent Engine 核心能力层（Python 策略与编排、TypeScript 宿主能力）
 
-Python 是唯一 Agent 运行时；普通对话、会话标题生成、`/concept`、`/vocabulary`、`/phrase`、`/synonym`、`/explore-phrase`、`/explore-vocabulary`、`/tts`、句子练习（提示和点评）与词汇练习批改始终经过 Python，任务识别、Prompt 与执行流程由 Python 持有。未来新增 Agent 策略和工作流统一在 `agent-engine/` 实现，TypeScript 不再维护并行 Agent 执行路径。其余现有显式技能及练习暂沿用 TS 实现，后续迁移。启动、协议或执行故障必须明确失败，不得静默回退或重放失败请求。架构边界见 [Python Agent ADR](docs/adr/2026-10-21-python-langgraph-agent-engine.md)。
+Python 是唯一 Agent 运行时；普通对话、会话标题生成、`/concept`、`/vocabulary`、`/phrase`、`/synonym`、`/explore-phrase`、`/explore-vocabulary`、`/tts`、句子练习（提示和点评）与词汇练习批改始终经过 Python，任务识别、Prompt 与执行流程由 Python 持有。未来新增 Agent 策略和工作流统一在 `agent-engine/` 实现，TypeScript 不再维护并行 Agent 执行路径。其余现有显式技能及练习暂沿用 TS 实现，后续迁移。启动、协议或执行故障必须明确失败，不得静默回退或重放失败请求。架构边界见 [Agent Engine README](agent-engine/README.md)。
 
 ## 目录职责
 
