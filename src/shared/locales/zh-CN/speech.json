@@ -12,7 +12,10 @@
   "voice": "音色",
   "speed": "合成语速",
   "speedValue": "{{speed}} 倍",
-  "voices": { "af_bella": "Bella（美式英语）", "am_michael": "Michael（美式英语）" },
+  "voices": {
+    "af_bella": "Bella（美式英语）",
+    "am_michael": "Michael（美式英语）"
+  },
   "install": "安装语音资源",
   "cancelInstall": "取消安装",
   "save": "保存",
@@ -32,7 +35,9 @@
     "paused": "已暂停",
     "completed": "播放完成",
     "cancelled": "已停止",
-    "failed": "朗读失败"
+    "failed": "朗读失败",
+    "loading": "正在读取语音",
+    "ready": "准备播放"
   },
   "errors": {
     "UNTRUSTED_SOURCE": "此窗口无法请求朗读。",
@@ -49,6 +54,11 @@
     "TOKEN_LIMIT": "此语音片段超过模型的 token 上限。",
     "NOT_OWNER": "此窗口不拥有该朗读请求。",
     "SETTINGS_FAILED": "无法读取或保存语音设置。",
-    "CLOCK_FAILED": "音频输出时钟不可用，准确的单词高亮需要有效的输出时钟。"
-  }
+    "CLOCK_FAILED": "音频输出时钟不可用，准确的单词高亮需要有效的输出时钟。",
+    "AUDIO_NOT_FOUND": "未找到保存的音频，请重新提交 /tts。",
+    "STORAGE_FAILED": "无法保存语音，请重试。"
+  },
+  "play": "播放",
+  "replay": "重播",
+  "seekWord": "跳转到 {{word}}"
 }

@@ -1,6 +1,7 @@
 import { ipcRenderer } from 'electron'
 import {
   SPEECH_CHANNELS as C,
+  conversationAudioInputSchema,
   speechInputSchema,
   speechSynthesisResultSchema,
   speechRequestSchema,
@@ -14,6 +15,11 @@ import {
 
 export function createSpeechApi(): SpeechApi {
   return {
+    async loadConversationAudio(raw) {
+      return speechSynthesisResultSchema.parse(
+        await ipcRenderer.invoke(C.loadConversationAudio, conversationAudioInputSchema.parse(raw))
+      )
+    },
     async synthesize(raw) {
       return speechSynthesisResultSchema.parse(
         await ipcRenderer.invoke(C.synthesize, speechInputSchema.parse(raw))

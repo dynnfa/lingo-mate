@@ -5,6 +5,23 @@ const ipc = vi.hoisted(() => ({ invoke: vi.fn(), on: vi.fn(), removeListener: vi
 vi.mock('electron', () => ({ ipcRenderer: ipc }))
 beforeEach(() => vi.clearAllMocks())
 describe('speech preload boundary', () => {
+  it('loads saved audio by message identity and rejects extra file authority', async () => {
+    const input = {
+      sessionId: 'a5c2281c-b5de-4f88-809e-04cab8af2c87',
+      messageId: 'a5c2281c-b5de-4f88-809e-04cab8af2c88'
+    }
+    ipc.invoke.mockResolvedValue({ status: 'error', error: { code: 'AUDIO_NOT_FOUND' } })
+    expect(await createSpeechApi().loadConversationAudio(input)).toMatchObject({
+      status: 'error',
+      error: { code: 'AUDIO_NOT_FOUND' }
+    })
+    expect(ipc.invoke).toHaveBeenCalledWith('speech:loadConversationAudio', input)
+    ipc.invoke.mockClear()
+    await expect(
+      createSpeechApi().loadConversationAudio({ ...input, path: '/private/audio.wav' } as never)
+    ).rejects.toThrow()
+    expect(ipc.invoke).not.toHaveBeenCalled()
+  })
   it('rejects arbitrary resource URLs and out-of-range speed before IPC', async () => {
     const api = createSpeechApi()
     await expect(api.updateSettings({ voice: 'af_bella', speed: 3 })).rejects.toThrow()

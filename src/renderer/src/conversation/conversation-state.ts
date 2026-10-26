@@ -18,6 +18,7 @@ export interface DisplayMessage {
   role: 'user' | 'assistant'
   content: string
   streaming: boolean
+  speech?: ConversationMessage['speech']
   retryable: boolean
   reasoning?: string
 }
@@ -171,6 +172,7 @@ function appendReasoningDelta(current: string, delta: string): string {
 // /concept 是普通对话流（概念讲解提示词），不属于技能。/explore-phrase 与
 // /explore-vocabulary 是无参数命令：会话中保存的形态就是命令本身。
 function skillCommandOf(content: string): ConversationSkillId | undefined {
+  if (content.startsWith('/tts ')) return 'tts'
   if (content.startsWith('/synonym ')) return 'synonym'
   if (content.startsWith('/phrase ')) return 'phrase'
   if (content.startsWith('/vocabulary ')) return 'vocabulary'
@@ -202,6 +204,7 @@ function toDisplayMessages(messages: ConversationMessage[]): DisplayMessage[] {
     messageId: message.messageId,
     role: message.role,
     content: message.content,
+    ...(message.speech ? { speech: message.speech } : {}),
     streaming: false,
     retryable: message.role === 'user' && message.retryable === true
   }))
@@ -327,6 +330,7 @@ function applyEvent(state: ConversationState, event: ConversationEvent): Convers
         messageId: event.message.messageId,
         role: 'assistant',
         content: event.message.content,
+        ...(event.message.speech ? { speech: event.message.speech } : {}),
         streaming: false,
         retryable: false
       }

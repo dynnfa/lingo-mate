@@ -36,6 +36,27 @@ const GENERATION = {
 }
 
 describe('conversation protocol schemas', () => {
+  it('binds speech word ranges to the assistant original text', () => {
+    const speech = {
+      kind: 'tts',
+      durationSeconds: 1,
+      words: [
+        { index: 0, text: 'Hello', charStart: 0, charEnd: 5, startSeconds: 0, endSeconds: 0.8 }
+      ]
+    }
+    expect(
+      conversationMessageSchema.safeParse({ ...USER_MESSAGE, role: 'assistant', speech }).success
+    ).toBe(true)
+    expect(conversationMessageSchema.safeParse({ ...USER_MESSAGE, speech }).success).toBe(false)
+    expect(
+      conversationMessageSchema.safeParse({
+        ...USER_MESSAGE,
+        role: 'assistant',
+        content: 'Other',
+        speech
+      }).success
+    ).toBe(false)
+  })
   it('accepts a persisted conversation summary', () => {
     expect(
       conversationSummarySchema.parse({

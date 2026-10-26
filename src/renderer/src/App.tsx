@@ -11,7 +11,6 @@ import { MistakesPage } from './mistakes/MistakesPage'
 import { RecordedPage } from './recorded/RecordedPage'
 import { SettingsPage } from './settings/SettingsPage'
 import { PracticePage } from './practice/PracticePage'
-import { SpeechControls } from './speech/SpeechControls'
 import { getSpeechController } from './speech/speech-controller'
 import type { ConversationSummary } from '../../shared/conversation'
 
@@ -42,8 +41,13 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
   const { activeView, openView, returnToConversation, entryButtonRefs } = useAppViewNavigation()
   useEffect(() => {
     getSpeechController().stop()
-    return () => getSpeechController().stop()
-  }, [activeView])
+    const speech = getSpeechController()
+    document.addEventListener('visibilitychange', speech.refresh)
+    return () => {
+      document.removeEventListener('visibilitychange', speech.refresh)
+      speech.stop()
+    }
+  }, [activeView, state.sessionId])
   // 先解构为局部标识符再绑定 ref；直接 ref={entryButtonRefs.x} 会被
   // react-hooks/refs 规则判定为渲染期访问 ref。
   const {
@@ -76,7 +80,6 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
 
   return (
     <>
-      <SpeechControls />
       {/* 设置页/已记录页期间保持对话视图挂载并隐藏，未发送草稿与滚动状态不丢失 */}
       <main className="chat-shell" data-phase={state.phase} hidden={activeView !== 'conversation'}>
         {preferenceNoticeVisible ? (
@@ -187,6 +190,7 @@ function App({ initialPreferenceError = false }: AppProps): React.JSX.Element {
         </aside>
 
         <ConversationPanel
+          sessionId={state.sessionId}
           messages={state.messages}
           status={state.status}
           generating={generating || state.commandPending}

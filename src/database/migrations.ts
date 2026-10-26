@@ -440,6 +440,73 @@ export const MIGRATIONS: Migration[] = [
       CREATE INDEX vocabulary_practice_mistakes_recent
         ON vocabulary_practice_mistakes (created_at DESC, entry_id DESC);
     `)
+  },
+  {
+    version: 12,
+    up: (database) => {
+      database.exec(`
+        CREATE TABLE conversation_skill_executions_v12 (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          user_message_id TEXT NOT NULL UNIQUE,
+          assistant_message_id TEXT,
+          skill_id TEXT NOT NULL CHECK(skill_id IN ('vocabulary', 'phrase', 'synonym', 'tts')),
+          arguments_json TEXT NOT NULL CHECK(json_valid(arguments_json)),
+          explanation_language TEXT NOT NULL CHECK(explanation_language IN ('zh-CN', 'en')),
+          phase TEXT NOT NULL CHECK(phase IN (
+            'started', 'analyzing', 'committing', 'summarizing', 'completed',
+            'cancelled', 'failed', 'description_failed', 'description_cancelled'
+          )),
+          batch_json TEXT CHECK(batch_json IS NULL OR json_valid(batch_json)),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (session_id) REFERENCES conversations (id),
+          FOREIGN KEY (user_message_id) REFERENCES conversation_messages (id),
+          FOREIGN KEY (assistant_message_id) REFERENCES conversation_messages (id)
+        );
+        INSERT INTO conversation_skill_executions_v12
+          (id, session_id, user_message_id, assistant_message_id, skill_id, arguments_json,
+           explanation_language, phase, batch_json, created_at, updated_at)
+        SELECT id, session_id, user_message_id, assistant_message_id, skill_id, arguments_json,
+               explanation_language, phase, batch_json, created_at, updated_at
+        FROM conversation_skill_executions
+        ORDER BY rowid;
+      `)
+      copyCountCheck(database, 'conversation_skill_executions', 'conversation_skill_executions_v12')
+      database.exec(`
+        DROP TABLE conversation_skill_executions;
+        ALTER TABLE conversation_skill_executions_v12 RENAME TO conversation_skill_executions;
+        CREATE INDEX conversation_skill_executions_session
+          ON conversation_skill_executions (session_id, created_at);
+      `)
+      database.exec(`
+        CREATE TABLE conversation_speech_assets (
+          execution_id TEXT PRIMARY KEY REFERENCES conversation_skill_executions(id),
+          metadata_json TEXT NOT NULL CHECK(json_valid(metadata_json)),
+          audio BLOB NOT NULL CHECK(typeof(audio) = 'blob' AND length(audio) BETWEEN 45 AND 8388608)
+        );
+      `)
+    }
+  },
+  {
+    // 360 秒 PCM16 / 24 kHz 音频超过旧 8 MiB 上限，同步扩展保存容量。
+    version: 13,
+    up: (database) => {
+      database.exec(`
+        CREATE TABLE conversation_speech_assets_v13 (
+          execution_id TEXT PRIMARY KEY REFERENCES conversation_skill_executions(id),
+          metadata_json TEXT NOT NULL CHECK(json_valid(metadata_json)),
+          audio BLOB NOT NULL CHECK(typeof(audio) = 'blob' AND length(audio) BETWEEN 45 AND 25165824)
+        );
+        INSERT INTO conversation_speech_assets_v13 (execution_id, metadata_json, audio)
+          SELECT execution_id, metadata_json, audio FROM conversation_speech_assets ORDER BY rowid;
+      `)
+      copyCountCheck(database, 'conversation_speech_assets', 'conversation_speech_assets_v13')
+      database.exec(`
+        DROP TABLE conversation_speech_assets;
+        ALTER TABLE conversation_speech_assets_v13 RENAME TO conversation_speech_assets;
+      `)
+    }
   }
 ]
 

@@ -13,6 +13,7 @@ describe('speech settings', () => {
     'loads and saves a bounded configuration in %s',
     async (locale) => {
       const api: SpeechApi = {
+        loadConversationAudio: vi.fn(),
         synthesize: vi.fn(),
         cancel: vi.fn(),
         installResources: vi.fn(),

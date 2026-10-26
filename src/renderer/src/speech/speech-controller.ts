@@ -12,7 +12,16 @@ export interface PlaybackSnapshot {
   playbackId: number
   sourceId: string | null
   text: string
-  status: 'idle' | 'synthesizing' | 'playing' | 'paused' | 'completed' | 'cancelled' | 'failed'
+  status:
+    | 'idle'
+    | 'loading'
+    | 'ready'
+    | 'synthesizing'
+    | 'playing'
+    | 'paused'
+    | 'completed'
+    | 'cancelled'
+    | 'failed'
   positionSeconds: number
   durationSeconds: number
   currentWord: SpeechWord | null
@@ -61,6 +70,70 @@ export class SpeechController {
     } catch {
       this.fail('CLOCK_FAILED')
       return this.state
+    }
+  }
+  async loadSaved(
+    sourceId: string,
+    text: string,
+    load: () => ReturnType<SpeechApi['synthesize']>,
+    offset = 0
+  ): Promise<boolean> {
+    this.stop()
+    const generation = this.generation
+    this.publish({ ...initial(), playbackId: generation, sourceId, text, status: 'loading' })
+    try {
+      const result = await load()
+      if (generation !== this.generation) return false
+      if (result.status === 'error') {
+        this.fail(result.error.code)
+        return false
+      }
+      if (result.result.text !== text) {
+        this.fail('INVALID_AUDIO')
+        return false
+      }
+      if (
+        !(await this.player.load(result.result.audio, result.result.durationSeconds)) ||
+        generation !== this.generation
+      )
+        return false
+      this.audio = result.result
+      this.player.seek(offset)
+      this.publish({
+        ...this.state,
+        status: 'ready',
+        durationSeconds: result.result.durationSeconds,
+        positionSeconds: offset,
+        currentWord: findSpeechWord(result.result.words, offset)
+      })
+      return true
+    } catch {
+      if (generation === this.generation) this.fail('INVALID_AUDIO')
+      return false
+    }
+  }
+  async playSaved(
+    sourceId: string,
+    text: string,
+    load: () => ReturnType<SpeechApi['synthesize']>
+  ): Promise<void> {
+    if (
+      this.state.sourceId === sourceId &&
+      this.state.text === text &&
+      ['ready', 'paused', 'completed'].includes(this.state.status)
+    ) {
+      await this.resume()
+      return
+    }
+    // Unlock while the play-button gesture is active, before awaiting IPC/decode.
+    const unlocked = this.player.unlock()
+    const pending = this.loadSaved(sourceId, text, load)
+    const generation = this.generation
+    try {
+      const [loaded] = await Promise.all([pending, unlocked])
+      if (loaded && generation === this.generation) await this.resume()
+    } catch {
+      if (generation === this.generation) this.fail('CLOCK_FAILED')
     }
   }
   async speak(sourceId: string, text: string): Promise<void> {
@@ -117,10 +190,15 @@ export class SpeechController {
     }
   }
   resume = async (): Promise<void> => {
-    if (this.state.status !== 'paused') return
+    if (!['ready', 'paused', 'completed'].includes(this.state.status)) return
     const generation = this.generation
     try {
-      if (!(await this.player.play(this.state.positionSeconds)) || generation !== this.generation)
+      if (
+        !(await this.player.play(
+          this.state.status === 'completed' ? 0 : this.state.positionSeconds
+        )) ||
+        generation !== this.generation
+      )
         return
       this.publish({ ...this.state, status: 'playing' })
       this.tick()
@@ -129,13 +207,14 @@ export class SpeechController {
     }
   }
   seek = async (seconds: number): Promise<void> => {
-    if (!['playing', 'paused'].includes(this.state.status)) return
+    if (!['ready', 'playing', 'paused', 'completed'].includes(this.state.status)) return
     const generation = this.generation
     const playing = this.state.status === 'playing'
     try {
       this.player.seek(seconds)
       this.publish({
         ...this.state,
+        status: this.state.status === 'completed' ? 'ready' : this.state.status,
         positionSeconds: seconds,
         currentWord: playing ? null : findSpeechWord(this.audio?.words ?? [], seconds),
         isPlaying: false

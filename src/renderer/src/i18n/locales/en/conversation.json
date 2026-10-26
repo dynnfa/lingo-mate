@@ -30,7 +30,9 @@
     "generatingExploreVocabulary": "Generating words…",
     "committingExploreVocabulary": "Saving the generated words…",
     "descriptionFailedExploreVocabulary": "Words were generated and saved, but showing the result failed. You can retry to restore it.",
-    "descriptionCancelledExploreVocabulary": "Words were generated and saved, but showing the result was cancelled. You can retry to restore it."
+    "descriptionCancelledExploreVocabulary": "Words were generated and saved, but showing the result was cancelled. You can retry to restore it.",
+    "synthesizingTts": "Generating speech…",
+    "committingTts": "Saving speech…"
   },
   "composer": {
     "vocabularyRequired": "Enter one or more English words or phrases after /vocabulary.",
@@ -41,7 +43,9 @@
     "explorePhraseInvalid": "/explore-phrase takes no arguments. Send it as is.",
     "explorePhraseHint": "Just send it to generate 10 common English phrases; the last 7 rounds are never repeated.",
     "exploreVocabularyInvalid": "/explore-vocabulary takes no arguments. Send it as is.",
-    "exploreVocabularyHint": "Just send it to generate 10 common English words with meanings and examples; the last 7 rounds are never repeated."
+    "exploreVocabularyHint": "Just send it to generate 10 common English words with meanings and examples; the last 7 rounds are never repeated.",
+    "ttsRequired": "Enter English plain text after /tts.",
+    "ttsHint": "For example: /tts Hello, world! Up to 4,000 characters."
   },
   "thinking": {
     "label": "Model thinking",
@@ -77,6 +81,10 @@
       "synonym": {
         "name": "Synonym groups",
         "description": "Save English words by shared meaning, separated by commas."
+      },
+      "tts": {
+        "name": "Text to speech",
+        "description": "Generate local speech and click words to seek."
       }
     }
   }

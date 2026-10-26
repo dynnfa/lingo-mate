@@ -18,6 +18,9 @@ export function createTestConversationModule(
   return new ConversationModule(
     repository,
     {
+      runTts: async () => {
+        throw new Error('Unexpected speech task')
+      },
       runVocabularyPractice: async () => {
         throw new Error('Unused vocabulary practice runtime')
       },
