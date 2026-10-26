@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 export const SPEECH_LIMITS = {
-  textUnits: 2000,
+  textUnits: 4000,
   segmentUnits: 350,
   segments: 20,
   tokens: 511,

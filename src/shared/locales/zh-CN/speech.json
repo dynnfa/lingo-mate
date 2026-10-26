@@ -36,7 +36,7 @@
   },
   "errors": {
     "UNTRUSTED_SOURCE": "此窗口无法请求朗读。",
-    "INVALID_INPUT": "请输入不超过 2,000 个字符的英语纯文本。",
+    "INVALID_INPUT": "请输入不超过 4,000 个字符的英语纯文本。",
     "NOT_INSTALLED": "请先前往「设置 → 语音」安装语音资源。",
     "INSTALL_FAILED": "语音资源安装失败，请重新安装。",
     "BUSY": "语音服务繁忙，请稍后重试。",
