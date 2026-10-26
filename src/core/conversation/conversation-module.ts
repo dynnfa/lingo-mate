@@ -1,3 +1,5 @@
+import { SpeechError } from '../speech/speech-synthesizer'
+import { speechInputSchema, isTtsReport } from '../../shared/speech'
 import { AgentRuntimeError, type AgentRuntime } from '../agent/agent-runtime'
 import { noopCoreDiagnostics, type CoreDiagnostics } from '../error-diagnostics'
 import { SynonymError, parseSynonymInput } from '../learning/synonym/parse-synonym-input'
@@ -199,6 +201,17 @@ export class ConversationModule {
     input: SendMessageInput,
     emit: ConversationEventListener
   ): Promise<GenerationAccepted> {
+    if (/^\/tts(?:\s|$)/u.test(input.text)) {
+      return this.runSkill(
+        {
+          requestId: input.requestId,
+          sessionId: input.sessionId,
+          skillId: 'tts',
+          arguments: { text: input.text.replace(/^\/tts(?:\s)?/u, ''), wordLanguage: 'en' }
+        },
+        emit
+      )
+    }
     const conversation =
       this.drafts.get(input.sessionId) ??
       (await this.withPersistence(() => this.repository.find(input.sessionId)))
@@ -253,8 +266,16 @@ export class ConversationModule {
     input: RunConversationSkillInput,
     emit: ConversationEventListener
   ): Promise<GenerationAccepted> {
-    runConversationSkillInputSchema.parse(input)
     if (input.skillId === 'synonym') parseSynonymInput(input.arguments.text)
+    if (input.skillId === 'tts') {
+      const parsed = speechInputSchema.safeParse({
+        requestId: input.requestId,
+        text: input.arguments.text,
+        language: 'en'
+      })
+      if (!parsed.success) throw new SpeechError('INVALID_INPUT')
+    }
+    runConversationSkillInputSchema.parse(input)
     const skill = this.skills.get(input.skillId)
     if (!skill) {
       throw new Error('Conversation skills are not configured')
@@ -299,11 +320,13 @@ export class ConversationModule {
       updatedAt: now
     }
     const execution: StoredConversationSkillExecution =
-      input.skillId === 'synonym'
-        ? { ...executionBase, skillId: 'synonym' }
-        : input.skillId === 'phrase'
-          ? { ...executionBase, skillId: 'phrase' }
-          : { ...executionBase, skillId: 'vocabulary' }
+      input.skillId === 'tts'
+        ? { ...executionBase, skillId: 'tts' }
+        : input.skillId === 'synonym'
+          ? { ...executionBase, skillId: 'synonym' }
+          : input.skillId === 'phrase'
+            ? { ...executionBase, skillId: 'phrase' }
+            : { ...executionBase, skillId: 'vocabulary' }
     const assistantMessageId = randomUUID()
     this.registerExecution(input.requestId, {
       controller: new AbortController(),
@@ -330,7 +353,7 @@ export class ConversationModule {
       throw error
     }
 
-    if (titled) void this.updateTitle(input.requestId, userMessage, emit)
+    if (titled && input.skillId !== 'tts') void this.updateTitle(input.requestId, userMessage, emit)
 
     const generation: GenerationStarted = {
       requestId: input.requestId,
@@ -605,6 +628,9 @@ export class ConversationModule {
       return this.retryExploreMessage(fileSkillId, input, userMessage, history, emit)
     }
 
+    if (/^\/tts(?:\s|$)/u.test(userMessage.content))
+      throw new RetryNotAllowedError('Missing speech execution')
+
     const lastMessage = history.at(-1)
     if (!lastMessage || lastMessage.id !== userMessage.id) {
       throw new RetryNotAllowedError('only the last unanswered user message can be retried')
@@ -742,7 +768,13 @@ export class ConversationModule {
     if (!draft) return undefined
     return {
       ...draft,
-      title: message.content.trim().slice(0, CONVERSATION_TITLE_MAX_LENGTH).trim(),
+      title: (message.content.startsWith('/tts ')
+        ? message.content.slice(5).replace(/\s+/gu, ' ')
+        : message.content
+      )
+        .trim()
+        .slice(0, CONVERSATION_TITLE_MAX_LENGTH)
+        .trim(),
       createdAt: message.createdAt,
       updatedAt: message.createdAt
     }
@@ -1057,6 +1089,7 @@ export class ConversationModule {
       sessionId: generation.sessionId,
       role: 'assistant',
       content: feedback,
+      ...(isTtsReport(report) ? { speech: report.speech } : {}),
       createdAt: new Date().toISOString()
     }
     await this.withPersistence(() =>
@@ -1112,6 +1145,7 @@ export class ConversationModule {
 
   // Core 只返回安全错误码，不负责界面翻译；内部原因留在产生处。
   private toSafeError(error: unknown): GenerationEventError {
+    if (error instanceof SpeechError) return { code: 'SPEECH_ERROR', speechCode: error.code }
     if (error instanceof AgentRuntimeError) return { code: error.code }
     if (error instanceof SynonymError) {
       if (error.code === 'STORAGE_FAILED') return { code: 'PERSISTENCE_ERROR' }
@@ -1207,6 +1241,7 @@ function toMessage(message: StoredMessage): ConversationMessage {
     role: message.role,
     content: message.content,
     createdAt: message.createdAt,
+    ...(message.speech ? { speech: message.speech } : {}),
     ...(message.retryable === true ? { retryable: true } : {})
   }
 }

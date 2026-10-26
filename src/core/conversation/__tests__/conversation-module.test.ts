@@ -168,6 +168,9 @@ describe('ConversationModule', () => {
       const conversation = await repository.seedConversation()
       const inputs: unknown[] = []
       const runtime: import('../../agent/agent-runtime').AgentRuntime = {
+        runTts: async () => {
+          throw new Error('Unexpected speech task')
+        },
         runVocabularyPractice: async () => {
           throw new Error('Unused vocabulary practice runtime')
         },

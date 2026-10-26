@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from lingo_agent.graphs.phrase import PhraseState
     from lingo_agent.graphs.sentence_practice import SentencePracticeState
     from lingo_agent.graphs.synonym import SynonymState
+    from lingo_agent.graphs.tts import TtsState
     from lingo_agent.graphs.vocabulary import VocabularyState
     from lingo_agent.graphs.vocabulary_practice import VocabularyPracticeState
 
@@ -32,6 +33,7 @@ async def execute(
     run_id: str, snapshot: dict[str, Any], host: HostCall
 ) -> (
     LearningState
+    | TtsState
     | VocabularyState
     | PhraseState
     | SynonymState
@@ -40,6 +42,10 @@ async def execute(
     | SentencePracticeState
     | VocabularyPracticeState
 ):
+    if snapshot["task"] == "tts":
+        from lingo_agent.graphs.tts import execute_tts
+
+        return await execute_tts(snapshot, host)
     if snapshot["task"] == "vocabulary-practice-review":
         from lingo_agent.graphs.vocabulary_practice import execute_vocabulary_practice
 

@@ -125,6 +125,7 @@ const issueSummary = (issues: ZodIssue[]): Array<{ path: PropertyKey[]; code: st
   issues.map(({ path, code }) => ({ path, code }))
 
 const api: LingoMateApi = {
+  // Includes saved audio reads bound to a conversation message, never file paths.
   speech: createSpeechApi(),
   reportError: async (rawInput) => {
     const input = rendererErrorReportSchema.parse(rawInput)

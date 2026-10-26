@@ -11,6 +11,44 @@ import { SPEECH_IDENTITY } from '../../../../shared/speech'
 
 afterEach(cleanup)
 describe('spoken plain text', () => {
+  it('shows synthesis and safe failures beside the original source without a global player', async () => {
+    let finish!: (
+      result: Awaited<ReturnType<import('../../../../shared/speech').SpeechApi['synthesize']>>
+    ) => void
+    const controller = new SpeechController(
+      {
+        synthesize: () =>
+          new Promise((resolve) => {
+            finish = resolve
+          }),
+        cancel: async () => ({ status: 'ok' })
+      },
+      new AudioPlayer({
+        unlock: async () => {},
+        decode: async () => {
+          throw new Error('No audio expected')
+        },
+        currentTime: () => 0,
+        now: () => 0,
+        getState: () => 'running',
+        getOutputTimestamp: () => ({ contextTime: 0, performanceTime: 0 }),
+        close: async () => {}
+      }),
+      { request: () => 1, cancel: () => {} }
+    )
+    render(
+      <I18nextProvider i18n={createI18n('en')}>
+        <SpeechText text="Hello" sourceId="example" controller={controller} />
+      </I18nextProvider>
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Read aloud: Hello' }))
+    expect(screen.getByRole('status')).toHaveTextContent('Preparing speech')
+    await act(async () => {
+      finish({ status: 'error', error: { code: 'NOT_INSTALLED' } })
+    })
+    expect(await screen.findByRole('alert')).toHaveTextContent('Settings')
+    expect(screen.queryByRole('slider')).not.toBeInTheDocument()
+  })
   it('preserves whitespace and punctuation and highlights only the matching source range', async () => {
     let outputTime = 5
     const text = ' hello, hello! '

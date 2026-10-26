@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import type { LanguageModel, ModelStreamEvent } from '../../core/llm/language-model'
 import { AgentHost, type AgentTestOperations } from '../../core/agent/agent-host'
 import {
+  type TtsHostOperations,
+  type TtsAgentRunInput,
   type VocabularyPracticeHostOperations,
   type VocabularyPracticeAgentRuntime,
   type SentencePracticeAgentRuntime,
@@ -25,6 +27,7 @@ import type { AgentFrame } from '../../core/agent/agent-protocol'
 import { PythonAgentProcess } from './python-agent-process'
 
 type BatchTask =
+  | 'tts'
   | 'vocabulary-practice-review'
   | 'sentence-practice-hints'
   | 'sentence-practice-review'
@@ -35,6 +38,7 @@ type BatchTask =
   | 'explore-vocabulary'
 
 interface RunHosts {
+  tts?: TtsHostOperations
   vocabularyPractice?: VocabularyPracticeHostOperations
   sentencePractice?: SentencePracticeHostOperations
   vocabulary?: VocabularyHostOperations
@@ -46,6 +50,7 @@ interface RunHosts {
 
 // Batch snapshots still require one message; the batch graphs never read it.
 const BATCH_MESSAGE: Record<BatchTask, string> = {
+  tts: 'Bound speech synthesis',
   'vocabulary-practice-review': 'Bound vocabulary practice',
   'sentence-practice-hints': 'Bound sentence practice',
   'sentence-practice-review': 'Bound sentence practice',
@@ -97,6 +102,7 @@ export class PythonAgentRuntime implements AgentRuntime {
 
   async *stream(input: AgentRunInput): AsyncIterable<ModelStreamEvent> {
     if (
+      input.task === 'tts' ||
       input.task === 'vocabulary-practice-review' ||
       input.task === 'sentence-practice-hints' ||
       input.task === 'sentence-practice-review' ||
@@ -171,6 +177,10 @@ export class PythonAgentRuntime implements AgentRuntime {
       void event
   }
 
+  runTts(input: TtsAgentRunInput, host: TtsHostOperations): Promise<void> {
+    return this.runBatch(input, 'tts', { tts: host })
+  }
+
   private async *run(input: AgentRunInput, hosts: RunHosts = {}): AsyncIterable<ModelStreamEvent> {
     input.signal.throwIfAborted()
     if (this.closed || this.runs.size >= 8) throw new AgentRuntimeError('AGENT_UNAVAILABLE')
@@ -196,7 +206,8 @@ export class PythonAgentRuntime implements AgentRuntime {
         hosts.explorePhrase,
         hosts.exploreVocabulary,
         hosts.sentencePractice,
-        hosts.vocabularyPractice
+        hosts.vocabularyPractice,
+        hosts.tts
       ),
       queue: [],
       wake: () => {},
@@ -262,6 +273,7 @@ export class PythonAgentRuntime implements AgentRuntime {
     }
     const run = this.runs.get(frame.runId)
     if (
+      frame.type === 'tts_result' ||
       frame.type === 'vocabulary_practice_result' ||
       frame.type === 'sentence_practice_result' ||
       frame.type === 'vocabulary_result' ||
@@ -306,6 +318,7 @@ export class PythonAgentRuntime implements AgentRuntime {
       }
       case 'event':
         if (
+          run.hosts.tts ||
           run.hosts.vocabularyPractice ||
           run.hosts.sentencePractice ||
           run.hosts.vocabulary ||
@@ -330,6 +343,16 @@ export class PythonAgentRuntime implements AgentRuntime {
         if (frame.event.type === 'text') run.text += frame.event.delta
         run.queue.push(frame.event)
         run.wake()
+        return
+      case 'tts_result':
+        try {
+          if (!run.hosts.tts || run.openCalls.size)
+            throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+          run.hosts.tts.verifyCompletion(frame.result)
+          this.finish(frame.runId, run)
+        } catch (error) {
+          this.finish(frame.runId, run, error)
+        }
         return
       case 'vocabulary_practice_result':
         try {
@@ -398,6 +421,7 @@ export class PythonAgentRuntime implements AgentRuntime {
         return
       case 'result':
         if (
+          run.hosts.tts ||
           run.hosts.vocabularyPractice ||
           run.hosts.sentencePractice ||
           run.hosts.vocabulary ||

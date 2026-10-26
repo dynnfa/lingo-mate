@@ -10,7 +10,7 @@
 
 这次重新审视历史架构清单中“不引入通用 Agent 框架”的范围：Agent 策略、Prompt 与编排统一由 Python 持有，现有会话生命周期、领域执行、模型适配、用量账本、存储与事务继续由 TypeScript 持有。历史清单原路径为 `docs/architecture-todo.md`，当前仓库已不包含该文件，此处仅保留决策背景，不作为现行规范入口。当前约定见 [AGENTS.md](../../AGENTS.md)，运行边界以本 ADR 为准。
 
-`ConversationModule` 必须注入 `AgentRuntime`，普通对话、会话标题生成、`/concept`、`/vocabulary`、`/phrase`、`/synonym`、`/explore-phrase`、`/explore-vocabulary` 及句子练习（提示和点评）始终经过 Python，不保留 TypeScript 直跑分支或运行时选择参数。Python 根据最新消息识别 `/concept`，组装明确指定解释语言和学习语言的系统指令。其余显式学习技能及练习暂沿用原流程，后续迁移；未来新增 Agent 策略和工作流统一在 Python 实现。故障返回明确错误，不能静默回退或重放失败请求。子进程仍在首个请求时启动。
+`ConversationModule` 必须注入 `AgentRuntime`，普通对话、会话标题生成、`/concept`、`/vocabulary`、`/phrase`、`/synonym`、`/explore-phrase`、`/explore-vocabulary`、`/tts` 及句子练习（提示和点评）始终经过 Python，不保留 TypeScript 直跑分支或运行时选择参数。Python 根据最新消息识别 `/concept`，组装明确指定解释语言和学习语言的系统指令。其余显式学习技能及练习暂沿用原流程，后续迁移；未来新增 Agent 策略和工作流统一在 Python 实现。故障返回明确错误，不能静默回退或重放失败请求。子进程仍在首个请求时启动。
 
 Python 只得到不含会话/消息 ID、密钥和连接信息的运行快照。运行 ID、独立 call ID、事件序号和进程实例身份在 Main 中关联。模型配置在第一次宿主调用时解析一次，语言在会话执行开始时解析；同一运行内保持稳定。实际 Prompt 由 Python 组装，以 `model.reply` 的必填 `systemPrompt` 传给宿主；供应商请求、取消和记账继续通过原模型适配器执行。宿主不识别 Agent 命令、不选择 Agent Prompt，只使用绑定运行的历史与模型配置执行请求。
 
@@ -18,7 +18,7 @@ Python 只得到不含会话/消息 ID、密钥和连接信息的运行快照。
 
 ## 协议与限制
 
-当前协议版本为 7，严格拒绝额外字段。TypeScript Zod 是协议源，生成 Python 使用的 Draft 2020-12 JSON Schema；两端测试共用合法/非法样例，CI 检查生成物是否过期。版本变更必须同时更新握手、契约和运行包 manifest。
+当前协议版本为 11，严格拒绝额外字段。TypeScript Zod 是协议源，生成 Python 使用的 Draft 2020-12 JSON Schema；两端测试共用合法/非法样例，CI 检查生成物是否过期。版本变更必须同时更新握手、契约和运行包 manifest。
 
 | 限制                     | 首版值                                                                                           |
 | ------------------------ | ------------------------------------------------------------------------------------------------ |
@@ -68,7 +68,8 @@ Python 标准输入使用独立守护线程的非缓冲 OS 读取，避免父管
 
 2026-10-23：句子练习的提示生成与答案点评迁入 `graphs/sentence_practice.py`，使用两个独立任务 `sentence-practice-hints` / `sentence-practice-review` 和 `START → prepare → generate → END` 图。Python 持有原有双语 Prompt，宿主仅授权 `sentence-practice.prepare` 与对应的 `model.sentence-practice-hints` / `model.sentence-practice-review`，完整 `systemPrompt` 原样发送模型。词条、参考释义、提示、答案及点评正文留在 TS，只交换实际输入大小与完成回执；宿主核验图终态后才释放结果。模型／准备调用／操作步骤为 1／1／2，含启动截止 120 秒、单次模型请求 60 秒；实际输入／安全回执／Prompt 上限为 65,536／1,024／4,096 个 UTF-16 单元。抽词、内存会话、配置、凭据、供应商请求、用量、结构及 ID 校验和取消仍由宿主持有，无数据库变更、TS Agent 回退或失败重放。协议升级 v9 并同步握手、共享契约和冻结运行包，见[句子练习迁移计划](../plans/2026-10-23-sentence-practice-langgraph-agent.md)。
 
-
 2026-10-23：词汇练习批改迁入 `graphs/vocabulary_practice.py`，协议升级 v10。独立 `vocabulary-practice-review` 任务由 Python 持有系统 Prompt、多轮工具流程及最多两次补标指令；TS 的模型适配器只完成单次请求，宿主账本校验绑定输入、连续轮次、待执行调用、固定 Prompt 与最终反馈／标记一致性。Python 仅取得轮次、分类、输入大小和安全回执，完整词条／答案／参考释义、模型／工具消息及外层会话／请求身份留在 TS。全对直接结束，标红与最终反馈一致且图终态通过核验后才发布结果并整批保存错题。原有成功请求缓存及保存重试保持幂等；失败无自动重放或 TS 回退。IPC 校验窗口归属，窗口销毁取消练习。
 
 预算为模型／非模型宿主调用／步骤 8／10／18；含启动总截止 120 秒、供应商请求 60 秒，完整消息加工具定义的单轮输入／累计安全回执／Prompt 上限 65,536／4,096／4,096 UTF-16 单元。同步 schema、共享契约、握手与运行包；v9 及旧包须重建。无数据库迁移或真实用户数据修改，见[词汇练习批改迁移计划](../plans/2026-10-23-vocabulary-practice-langgraph-agent.md)。
+
+2026-10-26：新增 `/tts` 确定性单节点图，协议升级 v11。任务仅授权 `tts.synthesize`，模型调用预算固定为 0，非模型宿主调用和操作步骤各 1，含 Python 启动总截止 180 秒。原文、HeadTTS 音频、逐词时间轴和外层消息身份全部由 TS 宿主持有，Python 仅交换完成回执。宿主核验 `tts_result` 后，在 SQLite v12 中原子提交音频和可恢复报告，助手消息保存失败时显式重试复用已提交成果。首次消息使用本地摘要标题，无 LLM 配置亦可执行。Renderer 通过消息身份读取保存音频，在消息内播放及点词定位；不接收文件路径。失败不回退、不重放，历史播放不重新合成。详见[实施记录](../plans/2026-10-26-tts-conversation.md)。

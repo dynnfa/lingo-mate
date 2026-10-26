@@ -1,5 +1,6 @@
 import type { TFunction } from 'i18next'
 import type { ConversationRequestError, GenerationEventError } from '../../../shared/conversation'
+import type { ConversationSkillId } from '../../../shared/conversation'
 import type { ConversationStatus, StatusOperation } from './conversation-state'
 
 type StatusTFunction = TFunction<['common', 'conversation', 'errors']>
@@ -52,9 +53,7 @@ type SkillStatusKeys = {
     | 'conversation:status.descriptionCancelledExploreVocabulary'
 }
 
-const skillKeys = (
-  skillId: 'vocabulary' | 'phrase' | 'synonym' | 'explore-phrase' | 'explore-vocabulary' | undefined
-): SkillStatusKeys =>
+const skillKeys = (skillId: ConversationSkillId | undefined): SkillStatusKeys =>
   skillId === 'synonym'
     ? {
         analyzing: 'conversation:status.analyzingSynonym',
@@ -109,6 +108,12 @@ export function translateConversationStatus(
     case 'generating':
       return t('conversation:status.generating')
     case 'skillPhase': {
+      if (status.skillId === 'tts')
+        return t(
+          status.phase === 'analyzing'
+            ? 'conversation:status.synthesizingTts'
+            : 'conversation:status.committingTts'
+        )
       const keys = skillKeys(status.skillId)
       if (status.phase === 'analyzing') return t(keys.analyzing)
       if (status.phase === 'committing') return t(keys.committing)
@@ -167,6 +172,8 @@ function translateRequestError(t: StatusTFunction, error: ConversationRequestErr
 }
 
 function translateGenerationError(t: StatusTFunction, error: GenerationEventError): string {
+  if (error.code === 'SPEECH_ERROR')
+    return t(`errors.${error.speechCode ?? 'RUNTIME_FAILED'}`, { ns: 'speech' })
   switch (error.code) {
     case 'AGENT_UNAVAILABLE':
       return t('errors:generation.agentUnavailable')

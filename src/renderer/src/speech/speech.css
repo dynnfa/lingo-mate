@@ -32,26 +32,6 @@
   text-decoration-thickness: 2px;
   border-radius: 2px;
 }
-.speech-controls {
-  position: fixed;
-  z-index: 20;
-  inset-inline: 16px;
-  bottom: 16px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-  padding: 12px 16px;
-  color: #f5f5f5;
-  background: #232734;
-  border: 1px solid #626b81;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px #0004;
-}
-.speech-controls input[type='range'] {
-  flex: 1;
-  min-width: 120px;
-}
 .speech-settings {
   display: grid;
   gap: 16px;
@@ -63,4 +43,66 @@
 }
 .speech-settings progress {
   width: 100%;
+}
+
+.tts-message {
+  display: grid;
+  gap: 12px;
+}
+.tts-controls {
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-message);
+  border-radius: 10px;
+  background: var(--color-surface-secondary);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.tts-original {
+  white-space: pre-wrap;
+  line-height: 1.8;
+  margin: 0;
+}
+.tts-word {
+  display: inline;
+  font: inherit;
+  color: inherit;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  user-select: text;
+}
+.tts-word.speech-word {
+  background: #ffe6a0;
+  color: #171717;
+}
+.tts-word:hover {
+  text-decoration: underline;
+}
+.tts-word:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.speech-source-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tts-controls button {
+  padding: 6px 12px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-message);
+}
+.tts-controls button:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+.tts-controls > span {
+  font-size: 12px;
+  color: var(--color-text-status);
 }

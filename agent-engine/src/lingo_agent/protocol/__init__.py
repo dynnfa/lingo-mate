@@ -5,7 +5,7 @@ from typing import Any, cast
 from jsonschema import Draft202012Validator
 
 MAX_FRAME_BYTES = 262_144
-PROTOCOL_VERSION = 10
+PROTOCOL_VERSION = 11
 _validator = Draft202012Validator(json.loads(Path(__file__).with_name("schema.json").read_text()))
 
 

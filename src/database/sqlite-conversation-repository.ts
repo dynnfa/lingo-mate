@@ -1,3 +1,4 @@
+import { ttsReportSchema } from '../shared/speech'
 import { synonymBatchSchema } from '../shared/synonym'
 import type Database from 'better-sqlite3'
 import { conversationSkillArgumentsSchema } from '../shared/conversation'
@@ -28,6 +29,7 @@ interface MessageRow {
   role: 'user' | 'assistant'
   content: string
   created_at: string
+  speech_json?: string | null
   retryable?: number
 }
 
@@ -36,7 +38,7 @@ interface SkillExecutionRow {
   session_id: string
   user_message_id: string
   assistant_message_id: string | null
-  skill_id: 'vocabulary' | 'phrase' | 'synonym'
+  skill_id: 'vocabulary' | 'phrase' | 'synonym' | 'tts'
   arguments_json: string
   explanation_language: 'zh-CN' | 'en'
   phase: ConversationSkillPhase
@@ -109,7 +111,7 @@ export class SqliteConversationRepository
     try {
       const rows = this.database
         .prepare(
-          `SELECT m.id, m.session_id, m.role, m.content, m.created_at,
+          `SELECT m.id, m.session_id, m.role, m.content, m.created_at, speech.batch_json AS speech_json,
                   CASE WHEN e.phase IN (
                     'started', 'analyzing', 'committing', 'summarizing', 'cancelled', 'failed',
                     'description_failed', 'description_cancelled'
@@ -117,6 +119,7 @@ export class SqliteConversationRepository
                        THEN 1 ELSE 0 END AS retryable
            FROM conversation_messages m
            LEFT JOIN conversation_skill_executions e ON e.user_message_id = m.id
+           LEFT JOIN conversation_skill_executions speech ON speech.assistant_message_id = m.id AND speech.skill_id = 'tts'
            WHERE m.session_id = ?
            ORDER BY m.created_at ASC, m.rowid ASC`
         )
@@ -254,6 +257,9 @@ function toStoredMessage(row: MessageRow): StoredMessage {
     role: row.role,
     content: row.content,
     createdAt: row.created_at,
+    ...(row.speech_json
+      ? { speech: ttsReportSchema.parse(JSON.parse(row.speech_json)).speech }
+      : {}),
     ...(row.retryable === 1 ? { retryable: true } : {})
   }
 }
@@ -273,6 +279,12 @@ function toStoredSkillExecution(row: SkillExecutionRow): StoredConversationSkill
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
+  if (row.skill_id === 'tts')
+    return {
+      ...common,
+      skillId: 'tts',
+      ...(row.batch_json ? { batch: ttsReportSchema.parse(JSON.parse(row.batch_json)) } : {})
+    }
   if (row.skill_id === 'synonym') {
     return {
       ...common,

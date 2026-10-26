@@ -56,6 +56,24 @@ describe('parseSlashTrigger', () => {
 })
 
 describe('skill command boundary', () => {
+  it('submits tts directly and preserves multiline text without treating longer prefixes as commands', () => {
+    expect(resolveSkillSubmission('/tts Hello,\nhello!', null)).toBe('tts')
+    expect(resolveSkillSubmission('/tts', null)).toBe('tts')
+    expect(extractSkillDraft('/tts Hello,\nhello!', 'tts')).toEqual({
+      status: 'ok',
+      text: 'Hello,\nhello!'
+    })
+    expect(extractSkillDraft('/tts ', 'tts')).toEqual({ status: 'empty' })
+    expect(resolveSkillSubmission('/ttstuff Hello', null)).toBeNull()
+    expect(parseSlashTrigger('/tts Hello')).toBeUndefined()
+  })
+  it('preserves whitespace belonging to the speech text after the command separator', () => {
+    expect(extractSkillDraft('/tts  Hello,\nworld!  ', 'tts')).toEqual({
+      status: 'ok',
+      text: ' Hello,\nworld!  '
+    })
+    expect(extractSkillDraft('/tts \n  ', 'tts')).toEqual({ status: 'empty' })
+  })
   it('extracts only text after the selected complete command prefix', () => {
     expect(extractSkillDraft('/vocabulary apple, banana', 'vocabulary')).toEqual({
       status: 'ok',

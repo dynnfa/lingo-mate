@@ -4,7 +4,14 @@ import type { ModelsApi } from './models'
 import type { PreferencesApi } from './preferences'
 import type { UsageApi } from './usage'
 import type { VocabularyApi, VocabularyBatch } from './vocabulary'
-import type { SpeechApi } from './speech'
+import {
+  ttsReportSchema,
+  conversationSpeechSchema,
+  speechInputSchema,
+  speechErrorCodeSchema,
+  type SpeechApi,
+  type TtsReport
+} from './speech'
 import type { PhraseApi, PhraseBatch } from './phrase'
 import type { ExplorePhraseReport } from './explore-phrase'
 import type { ExploreVocabularyReport } from './explore-vocabulary'
@@ -36,14 +43,32 @@ export const conversationSummarySchema = z.object({
   updatedAt: timestampSchema
 })
 
-export const conversationMessageSchema = z.object({
-  messageId: identifierSchema,
-  sessionId: identifierSchema,
-  role: z.enum(['user', 'assistant']),
-  content: z.string(),
-  createdAt: timestampSchema,
-  retryable: z.boolean().optional()
-})
+export const conversationMessageSchema = z
+  .object({
+    messageId: identifierSchema,
+    sessionId: identifierSchema,
+    role: z.enum(['user', 'assistant']),
+    content: z.string(),
+    createdAt: timestampSchema,
+    speech: conversationSpeechSchema.optional(),
+    retryable: z.boolean().optional()
+  })
+  .superRefine((message, context) => {
+    if (
+      message.speech &&
+      (message.role !== 'assistant' ||
+        !ttsReportSchema.safeParse({
+          skillId: 'tts',
+          text: message.content,
+          speech: message.speech
+        }).success)
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['speech'],
+        message: 'Speech must match assistant text'
+      })
+  })
 
 // send 结果与 started 事件共享同一 canonical 起始载荷；
 // requestId 只关联请求，messageId 才是消息身份。
@@ -61,6 +86,7 @@ export const sendMessageInputSchema = z.object({
 })
 
 export const conversationSkillIdSchema = z.enum([
+  'tts',
   'vocabulary',
   'phrase',
   'synonym',
@@ -103,6 +129,12 @@ const synonymSkillInputSchema = z.strictObject({
 })
 
 export const runConversationSkillInputSchema = z.discriminatedUnion('skillId', [
+  z.strictObject({
+    requestId: identifierSchema,
+    sessionId: identifierSchema,
+    skillId: z.literal('tts'),
+    arguments: z.strictObject({ text: speechInputSchema.shape.text, wordLanguage: z.literal('en') })
+  }),
   vocabularySkillInputSchema,
   phraseSkillInputSchema,
   synonymSkillInputSchema,
@@ -189,20 +221,23 @@ export const cancelMessageResultSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('error'), error: conversationRequestErrorSchema })
 ])
 
-const generationEventErrorSchema = z.object({
-  code: z.enum([
-    'MODEL_ERROR',
-    'AGENT_UNAVAILABLE',
-    'AGENT_PROTOCOL_ERROR',
-    'AGENT_LIMIT',
-    'AGENT_HOST_ERROR',
-    'MODEL_NOT_CONFIGURED',
-    'CREDENTIAL_DECRYPT_FAILED',
-    'TOOL_CALL_NOT_SUPPORTED',
-    'PERSISTENCE_ERROR',
-    'UNKNOWN_ERROR'
-  ])
-})
+const generationEventErrorSchema = z.union([
+  z.strictObject({ code: z.literal('SPEECH_ERROR'), speechCode: speechErrorCodeSchema }),
+  z.object({
+    code: z.enum([
+      'MODEL_ERROR',
+      'AGENT_UNAVAILABLE',
+      'AGENT_PROTOCOL_ERROR',
+      'AGENT_LIMIT',
+      'AGENT_HOST_ERROR',
+      'MODEL_NOT_CONFIGURED',
+      'CREDENTIAL_DECRYPT_FAILED',
+      'TOOL_CALL_NOT_SUPPORTED',
+      'PERSISTENCE_ERROR',
+      'UNKNOWN_ERROR'
+    ])
+  })
+])
 
 const eventBaseSchema = z.object({
   requestId: identifierSchema,
@@ -255,7 +290,12 @@ export type ConversationSkillArguments = z.infer<typeof conversationSkillArgumen
 // ExplorePhraseReport 与 ExploreVocabularyReport 仅存在于各自的 JSON 历史文件
 // 与内存分派，不进入数据库报告列。
 export type ConversationSkillReport =
-  VocabularyBatch | PhraseBatch | SynonymBatch | ExplorePhraseReport | ExploreVocabularyReport
+  | VocabularyBatch
+  | PhraseBatch
+  | SynonymBatch
+  | ExplorePhraseReport
+  | ExploreVocabularyReport
+  | TtsReport
 export type RetryMessageInput = z.infer<typeof retryMessageInputSchema>
 export type CancelMessageInput = z.infer<typeof cancelMessageInputSchema>
 export type SendMessageResult = z.infer<typeof sendMessageResultSchema>

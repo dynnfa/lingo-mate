@@ -70,6 +70,8 @@ import { createElectronPreferenceStore } from './preferences-store'
 import { LlmUsageStatisticsService } from '../core/llm/llm-usage-statistics'
 import { registerUsageIpc } from './usage-ipc'
 import { registerSpeechIpc } from './speech-ipc'
+import { SqliteTtsRepository } from '../database/sqlite-tts-repository'
+import { TtsConversationSkill } from '../core/speech/tts-conversation-skill'
 import { createSpeechHost } from './speech/speech-host'
 import { registerVocabularyIpc } from './vocabulary-ipc'
 import { VocabularyManagementService } from '../core/learning/vocabulary/vocabulary-management'
@@ -207,10 +209,9 @@ app.whenReady().then(() => {
   )
   // Renderer/Preload 的受限错误上报入口：复用守卫的来源校验与限流。
   registerErrorReportIpc(errorLogger, registerTrustedHandler)
-  disposeSpeech = registerSpeechIpc(
-    createSpeechHost(app.getPath('userData'), errorLogger),
-    registerTrustedHandler
-  )
+  const speechHost = createSpeechHost(app.getPath('userData'), errorLogger)
+  const ttsRepository = new SqliteTtsRepository(database)
+  disposeSpeech = registerSpeechIpc(speechHost, registerTrustedHandler, ttsRepository)
 
   // LLM 用量账本：统一客户端自动记账；重启时把上次进程遗留的 started
   // 调用标记为 interrupted（真实结束时间未知），不重发请求。
@@ -531,7 +532,9 @@ app.whenReady().then(() => {
     ),
     createExploreVocabularyFeedbackFormatter()
   )
+  const ttsSkill = new TtsConversationSkill(ttsRepository, speechHost, agentRuntime)
   const conversationSkills = new Map<ConversationSkillId, ConversationSkill>([
+    [ttsSkill.skillId, ttsSkill],
     [vocabularySkill.skillId, vocabularySkill],
     [phraseSkill.skillId, phraseSkill],
     [synonymSkill.skillId, synonymSkill],
