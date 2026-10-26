@@ -31,7 +31,36 @@ describe('speech synthesis', () => {
     expect(audio.words[50].charStart).toBe(350)
     expect(audio.audio.byteLength).toBe(44 + 2 * 48000)
   })
-  it('rejects input budgets before invoking inference', async () => {
+  it('synthesizes 4,000 UTF-16 units without losing text or word positions', async () => {
+    const text = 'word '.repeat(800)
+    const parts: string[] = []
+    const service = new SpeechService({
+      async synthesize(part) {
+        parts.push(part)
+        const words = part.match(/word /g)!
+        return {
+          audio: wav(),
+          words,
+          wtimes: words.map((_, i) => i * 10),
+          wdurations: words.map(() => 10)
+        }
+      }
+    })
+    const audio = await service.synthesize(
+      { requestId, text, language: 'en' },
+      DEFAULT_SPEECH_SETTINGS,
+      new AbortController().signal
+    )
+    expect(parts.join('')).toBe(text)
+    expect(audio.text).toBe(text)
+    expect(audio.words).toHaveLength(800)
+    expect(audio.words.at(-1)).toMatchObject({
+      text: 'word',
+      charStart: 3995,
+      charEnd: 3999
+    })
+  })
+  it('rejects more than 4,000 UTF-16 units before invoking inference', async () => {
     let called = false
     const service = new SpeechService({
       async synthesize() {
@@ -41,7 +70,7 @@ describe('speech synthesis', () => {
     })
     await expect(
       service.synthesize(
-        { requestId, text: 'a'.repeat(2001), language: 'en' },
+        { requestId, text: 'a'.repeat(4001), language: 'en' },
         DEFAULT_SPEECH_SETTINGS,
         new AbortController().signal
       )

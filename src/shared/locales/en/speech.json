@@ -36,7 +36,7 @@
   },
   "errors": {
     "UNTRUSTED_SOURCE": "This window cannot request speech.",
-    "INVALID_INPUT": "Use English plain text, up to 2,000 characters.",
+    "INVALID_INPUT": "Use English plain text, up to 4,000 characters.",
     "NOT_INSTALLED": "Install speech resources in Settings → Speech first.",
     "INSTALL_FAILED": "Speech resources could not be installed. Try installing again.",
     "BUSY": "Speech is busy. Try again shortly.",
