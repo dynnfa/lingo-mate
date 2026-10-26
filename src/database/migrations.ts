@@ -487,6 +487,26 @@ export const MIGRATIONS: Migration[] = [
         );
       `)
     }
+  },
+  {
+    // 360 秒 PCM16 / 24 kHz 音频超过旧 8 MiB 上限，同步扩展保存容量。
+    version: 13,
+    up: (database) => {
+      database.exec(`
+        CREATE TABLE conversation_speech_assets_v13 (
+          execution_id TEXT PRIMARY KEY REFERENCES conversation_skill_executions(id),
+          metadata_json TEXT NOT NULL CHECK(json_valid(metadata_json)),
+          audio BLOB NOT NULL CHECK(typeof(audio) = 'blob' AND length(audio) BETWEEN 45 AND 25165824)
+        );
+        INSERT INTO conversation_speech_assets_v13 (execution_id, metadata_json, audio)
+          SELECT execution_id, metadata_json, audio FROM conversation_speech_assets ORDER BY rowid;
+      `)
+      copyCountCheck(database, 'conversation_speech_assets', 'conversation_speech_assets_v13')
+      database.exec(`
+        DROP TABLE conversation_speech_assets;
+        ALTER TABLE conversation_speech_assets_v13 RENAME TO conversation_speech_assets;
+      `)
+    }
   }
 ]
 
