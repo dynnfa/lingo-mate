@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { SpeechText } from '../../speech/SpeechText'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { LoadMoreBar } from '../../components/LoadMoreBar'
 import { StateBlock } from '../../components/StateBlock'
@@ -145,9 +146,16 @@ export function PhraseDetail(): React.JSX.Element {
               <tbody>
                 {list.entries.map((entry) => (
                   <tr key={entry.phrase}>
-                    <td className="phrase-cell-phrase">{entry.phrase}</td>
+                    <td className="phrase-cell-phrase">
+                      <SpeechText text={entry.phrase} sourceId={`phrase:${entry.phrase}:term`} />
+                    </td>
                     <td className="phrase-cell-prewrap">{entry.explantation}</td>
-                    <td className="phrase-cell-prewrap">{entry.example}</td>
+                    <td className="phrase-cell-prewrap">
+                      <SpeechText
+                        text={entry.example}
+                        sourceId={`phrase:${entry.phrase}:example`}
+                      />
+                    </td>
                     <td className="phrase-actions-column phrase-actions-cell">
                       <button
                         aria-label={t('recorded.phrase.deleteButtonLabel', {

@@ -1,6 +1,7 @@
 import { VocabularyTransfer } from './VocabularyTransfer'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { SpeechText } from '../../speech/SpeechText'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { LoadMoreBar } from '../../components/LoadMoreBar'
 import { StateBlock } from '../../components/StateBlock'
@@ -162,7 +163,9 @@ export function VocabularyDetail(): React.JSX.Element {
               <tbody>
                 {list.entries.map((entry) => (
                   <tr key={entry.id}>
-                    <td className="vocabulary-cell-term">{entry.term}</td>
+                    <td className="vocabulary-cell-term">
+                      <SpeechText text={entry.term} sourceId={`vocabulary:${entry.id}:term`} />
+                    </td>
                     <td className="vocabulary-cell-phonetic">
                       {entry.phonetic
                         ? entry.phonetic.map((phonetic, index) => <div key={index}>{phonetic}</div>)
@@ -174,7 +177,12 @@ export function VocabularyDetail(): React.JSX.Element {
                       {entry.exampleSentences ? (
                         <ul className="vocabulary-example-list">
                           {entry.exampleSentences.map((sentence) => (
-                            <li key={sentence}>{sentence}</li>
+                            <li key={sentence}>
+                              <SpeechText
+                                text={sentence}
+                                sourceId={`vocabulary:${entry.id}:example:${sentence}`}
+                              />
+                            </li>
                           ))}
                         </ul>
                       ) : (

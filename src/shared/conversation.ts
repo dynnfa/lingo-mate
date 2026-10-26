@@ -4,6 +4,7 @@ import type { ModelsApi } from './models'
 import type { PreferencesApi } from './preferences'
 import type { UsageApi } from './usage'
 import type { VocabularyApi, VocabularyBatch } from './vocabulary'
+import type { SpeechApi } from './speech'
 import type { PhraseApi, PhraseBatch } from './phrase'
 import type { ExplorePhraseReport } from './explore-phrase'
 import type { ExploreVocabularyReport } from './explore-vocabulary'
@@ -295,6 +296,7 @@ export interface ConversationApi {
 }
 
 export interface LingoMateApi {
+  speech: SpeechApi
   conversation: ConversationApi
   preferences: PreferencesApi
   models: ModelsApi
