@@ -1,12 +1,8 @@
 import { z } from 'zod'
 import type { ChatCompletionTool } from 'openai/resources/chat/completions'
-import { synonymTextSchema, synonymWordSchema } from '../../shared/synonym'
-import type {
-  SynonymRepository,
-  SynonymSaveResult,
-  SynonymWrite
-} from '../learning/synonym/synonym-repository'
-import { SynonymError } from '../learning/synonym/parse-synonym-input'
+import { synonymTextSchema, synonymWordSchema } from '../../../shared/synonym'
+import type { SynonymRepository, SynonymSaveResult, SynonymWrite } from './synonym-repository'
+import { SynonymError } from './parse-synonym-input'
 
 const word = synonymWordSchema
 const meaning = synonymTextSchema

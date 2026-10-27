@@ -4,9 +4,9 @@ import {
   EXPLORE_PHRASE_EXPLANATION_MAX_LENGTH,
   EXPLORE_PHRASE_ITEM_COUNT,
   EXPLORE_PHRASE_MAX_LENGTH
-} from '../../shared/explore-phrase'
-import { ExplorePhraseError } from '../learning/explore-phrase/explore-phrase-error'
-import type { ExplorePhraseCandidate } from '../learning/explore-phrase/explore-phrase-generator'
+} from '../../../shared/explore-phrase'
+import { ExplorePhraseError } from './explore-phrase-error'
+import type { ExplorePhraseCandidate } from './explore-phrase-generator'
 
 // /explore-phrase 仅暴露一个白名单工具：模型通过 submit_explored_phrases
 // 提交候选内容（且只提供三个内容字段）；executionId、身份、时间、语言快照

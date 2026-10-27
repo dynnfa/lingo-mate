@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { LlmSentencePracticeReviewer } from '../llm-sentence-practice-reviewer'
-import { ModelRequestError, type CreateLlmClient } from '../llm-client'
-import type { RuntimeModelConfig } from '../model-config'
+import { ModelRequestError, type CreateLlmClient } from '../../../llm/llm-client'
+import type { RuntimeModelConfig } from '../../../llm/model-config'
 
 const config: RuntimeModelConfig = {
   configured: true,

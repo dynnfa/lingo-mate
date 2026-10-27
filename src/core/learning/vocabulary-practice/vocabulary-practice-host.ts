@@ -17,7 +17,7 @@ import { AgentRuntimeError, type VocabularyPracticeHostOperations } from '../../
 import {
   VocabularyPracticeToolExecutor,
   vocabularyPracticeTools
-} from '../../tools/vocabulary-practice-tools'
+} from './vocabulary-practice-tools'
 import { VocabularyPracticeError } from './parse-vocabulary-practice-input'
 import type {
   VocabularyPracticeModel,

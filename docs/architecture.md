@@ -81,6 +81,12 @@ Python 运行服务通过 `runtime/dispatcher.py` 显式分发 task，各功能�
 
 这次职责拆分保留 Python 唯一 Agent 运行时、Zod 唯一协议来源、公开运行签名及现有持久化格式，不新增动态执行或回退入口。详细接口与计量口径见 [Agent Engine README](../agent-engine/README.md#typescript-宿主任务边界)。
 
+### TypeScript 领域实现归属
+
+领域接口、规则、Host、具体模型 Adapter、专属工具定义与校验及其单元测试聚合在 `src/core/learning/<功能>/`。模型实现保留 `llm-` 文件名前缀；句子练习提示与点评共用的 `llm-sentence-practice-completion.ts` 同样位于 `sentence-practice/`。Main 构造并注入具体 Adapter，领域 Module 继续通过已有 Interface 接收依赖。SQLite 仓储实现保留在 `src/database/`，可引用领域内容类型与校验。
+
+`src/core/llm/` 维护跨功能的模型配置、客户端、供应商传输、流式处理、用量及连接测试；`tool-protocol.ts` 和 `tool-request-policy.ts` 也保留在此，供领域 Adapter 复用。通用模型生产代码不依赖学习功能的类型、错误或实现，原 `src/core/tools/` 中的专属实现已全部归入各功能目录。文件归属不改变 Python 持有 Prompt 与执行流程的边界、宿主授权或业务提交语义；搬迁清单与验证见[领域实现归位计划](plans/2026-10-27-ts-domain-implementation-colocation.md)。
+
 ### 近义词 Agent
 
 `/synonym` 沿用现有显式命令、选择器和报告界面，由 Python / LangGraph 持有 Prompt 与顺序多轮工具流程。TS 的运行账本保管模型消息、供应商回放状态、工具参数及分组内容；Python 只取得绑定索引、轮次和安全回执。Main 装配的唯一近义词模块串行处理跨会话批次，后续词能查询前面新建的分组。

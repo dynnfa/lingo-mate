@@ -20,7 +20,7 @@ import {
   type SynonymApplyArgs,
   type SynonymFinishArgs
 } from '../../agent/agent-protocol'
-import { synonymTools, SynonymToolExecutor } from '../../tools/synonym-tools'
+import { synonymTools, SynonymToolExecutor } from './synonym-tools'
 import type { SynonymRepository } from './synonym-repository'
 import type { SynonymAnalyzer, SynonymModelTurn } from './synonym-analyzer'
 import { parseSynonymInput, SynonymError } from './parse-synonym-input'

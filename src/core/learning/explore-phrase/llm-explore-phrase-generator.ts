@@ -2,19 +2,19 @@ import type {
   ExplorePhraseCandidate,
   ExplorePhraseGenerateInput,
   ExplorePhraseGenerator
-} from '../learning/explore-phrase/explore-phrase-generator'
-import { ExplorePhraseError } from '../learning/explore-phrase/explore-phrase-error'
+} from './explore-phrase-generator'
+import { ExplorePhraseError } from './explore-phrase-error'
 import {
   explorePhraseTools,
   SUBMIT_EXPLORED_PHRASES_TOOL_NAME,
   validateSubmitExploredPhrasesArguments
-} from '../tools/explore-phrase-tools'
-import { explorePhraseUserContent } from '../learning/explore-phrase/explore-phrase-generator'
-import type { RuntimeModelConfig } from './model-config'
-import { classifyModelRequestError, type CreateLlmClient } from './llm-client'
-import { isUnsupportedToolCall, parseSingleToolCallResponse } from './tool-protocol'
-import { toolRequestParams } from './tool-request-policy'
-import { createAbortableOperation } from '../learning/abortable-operation'
+} from './explore-phrase-tools'
+import { explorePhraseUserContent } from './explore-phrase-generator'
+import type { RuntimeModelConfig } from '../../llm/model-config'
+import { classifyModelRequestError, type CreateLlmClient } from '../../llm/llm-client'
+import { isUnsupportedToolCall, parseSingleToolCallResponse } from '../../llm/tool-protocol'
+import { toolRequestParams } from '../../llm/tool-request-policy'
+import { createAbortableOperation } from '../abortable-operation'
 
 const abortableExploreOperation = createAbortableOperation(ExplorePhraseError)
 

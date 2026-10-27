@@ -1,22 +1,18 @@
-import { PhraseError } from '../learning/phrase/parse-phrase-input'
+import { PhraseError } from './parse-phrase-input'
 import {
   validatePhraseInsertArguments,
   PHRASE_INSERT_TOOL_NAME,
   PHRASE_UNRECOGNIZED_TOOL_NAME,
   phraseInsertTools,
   phraseUnrecognizedToolArgumentsSchema
-} from '../tools/phrase-tools'
-import type {
-  AnalyzePhraseInput,
-  PhraseAnalyzer,
-  PhraseAnalysisResult
-} from '../learning/phrase/phrase-analyzer'
-import { abortablePhraseOperation } from '../learning/phrase/abortable-operation'
-import { PHRASE_PROMPT_VERSION } from '../learning/phrase/phrase-analyzer'
-import type { RuntimeModelConfig } from './model-config'
-import { classifyModelRequestError, type CreateLlmClient } from './llm-client'
-import { isUnsupportedToolCall, parseSingleToolCallResponse } from './tool-protocol'
-import { toolRequestParams } from './tool-request-policy'
+} from './phrase-tools'
+import type { AnalyzePhraseInput, PhraseAnalyzer, PhraseAnalysisResult } from './phrase-analyzer'
+import { abortablePhraseOperation } from './abortable-operation'
+import { PHRASE_PROMPT_VERSION } from './phrase-analyzer'
+import type { RuntimeModelConfig } from '../../llm/model-config'
+import { classifyModelRequestError, type CreateLlmClient } from '../../llm/llm-client'
+import { isUnsupportedToolCall, parseSingleToolCallResponse } from '../../llm/tool-protocol'
+import { toolRequestParams } from '../../llm/tool-request-policy'
 
 export class LlmPhraseAnalyzer implements PhraseAnalyzer {
   // 无默认值：调用方（PhraseModule 通过工厂）持有单项超时策略，保持单一来源。

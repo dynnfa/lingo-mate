@@ -1,15 +1,15 @@
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import { z } from 'zod'
-import { VocabularyPracticeError } from '../learning/vocabulary-practice/parse-vocabulary-practice-input'
+import { VocabularyPracticeError } from './parse-vocabulary-practice-input'
 import type {
   VocabularyPracticeModel,
   VocabularyPracticeModelMessage
-} from '../learning/vocabulary-practice/vocabulary-practice-reviewer'
-import { vocabularyPracticeTools } from '../tools/vocabulary-practice-tools'
-import type { RuntimeModelConfig } from './model-config'
-import { classifyModelRequestError, type CreateLlmClient } from './llm-client'
-import { isUnsupportedToolCall } from './tool-protocol'
-import { toolRequestParams } from './tool-request-policy'
+} from './vocabulary-practice-reviewer'
+import { vocabularyPracticeTools } from './vocabulary-practice-tools'
+import type { RuntimeModelConfig } from '../../llm/model-config'
+import { classifyModelRequestError, type CreateLlmClient } from '../../llm/llm-client'
+import { isUnsupportedToolCall } from '../../llm/tool-protocol'
+import { toolRequestParams } from '../../llm/tool-request-policy'
 
 // 工具调用可附带说明文本；只有正常结束且无工具调用时才解析最终反馈。
 const responseSchema = z.object({

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
-import { LlmSynonymAnalyzer } from '../../src/core/llm/llm-synonym-analyzer'
+import { LlmSynonymAnalyzer } from '../../src/core/learning/synonym/llm-synonym-analyzer'
 import type { CreateLlmClient } from '../../src/core/llm/llm-client'
 import { SynonymHost } from '../../src/core/learning/synonym/synonym-host'
 import { SynonymError } from '../../src/core/learning/synonym/parse-synonym-input'

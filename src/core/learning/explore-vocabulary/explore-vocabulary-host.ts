@@ -15,7 +15,7 @@ import {
 import {
   exploreVocabularyTools,
   submitExploredVocabularyArgumentsSchema
-} from '../../tools/explore-vocabulary-tools'
+} from './explore-vocabulary-tools'
 import { ExploreVocabularyError } from './explore-vocabulary-error'
 import {
   exploreVocabularyUserContent,

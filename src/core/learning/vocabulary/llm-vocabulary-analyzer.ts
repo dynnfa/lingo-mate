@@ -1,23 +1,23 @@
 import { ZodError } from 'zod'
-import { VocabularyError } from '../learning/vocabulary/parse-vocabulary-input'
+import { VocabularyError } from './parse-vocabulary-input'
 import {
   validateInsertArguments,
   VOCABULARY_INSERT_TOOL_NAME,
   VOCABULARY_UNRECOGNIZED_TOOL_NAME,
   vocabularyInsertTools,
   unrecognizedToolArgumentsSchema
-} from '../learning/vocabulary/vocabulary-insert'
+} from './vocabulary-insert'
 import type {
   AnalyzeVocabularyInput,
   VocabularyModelAnalyzer,
   VocabularyAnalysisResult
-} from '../learning/vocabulary/vocabulary-analyzer'
-import { abortableOperation } from '../learning/vocabulary/abortable-operation'
-import { VOCABULARY_PROMPT_VERSION } from '../learning/vocabulary/vocabulary-analyzer'
-import type { RuntimeModelConfig } from './model-config'
-import { classifyModelRequestError, type CreateLlmClient } from './llm-client'
-import { isUnsupportedToolCall, parseSingleToolCallResponse } from './tool-protocol'
-import { toolRequestParams } from './tool-request-policy'
+} from './vocabulary-analyzer'
+import { abortableOperation } from './abortable-operation'
+import { VOCABULARY_PROMPT_VERSION } from './vocabulary-analyzer'
+import type { RuntimeModelConfig } from '../../llm/model-config'
+import { classifyModelRequestError, type CreateLlmClient } from '../../llm/llm-client'
+import { isUnsupportedToolCall, parseSingleToolCallResponse } from '../../llm/tool-protocol'
+import { toolRequestParams } from '../../llm/tool-request-policy'
 
 export interface VocabularyAnalysisFailure {
   term: string

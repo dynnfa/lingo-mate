@@ -5,7 +5,7 @@ import { PythonAgentProcess } from '../../src/main/agent/python-agent-process'
 import { PythonAgentRuntime } from '../../src/main/agent/python-agent-runtime'
 import { AgentVocabularyPracticeReviewer } from '../../src/core/learning/vocabulary-practice/vocabulary-practice-agent'
 import { describe, expect, it, vi } from 'vitest'
-import { LlmVocabularyPracticeReviewer } from '../../src/core/llm/llm-vocabulary-practice-reviewer'
+import { LlmVocabularyPracticeReviewer } from '../../src/core/learning/vocabulary-practice/llm-vocabulary-practice-reviewer'
 import type { CreateLlmClient } from '../../src/core/llm/llm-client'
 import type { RuntimeModelConfig } from '../../src/core/llm/model-config'
 
