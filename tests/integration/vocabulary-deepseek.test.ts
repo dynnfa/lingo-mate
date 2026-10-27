@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { openDatabase } from '../../src/database/database'
 import { SqliteVocabularyRepository } from '../../src/database/sqlite-vocabulary-repository'
 import { VocabularyModule } from '../../src/core/learning/vocabulary/vocabulary-module'
-import { LlmVocabularyAnalyzer } from '../../src/core/llm/llm-vocabulary-analyzer'
+import { LlmVocabularyAnalyzer } from '../../src/core/learning/vocabulary/llm-vocabulary-analyzer'
 import { LlmClient, type CreateLlmClient } from '../../src/core/llm/llm-client'
 import { LlmUsageRecorder } from '../../src/core/llm/llm-usage-recorder'
 

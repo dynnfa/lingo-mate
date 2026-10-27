@@ -2,19 +2,19 @@ import type {
   ExploreVocabularyCandidate,
   ExploreVocabularyGenerateInput,
   ExploreVocabularyGenerator
-} from '../learning/explore-vocabulary/explore-vocabulary-generator'
-import { ExploreVocabularyError } from '../learning/explore-vocabulary/explore-vocabulary-error'
+} from './explore-vocabulary-generator'
+import { ExploreVocabularyError } from './explore-vocabulary-error'
 import {
   exploreVocabularyTools,
   SUBMIT_EXPLORED_VOCABULARY_TOOL_NAME,
   validateSubmitExploredVocabularyArguments
-} from '../tools/explore-vocabulary-tools'
-import { exploreVocabularyUserContent } from '../learning/explore-vocabulary/explore-vocabulary-generator'
-import type { RuntimeModelConfig } from './model-config'
-import { classifyModelRequestError, type CreateLlmClient } from './llm-client'
-import { isUnsupportedToolCall, parseSingleToolCallResponse } from './tool-protocol'
-import { toolRequestParams } from './tool-request-policy'
-import { createAbortableOperation } from '../learning/abortable-operation'
+} from './explore-vocabulary-tools'
+import { exploreVocabularyUserContent } from './explore-vocabulary-generator'
+import type { RuntimeModelConfig } from '../../llm/model-config'
+import { classifyModelRequestError, type CreateLlmClient } from '../../llm/llm-client'
+import { isUnsupportedToolCall, parseSingleToolCallResponse } from '../../llm/tool-protocol'
+import { toolRequestParams } from '../../llm/tool-request-policy'
+import { createAbortableOperation } from '../abortable-operation'
 
 const abortableExploreOperation = createAbortableOperation(ExploreVocabularyError)
 

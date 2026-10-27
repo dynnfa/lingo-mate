@@ -1,11 +1,11 @@
 import { z } from 'zod'
-import type { SynonymAnalyzer, SynonymModelTurn } from '../learning/synonym/synonym-analyzer'
-import { SynonymError } from '../learning/synonym/parse-synonym-input'
-import { synonymTools } from '../tools/synonym-tools'
-import type { RuntimeModelConfig } from './model-config'
-import { classifyModelRequestError, type CreateLlmClient } from './llm-client'
-import { isUnsupportedToolCall } from './tool-protocol'
-import { toolRequestParams } from './tool-request-policy'
+import type { SynonymAnalyzer, SynonymModelTurn } from './synonym-analyzer'
+import { SynonymError } from './parse-synonym-input'
+import { synonymTools } from './synonym-tools'
+import type { RuntimeModelConfig } from '../../llm/model-config'
+import { classifyModelRequestError, type CreateLlmClient } from '../../llm/llm-client'
+import { isUnsupportedToolCall } from '../../llm/tool-protocol'
+import { toolRequestParams } from '../../llm/tool-request-policy'
 
 const responseSchema = z.object({
   choices: z

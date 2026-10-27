@@ -1,5 +1,5 @@
 import type { PhraseEntry } from '../../../../shared/phrase'
-import type { PhraseInsertContent } from '../../../tools/phrase-tools'
+import type { PhraseInsertContent } from '../phrase-tools'
 import type { PhraseAnalysisResult } from '../phrase-analyzer'
 import type { PhraseRepository, PhraseSaveStatus } from '../phrase-repository'
 import { normalizePhrase } from '../parse-phrase-input'

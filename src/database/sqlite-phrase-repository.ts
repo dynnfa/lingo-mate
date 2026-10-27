@@ -12,7 +12,7 @@ import { PhraseError } from '../core/learning/phrase/parse-phrase-input'
 import {
   assertValidPhraseInsertContent,
   type PhraseInsertContent
-} from '../core/tools/phrase-tools'
+} from '../core/learning/phrase/phrase-tools'
 import type { PhraseRepository, PhraseSaveStatus } from '../core/learning/phrase/phrase-repository'
 
 // 应用内部固定的参数化 INSERT：唯一约束冲突不覆盖既有内容。

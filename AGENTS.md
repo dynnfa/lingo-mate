@@ -20,11 +20,10 @@ src/
 ├── preload/        # IPC Bridge，Renderer 与 Main 之间的安全桥接层
 ├── core/           # TypeScript 领域与可信宿主能力
 │   ├── agent/      # AgentRuntime 接口、宿主安全校验与跨语言协议
-│   ├── llm/        # 模型客户端、模型配置与流式响应
+│   ├── llm/        # 通用模型客户端、配置、传输、流式响应与工具协议处理
 │   ├── memory/     # 规划模块，尚未实现：长期学习记忆与检索
-│   ├── tools/      # Agent 工具定义与执行
 │   ├── prompt/     # 尚未迁移的技能及练习 Prompt
-│   ├── learning/   # 语言学习领域逻辑
+│   ├── learning/   # 按功能聚合领域逻辑、宿主、模型 Adapter、专属工具与测试
 │   └── conversation/ # 会话模型、消息流与上下文组装
 ├── database/       # SQLite schema、迁移、连接与数据访问
 ├── shared/         # 跨层共享的 TypeScript 类型与协议
@@ -87,15 +86,16 @@ hook 文件统一使用 camelCase 命名，且文件名与导出的 hook 函数�
 ```text
 src/core/
 ├── agent/          # AgentRuntime、宿主能力与跨语言协议契约
-├── llm/            # 模型配置、传输适配和流式响应
+├── llm/            # 通用模型配置、客户端、传输、流式响应、用量与工具协议处理
 ├── memory/         # 规划模块，尚未实现：长期学习记忆与检索
-├── tools/          # Agent 工具定义与执行
 ├── prompt/         # 尚未迁移的技能及练习 Prompt
-├── learning/       # 语言学习领域逻辑
+├── learning/       # 按功能聚合领域接口、规则、宿主、模型 Adapter、专属工具与测试
 └── conversation/   # 会话模型、消息流和上下文组装
 ```
 
 核心逻辑应尽量通过明确接口与依赖注入连接 LLM、存储和系统能力，以便独立测试。不要从 `src/core` 导入 React 组件或 Renderer 状态。
+
+领域专属模型 Adapter、工具定义与校验及其单元测试归入对应的 `learning/<功能>/`。`llm/` 只维护跨功能模型基础设施，不依赖学习功能的类型、错误或实现；通用工具请求／响应处理保留在 `llm/`。Main 构造并注入具体 Adapter，领域 Module 继续依赖已有 Interface，不自行构造模型 Adapter。
 
 `memory/` 当前仅为规划职责，不代表已有记忆提取、持久化或召回实现；实施范围见 [长期学习记忆计划](docs/plans/2026-10-21-long-term-learning-memory.md)。
 
