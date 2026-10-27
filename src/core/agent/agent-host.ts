@@ -1,99 +1,28 @@
-import { phraseInsertTools } from '../tools/phrase-tools'
-import { vocabularyInsertTools } from '../learning/vocabulary/vocabulary-insert'
-import type { LanguageModel, ModelStreamEvent } from '../llm/language-model'
+import { ZodError } from 'zod'
+import type { ModelStreamEvent } from '../llm/language-model'
 import {
-  ttsCompletionSchema,
-  vocabularyPracticePreparedSchema,
-  vocabularyPracticeTurnSchema,
-  vocabularyPracticeAppliedSchema,
-  vocabularyPracticeCompletionSchema,
-  vocabularyPracticeModelArgsSchema,
-  vocabularyPracticeApplyArgsSchema,
-  vocabularyPracticeCorrectArgsSchema,
-  vocabularyPracticeFinishArgsSchema,
-  sentencePracticePreparedSchema,
-  sentencePracticeCompletionSchema,
-  exploreVocabularyModelArgsSchema,
-  exploreVocabularyPreparedSchema,
-  exploreVocabularyReceiptSchema,
-  explorePhraseModelArgsSchema,
-  explorePhrasePreparedSchema,
-  explorePhraseReceiptSchema,
-  synonymModelArgsSchema,
-  synonymApplyArgsSchema,
-  synonymFinishArgsSchema,
-  synonymPreparedSchema,
-  synonymTurnSchema,
-  synonymAppliedSchema,
-  synonymFinishedSchema,
   agentCallArgsSchema,
-  agentHostResultSchema,
-  agentDecisionSchema,
-  agentReplyArgsSchema,
-  vocabularyModelArgsSchema,
-  vocabularyPreparedSchema,
-  vocabularyAnalysisReceiptSchema,
-  phraseModelArgsSchema,
-  phrasePreparedSchema,
-  phraseAnalysisReceiptSchema,
-  type AgentDecision,
   type AgentCallArgs,
   type AgentHostResult,
   type AgentOperation,
-  type VocabularyPrepared,
-  type PhrasePrepared,
   type AgentSnapshot
 } from './agent-protocol'
-import {
-  AgentRuntimeError,
-  type TtsHostOperations,
-  type VocabularyPracticeHostOperations,
-  type SentencePracticeHostOperations,
-  type VocabularyHostOperations,
-  type PhraseHostOperations,
-  type SynonymHostOperations,
-  type ExplorePhraseHostOperations,
-  type ExploreVocabularyHostOperations
-} from './agent-runtime'
-
-export interface AgentTestOperations {
-  // Installed only by controlled tests. Production registers no tool handlers.
-  decide(
-    input: Pick<AgentSnapshot, 'messages' | 'outputLanguage' | 'targetLanguage'> & {
-      results: Array<{ entries: string[] }>
-      signal: AbortSignal
-    }
-  ): Promise<AgentDecision>
-  lookup(query: string, signal: AbortSignal): Promise<{ entries: string[] }>
-}
+import { AgentRuntimeError } from './agent-runtime'
+import type { AgentTaskBinding } from './agent-task'
+export type { AgentTestOperations } from './agent-task'
 
 export class AgentHost {
-  private sentencePrepared = false
-  private sentenceModelStarted = false
-  private phrasePrepared?: PhrasePrepared
-  private readonly phraseIndices = new Set<number>()
-  private prepared?: VocabularyPrepared
-  private readonly vocabularyIndices = new Set<number>()
   private readonly calls = new Set<string>()
-  private model?: LanguageModel
   private modelCalls = 0
-  private outputChars = 0
   private toolCalls = 0
-  private results: Array<{ entries: string[] }> = []
-  private query?: string
+  private outputChars = 0
+  private readonly snapshot: AgentSnapshot
   constructor(
-    private readonly snapshot: AgentSnapshot,
-    private readonly resolveModel: () => LanguageModel,
-    private readonly testOperations?: AgentTestOperations,
-    private readonly vocabulary?: VocabularyHostOperations,
-    private readonly phrase?: PhraseHostOperations,
-    private readonly synonym?: SynonymHostOperations,
-    private readonly explorePhrase?: ExplorePhraseHostOperations,
-    private readonly exploreVocabulary?: ExploreVocabularyHostOperations,
-    private readonly sentencePractice?: SentencePracticeHostOperations,
-    private readonly vocabularyPractice?: VocabularyPracticeHostOperations,
-    private readonly tts?: TtsHostOperations
+    snapshot: AgentSnapshot,
+    private readonly binding: AgentTaskBinding
   ) {
+    if (snapshot.task !== binding.task || snapshot.task !== binding.adapter.task)
+      throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
     this.snapshot = structuredClone(snapshot)
   }
 
@@ -106,348 +35,44 @@ export class AgentHost {
   ): Promise<AgentHostResult> {
     signal.throwIfAborted()
     if (
+      !this.binding.policy.allowedOperations.includes(operation) ||
       !this.snapshot.allowedOperations.some((allowed) => allowed === operation) ||
       this.calls.has(callId)
     )
       throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
     this.calls.add(callId)
-    const parsedArgs = agentCallArgsSchema.safeParse(rawArgs)
-    if (!parsedArgs.success)
-      throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR', { cause: parsedArgs.error })
-    const args = parsedArgs.data
-    if (this.calls.size > this.snapshot.budget.maxSteps) throw new AgentRuntimeError('AGENT_LIMIT')
-    if (this.snapshot.task === 'tts') {
-      if (!this.tts || operation !== 'tts.synthesize' || Object.keys(args).length)
-        throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-      if (++this.toolCalls > this.snapshot.budget.maxToolCalls)
+    try {
+      const args = agentCallArgsSchema.parse(rawArgs)
+      if (this.calls.size > this.snapshot.budget.maxSteps)
         throw new AgentRuntimeError('AGENT_LIMIT')
-      const result = ttsCompletionSchema.parse(await this.tts.synthesize(signal))
-      signal.throwIfAborted()
-      return result
-    }
-    if (this.snapshot.task === 'vocabulary-practice-review') {
-      if (!this.vocabularyPractice) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-      let result: AgentHostResult
-      if (operation === 'model.vocabulary-practice-review') {
+      const plan = this.binding.adapter.prepareCall(operation, args)
+      // Reserve before awaiting: two concurrent analyses cannot spend the same
+      // remaining model call. Task validation precedes budget reservation.
+      if (plan.kind === 'model') {
         if (++this.modelCalls > this.snapshot.budget.maxModelCalls)
           throw new AgentRuntimeError('AGENT_LIMIT')
-        result = vocabularyPracticeTurnSchema.parse(
-          await this.vocabularyPractice.model(
-            vocabularyPracticeModelArgsSchema.parse(args),
-            signal,
-            this.snapshot.budget.maxInputChars
-          )
-        )
-      } else {
-        if (++this.toolCalls > this.snapshot.budget.maxToolCalls)
-          throw new AgentRuntimeError('AGENT_LIMIT')
-        if (operation === 'vocabulary-practice.prepare' && !Object.keys(args).length)
-          result = vocabularyPracticePreparedSchema.parse(this.vocabularyPractice.prepare())
-        else if (operation === 'vocabulary-practice.apply')
-          result = vocabularyPracticeAppliedSchema.parse(
-            this.vocabularyPractice.apply(vocabularyPracticeApplyArgsSchema.parse(args), signal)
-          )
-        else if (operation === 'vocabulary-practice.correct')
-          result = vocabularyPracticeAppliedSchema.parse(
-            this.vocabularyPractice.correct(vocabularyPracticeCorrectArgsSchema.parse(args), signal)
-          )
-        else if (operation === 'vocabulary-practice.finish')
-          result = vocabularyPracticeCompletionSchema.parse(
-            this.vocabularyPractice.finish(vocabularyPracticeFinishArgsSchema.parse(args))
-          )
-        else throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-      }
+      } else if (++this.toolCalls > this.snapshot.budget.maxToolCalls)
+        throw new AgentRuntimeError('AGENT_LIMIT')
       signal.throwIfAborted()
-      this.outputChars += JSON.stringify(result).length
-      if (this.outputChars > this.snapshot.budget.maxOutputChars)
-        throw new AgentRuntimeError('AGENT_LIMIT')
-      return result
-    }
-    if (
-      this.snapshot.task === 'sentence-practice-hints' ||
-      this.snapshot.task === 'sentence-practice-review'
-    ) {
-      if (!this.sentencePractice) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-      let result: AgentHostResult
-      if (operation === 'sentence-practice.prepare' && !Object.keys(args).length) {
-        if (this.sentencePrepared) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-        if (++this.toolCalls > this.snapshot.budget.maxToolCalls)
-          throw new AgentRuntimeError('AGENT_LIMIT')
-        this.sentencePrepared = true
-        result = sentencePracticePreparedSchema.parse(this.sentencePractice.prepare())
-      } else if (operation === `model.${this.snapshot.task}`) {
-        if (!this.sentencePrepared || this.sentenceModelStarted)
-          throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-        this.sentenceModelStarted = true
-        if (++this.modelCalls > this.snapshot.budget.maxModelCalls)
-          throw new AgentRuntimeError('AGENT_LIMIT')
-        result = sentencePracticeCompletionSchema.parse(
-          await this.sentencePractice.model(
-            agentReplyArgsSchema.parse(args),
-            signal,
-            this.snapshot.budget.maxInputChars
-          )
-        )
-      } else throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-      signal.throwIfAborted()
-      this.outputChars += JSON.stringify(result).length
-      if (this.outputChars > this.snapshot.budget.maxOutputChars)
-        throw new AgentRuntimeError('AGENT_LIMIT')
-      return result
-    }
-    if (this.explorePhrase && this.snapshot.task === 'explore-phrase') {
-      let result: AgentHostResult
-      if (operation === 'explore-phrase.prepare' && !Object.keys(args).length) {
-        if (++this.toolCalls > this.snapshot.budget.maxToolCalls)
-          throw new AgentRuntimeError('AGENT_LIMIT')
-        result = explorePhrasePreparedSchema.parse(this.explorePhrase.prepare())
-      } else if (operation === 'model.explore-phrase') {
-        if (++this.modelCalls > this.snapshot.budget.maxModelCalls)
-          throw new AgentRuntimeError('AGENT_LIMIT')
-        result = explorePhraseReceiptSchema.parse(
-          await this.explorePhrase.model(
-            explorePhraseModelArgsSchema.parse(args),
-            signal,
-            this.snapshot.budget.maxInputChars
-          )
-        )
-      } else throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-      signal.throwIfAborted()
-      this.outputChars += JSON.stringify(result).length
-      if (this.outputChars > this.snapshot.budget.maxOutputChars)
-        throw new AgentRuntimeError('AGENT_LIMIT')
-      return result
-    }
-    if (this.exploreVocabulary && this.snapshot.task === 'explore-vocabulary') {
-      let result: AgentHostResult
-      if (operation === 'explore-vocabulary.prepare' && !Object.keys(args).length) {
-        if (++this.toolCalls > this.snapshot.budget.maxToolCalls)
-          throw new AgentRuntimeError('AGENT_LIMIT')
-        result = exploreVocabularyPreparedSchema.parse(this.exploreVocabulary.prepare())
-      } else if (operation === 'model.explore-vocabulary') {
-        if (++this.modelCalls > this.snapshot.budget.maxModelCalls)
-          throw new AgentRuntimeError('AGENT_LIMIT')
-        result = exploreVocabularyReceiptSchema.parse(
-          await this.exploreVocabulary.model(
-            exploreVocabularyModelArgsSchema.parse(args),
-            signal,
-            this.snapshot.budget.maxInputChars
-          )
-        )
-      } else throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-      signal.throwIfAborted()
-      this.outputChars += JSON.stringify(result).length
-      if (this.outputChars > this.snapshot.budget.maxOutputChars)
-        throw new AgentRuntimeError('AGENT_LIMIT')
-      return result
-    }
-    if (this.synonym && this.snapshot.task === 'synonym') {
-      let result: AgentHostResult
-      if (operation === 'model.synonym') {
-        if (++this.modelCalls > this.snapshot.budget.maxModelCalls)
-          throw new AgentRuntimeError('AGENT_LIMIT')
-        const turn = synonymTurnSchema.parse(
-          await this.synonym.model(
-            synonymModelArgsSchema.parse(args),
-            signal,
-            this.snapshot.budget.maxInputChars
-          )
-        )
-        if (turn.inputChars > this.snapshot.budget.maxInputChars)
-          throw new AgentRuntimeError('AGENT_LIMIT')
-        result = turn
-      } else {
-        if (++this.toolCalls > this.snapshot.budget.maxToolCalls)
-          throw new AgentRuntimeError('AGENT_LIMIT')
-        if (operation === 'synonym.prepare' && !Object.keys(args).length)
-          result = synonymPreparedSchema.parse(this.synonym.prepare())
-        else if (operation === 'synonym.apply')
-          result = synonymAppliedSchema.parse(
-            this.synonym.apply(synonymApplyArgsSchema.parse(args), signal)
-          )
-        else if (operation === 'synonym.finish')
-          result = synonymFinishedSchema.parse(
-            this.synonym.finish(synonymFinishArgsSchema.parse(args))
-          )
-        else throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-      }
-      signal.throwIfAborted()
-      this.outputChars += JSON.stringify(result).length
-      if (this.outputChars > this.snapshot.budget.maxOutputChars)
-        throw new AgentRuntimeError('AGENT_LIMIT')
-      return result
-    }
-    if (operation === 'vocabulary.prepare' && this.vocabulary) {
-      if (Object.keys(args).length || ++this.toolCalls > 1)
-        throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-      if (this.toolCalls > this.snapshot.budget.maxToolCalls)
-        throw new AgentRuntimeError('AGENT_LIMIT')
-      const result = vocabularyPreparedSchema.parse(await this.vocabulary.prepare())
-      signal.throwIfAborted()
-      this.prepared = structuredClone(result)
-      return result
-    }
-    if (operation === 'model.vocabulary' && this.vocabulary) {
-      const parsed = vocabularyModelArgsSchema.safeParse(args)
-      if (!parsed.success)
-        throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR', { cause: parsed.error })
-      const item = this.prepared?.items.find(
-        (item) => item.inputIndex === parsed.data.inputIndex && item.status === 'pending'
-      )
-      if (!item || this.vocabularyIndices.has(item.inputIndex))
-        throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-      this.vocabularyIndices.add(item.inputIndex)
-      if (++this.modelCalls > this.snapshot.budget.maxModelCalls)
-        throw new AgentRuntimeError('AGENT_LIMIT')
-      const content = JSON.stringify({
-        term: item.term,
-        wordLanguage: this.snapshot.targetLanguage
+      const result = await plan.execute(signal, async (event) => {
+        signal.throwIfAborted()
+        this.countOutput(event.delta.length)
+        await emit(event)
+        signal.throwIfAborted()
       })
-      if (
-        parsed.data.systemPrompt.length +
-          content.length +
-          JSON.stringify(vocabularyInsertTools()).length >
-        this.snapshot.budget.maxInputChars
-      )
-        throw new AgentRuntimeError('AGENT_LIMIT')
-      const result = vocabularyAnalysisReceiptSchema.parse(
-        await this.vocabulary.analyze(parsed.data, signal)
-      )
       signal.throwIfAborted()
-      if (result.inputIndex !== item.inputIndex) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-      this.outputChars += JSON.stringify(result).length
-      if (this.outputChars > this.snapshot.budget.maxOutputChars)
-        throw new AgentRuntimeError('AGENT_LIMIT')
+      if (plan.output === 'json') this.countOutput(JSON.stringify(result).length)
+      else if (plan.output === 'decision' && 'kind' in result && result.kind === 'final')
+        this.countOutput(result.text.length)
       return result
+    } catch (cause) {
+      if (cause instanceof ZodError) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR', { cause })
+      throw cause
     }
-    if (operation === 'phrase.prepare' && this.phrase) {
-      if (Object.keys(args).length || ++this.toolCalls > 1)
-        throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-      if (this.toolCalls > this.snapshot.budget.maxToolCalls)
-        throw new AgentRuntimeError('AGENT_LIMIT')
-      const result = phrasePreparedSchema.parse(await this.phrase.prepare())
-      signal.throwIfAborted()
-      this.phrasePrepared = structuredClone(result)
-      return result
-    }
-    if (operation === 'model.phrase' && this.phrase) {
-      const parsed = phraseModelArgsSchema.safeParse(args)
-      if (!parsed.success)
-        throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR', { cause: parsed.error })
-      const item = this.phrasePrepared?.items.find(
-        (item) => item.inputIndex === parsed.data.inputIndex && item.status === 'pending'
-      )
-      if (!item || this.phraseIndices.has(item.inputIndex))
-        throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-      this.phraseIndices.add(item.inputIndex)
-      if (++this.modelCalls > this.snapshot.budget.maxModelCalls)
-        throw new AgentRuntimeError('AGENT_LIMIT')
-      const content = JSON.stringify({
-        phrase: item.phrase,
-        wordLanguage: this.snapshot.targetLanguage
-      })
-      if (
-        parsed.data.systemPrompt.length +
-          content.length +
-          JSON.stringify(phraseInsertTools()).length >
-        this.snapshot.budget.maxInputChars
-      )
-        throw new AgentRuntimeError('AGENT_LIMIT')
-      const result = phraseAnalysisReceiptSchema.parse(
-        await this.phrase.analyze(parsed.data, signal)
-      )
-      signal.throwIfAborted()
-      if (result.inputIndex !== item.inputIndex) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-      this.outputChars += JSON.stringify(result).length
-      if (this.outputChars > this.snapshot.budget.maxOutputChars)
-        throw new AgentRuntimeError('AGENT_LIMIT')
-      return result
-    }
-    if (operation === 'model.decide' && this.testOperations) {
-      if (
-        args.inputIndex !== undefined ||
-        args.systemPrompt !== undefined ||
-        args.query ||
-        JSON.stringify(args.results) !== JSON.stringify(this.results)
-      )
-        throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-      if (++this.modelCalls > this.snapshot.budget.maxModelCalls)
-        throw new AgentRuntimeError('AGENT_LIMIT')
-      const decision = agentDecisionSchema.parse(
-        await this.testOperations.decide({
-          messages: structuredClone(this.snapshot.messages),
-          outputLanguage: this.snapshot.outputLanguage,
-          targetLanguage: this.snapshot.targetLanguage,
-          results: structuredClone(this.results),
-          signal
-        })
-      )
-      signal.throwIfAborted()
-      if (decision.kind === 'tool') this.query = decision.query
-      else {
-        this.outputChars += decision.text.length
-        if (this.outputChars > this.snapshot.budget.maxOutputChars)
-          throw new AgentRuntimeError('AGENT_LIMIT')
-      }
-      return decision
-    }
-    if (operation === 'learning.lookup' && this.testOperations) {
-      if (
-        args.inputIndex !== undefined ||
-        args.systemPrompt !== undefined ||
-        !args.query ||
-        args.query !== this.query ||
-        args.results
-      )
-        throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-      this.query = undefined
-      if (++this.toolCalls > this.snapshot.budget.maxToolCalls)
-        throw new AgentRuntimeError('AGENT_LIMIT')
-      signal.throwIfAborted()
-      const result = agentHostResultSchema.parse(
-        await this.testOperations.lookup(args.query, signal)
-      )
-      signal.throwIfAborted()
-      if (!('entries' in result)) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-      this.results.push(result)
-      if (
-        JSON.stringify(this.results).length +
-          this.snapshot.messages.reduce((n, m) => n + m.content.length, 4096) >
-        this.snapshot.budget.maxInputChars
-      )
-        throw new AgentRuntimeError('AGENT_LIMIT')
-      return result
-    }
-    const isTitle = this.snapshot.task === 'conversation-title'
-    if (operation !== (isTitle ? 'model.title' : 'model.reply'))
-      throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-    const reply = agentReplyArgsSchema.safeParse(args)
-    if (!reply.success) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR', { cause: reply.error })
-    if (
-      reply.data.systemPrompt.length +
-        this.snapshot.messages.reduce((n, m) => n + m.content.length, 0) >
-      this.snapshot.budget.maxInputChars
-    )
+  }
+  private countOutput(chars: number): void {
+    this.outputChars += chars
+    if (this.outputChars > this.snapshot.budget.maxOutputChars)
       throw new AgentRuntimeError('AGENT_LIMIT')
-    if (++this.modelCalls > this.snapshot.budget.maxModelCalls)
-      throw new AgentRuntimeError('AGENT_LIMIT')
-    this.model ??= this.resolveModel()
-    let text = ''
-    for await (const event of this.model.streamReply({
-      messages: this.snapshot.messages.map((m) => ({ ...m })),
-      systemPrompt: reply.data.systemPrompt,
-      purpose: isTitle ? 'conversation-title' : 'conversation',
-      signal
-    })) {
-      signal.throwIfAborted()
-      if (isTitle && event.type !== 'text') continue
-      this.outputChars += event.delta.length
-      if (this.outputChars > this.snapshot.budget.maxOutputChars)
-        throw new AgentRuntimeError('AGENT_LIMIT')
-      if (event.type === 'text') text += event.delta
-      await emit(event)
-    }
-    signal.throwIfAborted()
-    return agentHostResultSchema.parse({ text })
   }
 }
