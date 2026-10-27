@@ -1,6 +1,6 @@
 import pytest
 
-from lingo_agent.graphs.synonym import execute_synonym
+from lingo_agent.workflows.synonym.graph import execute_synonym
 
 
 def snapshot():
@@ -86,7 +86,7 @@ async def test_synonym_checks_each_budget(field, value):
             return {"items": [{"inputIndex": 0, "status": "pending"}]}
         return {"inputIndex": 0, "round": 1, "kind": "failed", "inputChars": 4000}
 
-    from lingo_agent.graphs.common import LimitError
+    from lingo_agent.workflows.common import LimitError
 
     with pytest.raises(LimitError):
         await execute_synonym(request, host)
@@ -179,8 +179,8 @@ async def test_synonym_rejects_bad_receipts_and_propagates_failures(kind):
 
 @pytest.mark.parametrize("locale,language", [("zh-CN", "Simplified Chinese"), ("en", "English")])
 def test_synonym_prompt_preserves_grouping_and_language_rules(locale, language):
-    from lingo_agent.graphs.common import chars
-    from lingo_agent.prompts import synonym_system_message
+    from lingo_agent.workflows.common import chars
+    from lingo_agent.workflows.synonym.prompts import synonym_system_message
 
     prompt = synonym_system_message(locale)
     assert chars(prompt) <= 4096

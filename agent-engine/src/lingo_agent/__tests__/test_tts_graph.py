@@ -2,7 +2,7 @@ from typing import Any
 
 import pytest
 
-from lingo_agent.graphs.tts import execute_tts
+from lingo_agent.workflows.tts import execute_tts
 
 
 @pytest.mark.asyncio

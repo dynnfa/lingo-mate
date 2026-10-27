@@ -7,18 +7,18 @@ from typing import Any, cast
 
 from langgraph.errors import GraphRecursionError
 
-from lingo_agent.graphs.common import LimitError
-from lingo_agent.graphs.explore_phrase import ExplorePhraseState
-from lingo_agent.graphs.explore_vocabulary import ExploreVocabularyState
-from lingo_agent.graphs.learning import execute
-from lingo_agent.graphs.phrase import PhraseState
-from lingo_agent.graphs.sentence_practice import SentencePracticeState
-from lingo_agent.graphs.synonym import SynonymState
-from lingo_agent.graphs.tts import TtsState
-from lingo_agent.graphs.vocabulary import VocabularyState
-from lingo_agent.graphs.vocabulary_practice import VocabularyPracticeState
 from lingo_agent.protocol import MAX_FRAME_BYTES, PROTOCOL_VERSION, encode_frame, parse_frame
+from lingo_agent.runtime.dispatcher import execute
 from lingo_agent.state import LearningState
+from lingo_agent.workflows.common import LimitError
+from lingo_agent.workflows.explore_phrase.graph import ExplorePhraseState
+from lingo_agent.workflows.explore_vocabulary.graph import ExploreVocabularyState
+from lingo_agent.workflows.phrase.graph import PhraseState
+from lingo_agent.workflows.sentence_practice.graph import SentencePracticeState
+from lingo_agent.workflows.synonym.graph import SynonymState
+from lingo_agent.workflows.tts import TtsState
+from lingo_agent.workflows.vocabulary.graph import VocabularyState
+from lingo_agent.workflows.vocabulary_practice.graph import VocabularyPracticeState
 
 
 class HostError(Exception):

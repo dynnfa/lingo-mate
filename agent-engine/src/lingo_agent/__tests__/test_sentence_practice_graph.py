@@ -1,6 +1,6 @@
 import pytest
 
-from lingo_agent.graphs.learning import execute
+from lingo_agent.workflows.sentence_practice.graph import execute_sentence_practice
 
 
 def snapshot(kind="hints", locale="zh-CN"):
@@ -33,7 +33,7 @@ async def test_practice_uses_one_bound_model_call_and_explicit_languages(kind, l
             return {"inputChars": 250}
         return {"completed": True}
 
-    state = await execute("practice", snapshot(kind, locale), host)
+    state = await execute_sentence_practice(snapshot(kind, locale), host)
     assert [op for op, _ in calls] == [
         "sentence-practice.prepare",
         f"model.sentence-practice-{kind}",
@@ -52,7 +52,7 @@ async def test_practice_uses_one_bound_model_call_and_explicit_languages(kind, l
     "limit", ["maxModelCalls", "maxToolCalls", "maxSteps", "maxInputChars", "maxOutputChars"]
 )
 async def test_practice_limits_prevent_model_requests(kind, limit):
-    from lingo_agent.graphs.common import LimitError
+    from lingo_agent.workflows.common import LimitError
 
     request = snapshot(kind)
     request["budget"][limit] = 0
@@ -63,14 +63,14 @@ async def test_practice_limits_prevent_model_requests(kind, limit):
         return {"inputChars": 100}
 
     with pytest.raises(LimitError):
-        await execute("limited", request, host)
+        await execute_sentence_practice(request, host)
     assert not any(op.startswith("model.") for op in calls)
 
 
 @pytest.mark.parametrize("kind", ["hints", "review"])
 async def test_practice_counts_actual_utf16_input(kind):
-    from lingo_agent.graphs.common import LimitError, chars
-    from lingo_agent.prompts import (
+    from lingo_agent.workflows.common import LimitError, chars
+    from lingo_agent.workflows.sentence_practice.prompts import (
         sentence_practice_hints_system_message,
         sentence_practice_review_system_message,
     )
@@ -86,10 +86,10 @@ async def test_practice_counts_actual_utf16_input(kind):
     async def host(operation, args):
         return {"inputChars": 2} if operation.endswith("prepare") else {"completed": True}
 
-    assert (await execute("exact", request, host))["sentencePractice"]["completed"]
+    assert (await execute_sentence_practice(request, host))["sentencePractice"]["completed"]
     request["budget"]["maxInputChars"] -= 1
     with pytest.raises(LimitError):
-        await execute("over", request, host)
+        await execute_sentence_practice(request, host)
 
 
 @pytest.mark.parametrize(
@@ -107,7 +107,7 @@ async def test_practice_rejects_invalid_preparation(result):
         return result
 
     with pytest.raises(ValueError):
-        await execute("invalid", snapshot(), host)
+        await execute_sentence_practice(snapshot(), host)
 
 
 async def test_practice_rejects_cross_task_permissions_before_preparation():
@@ -118,7 +118,7 @@ async def test_practice_rejects_cross_task_permissions_before_preparation():
         pytest.fail("must not call the host")
 
     with pytest.raises(ValueError, match="practice operations"):
-        await execute("denied", request, host)
+        await execute_sentence_practice(request, host)
 
 
 async def test_practice_host_failure_is_not_retried():
@@ -131,7 +131,7 @@ async def test_practice_host_failure_is_not_retried():
         raise RuntimeError("model failed")
 
     with pytest.raises(RuntimeError, match="model failed"):
-        await execute("failed", snapshot(), host)
+        await execute_sentence_practice(snapshot(), host)
     assert calls == ["sentence-practice.prepare", "model.sentence-practice-hints"]
 
 
@@ -148,7 +148,7 @@ async def test_practice_cancellation_stops_the_bound_model_without_retry():
         started.set()
         await asyncio.Future()
 
-    task = asyncio.create_task(execute("cancel", snapshot(), host))
+    task = asyncio.create_task(execute_sentence_practice(snapshot(), host))
     await asyncio.wait_for(started.wait(), timeout=1)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):

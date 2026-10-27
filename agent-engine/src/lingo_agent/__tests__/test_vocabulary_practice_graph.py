@@ -1,6 +1,6 @@
 import pytest
 
-from lingo_agent.graphs.learning import execute
+from lingo_agent.workflows.vocabulary_practice.graph import execute_vocabulary_practice
 
 
 def snapshot(locale="zh-CN"):
@@ -42,7 +42,7 @@ async def test_all_correct_uses_python_prompt_and_no_mark_calls(locale, language
         assert args == {"round": 1, "reason": "terminal"}
         return {"completed": True, "rounds": 1}
 
-    result = await execute("practice", snapshot(locale), host)
+    result = await execute_vocabulary_practice(snapshot(locale), host)
     assert result["vocabularyPractice"] == {"completed": True, "rounds": 1}
     assert [op for op, _ in calls] == [
         "vocabulary-practice.prepare",
@@ -70,7 +70,7 @@ async def test_eighth_round_correction_finishes_as_round_limit():
         return {"round": args["round"], "applied": True}
 
     with pytest.raises(RuntimeError, match="ROUND_LIMIT"):
-        await execute("limit", snapshot(), host)
+        await execute_vocabulary_practice(snapshot(), host)
     assert len(calls) == 18
 
 
@@ -91,7 +91,7 @@ async def test_tool_turns_and_two_missing_mark_corrections_are_driven_by_graph()
             assert "Simplified Chinese" in args["instruction"]
         return {"round": args["round"], "applied": True}
 
-    result = await execute("multi", snapshot(), host)
+    result = await execute_vocabulary_practice(snapshot(), host)
     assert result["vocabularyPractice"] == {"completed": True, "rounds": 5}
     assert sum(op.endswith("correct") for op, _ in calls) == 2
     assert sum(op.endswith("apply") for op, _ in calls) == 2
@@ -112,7 +112,7 @@ async def test_missing_marks_stop_after_two_corrections():
         return {"round": args["round"], "applied": True}
 
     with pytest.raises(RuntimeError, match="INVALID_ANALYSIS"):
-        await execute("corrections", snapshot(), host)
+        await execute_vocabulary_practice(snapshot(), host)
     assert rounds == [1, 2, 3]
 
 
@@ -120,7 +120,7 @@ async def test_missing_marks_stop_after_two_corrections():
     "limit", ["maxModelCalls", "maxToolCalls", "maxSteps", "maxInputChars", "maxOutputChars"]
 )
 async def test_budgets_prevent_model_requests(limit):
-    from lingo_agent.graphs.common import LimitError
+    from lingo_agent.workflows.common import LimitError
 
     request = snapshot()
     request["budget"][limit] = 0
@@ -130,7 +130,7 @@ async def test_budgets_prevent_model_requests(limit):
         return {"inputChars": 100}
 
     with pytest.raises(LimitError):
-        await execute("budget", request, host)
+        await execute_vocabulary_practice(request, host)
 
 
 @pytest.mark.parametrize(
@@ -152,7 +152,7 @@ async def test_invalid_turn_receipts_fail_without_retry(receipt):
         return receipt
 
     with pytest.raises(ValueError):
-        await execute("receipt", snapshot(), host)
+        await execute_vocabulary_practice(snapshot(), host)
     assert len(calls) == 2
 
 
@@ -164,7 +164,7 @@ async def test_unrelated_permissions_fail_before_host_calls():
         pytest.fail("unauthorized host call")
 
     with pytest.raises(ValueError, match="vocabulary practice operations"):
-        await execute("permission", request, host)
+        await execute_vocabulary_practice(request, host)
 
 
 async def test_host_failure_is_not_retried():
@@ -177,5 +177,5 @@ async def test_host_failure_is_not_retried():
         raise RuntimeError("provider failed")
 
     with pytest.raises(RuntimeError, match="provider failed"):
-        await execute("failed", snapshot(), host)
+        await execute_vocabulary_practice(snapshot(), host)
     assert len(calls) == 2

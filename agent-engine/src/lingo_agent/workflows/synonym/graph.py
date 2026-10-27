@@ -5,8 +5,8 @@ from typing import Any, TypedDict, cast
 
 from langgraph.graph import END, START, StateGraph
 
-from lingo_agent.graphs.common import HostCall, LimitError, chars
-from lingo_agent.prompts import synonym_system_message
+from lingo_agent.workflows.common import HostCall, LimitError, chars
+from lingo_agent.workflows.synonym.prompts import synonym_system_message
 
 OPERATIONS = {"synonym.prepare", "model.synonym", "synonym.apply", "synonym.finish"}
 

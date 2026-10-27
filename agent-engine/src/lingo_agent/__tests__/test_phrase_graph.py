@@ -1,4 +1,4 @@
-from lingo_agent.graphs.learning import execute
+from lingo_agent.workflows.phrase.graph import execute_phrase
 
 
 async def test_phrase_prepares_and_analyzes_only_new_phrases():
@@ -25,8 +25,7 @@ async def test_phrase_prepares_and_analyzes_only_new_phrases():
         assert "English" in args["systemPrompt"]
         return {"inputIndex": 0, "status": "staged"}
 
-    state = await execute(
-        "run",
+    state = await execute_phrase(
         {
             "task": "phrase",
             "messages": [
@@ -53,7 +52,7 @@ async def test_phrase_prepares_and_analyzes_only_new_phrases():
 async def test_phrase_enforces_output_budget_before_finalizing():
     import pytest
 
-    from lingo_agent.graphs.common import LimitError
+    from lingo_agent.workflows.common import LimitError
 
     async def host(operation, args):
         if operation == "phrase.prepare":
@@ -61,8 +60,7 @@ async def test_phrase_enforces_output_budget_before_finalizing():
         return {"inputIndex": args["inputIndex"], "status": "staged"}
 
     with pytest.raises(LimitError):
-        await execute(
-            "run",
+        await execute_phrase(
             {
                 "task": "phrase",
                 "outputLanguage": "en",
@@ -102,8 +100,7 @@ async def test_phrase_has_two_workers_and_never_calls_existing_or_duplicate_phra
         active -= 1
         return {"inputIndex": args["inputIndex"], "status": "failed", "code": "UNRECOGNIZED"}
 
-    state = await execute(
-        "run",
+    state = await execute_phrase(
         {
             "task": "phrase",
             "outputLanguage": "en",
@@ -135,8 +132,7 @@ async def test_phrase_preserves_fatal_host_errors_after_cancelling_the_other_wor
         raise failure
 
     with pytest.raises(RuntimeError) as caught:
-        await execute(
-            "run",
+        await execute_phrase(
             {
                 "task": "phrase",
                 "outputLanguage": "en",
@@ -156,7 +152,7 @@ async def test_phrase_preserves_fatal_host_errors_after_cancelling_the_other_wor
 
 
 def test_phrase_prompt_preserves_languages_and_content_only_tool_contract():
-    from lingo_agent.prompts import phrase_system_message
+    from lingo_agent.workflows.phrase.prompts import phrase_system_message
 
     for locale, language in [("en", "English (en)"), ("zh-CN", "Simplified Chinese (zh-CN)")]:
         prompt = phrase_system_message(locale)

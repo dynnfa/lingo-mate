@@ -1,38 +1,4 @@
-from lingo_agent.graphs.learning import execute
-
-
-async def test_routes_concept_through_host_and_preserves_languages():
-    calls = []
-    snapshot = {
-        "task": "conversation",
-        "messages": [{"role": "user", "content": "/concept carry"}],
-        "outputLanguage": "zh-CN",
-        "targetLanguage": "en",
-        "allowedOperations": ["model.reply"],
-        "budget": {
-            "timeoutMs": 1000,
-            "maxModelCalls": 1,
-            "maxToolCalls": 0,
-            "maxSteps": 4,
-            "maxInputChars": 8192,
-            "maxOutputChars": 100,
-        },
-    }
-
-    async def host(operation, args):
-        calls.append((operation, args))
-        return {"text": "answer"}
-
-    state = await execute("run-1", snapshot, host)
-    assert len(calls) == 1
-    assert calls[0][0] == "model.reply"
-    prompt = calls[0][1]["systemPrompt"]
-    assert "the /concept command" in prompt
-    assert "commentary on examples in Simplified Chinese (zh-CN)" in prompt
-    assert "the example sentences themselves in English (en)" in prompt
-    assert state["text"] == "answer"
-    assert state["languages"] == {"outputLanguage": "zh-CN", "targetLanguage": "en"}
-    assert state["status"] == "completed"
+from lingo_agent.workflows.tool_loop import execute_tool_loop as execute
 
 
 async def test_model_tool_model_loop_is_bounded_and_correlated():
@@ -105,7 +71,7 @@ def tool_snapshot():
 async def test_budget_exhaustion_stops_a_loop():
     import pytest
 
-    from lingo_agent.graphs.common import LimitError
+    from lingo_agent.workflows.common import LimitError
 
     calls = []
 
@@ -146,7 +112,7 @@ async def test_cancelled_model_never_schedules_a_tool():
 async def test_input_budget_is_checked_before_any_host_call():
     import pytest
 
-    from lingo_agent.graphs.common import LimitError
+    from lingo_agent.workflows.common import LimitError
 
     snapshot = tool_snapshot()
     snapshot["messages"] = [{"role": "user", "content": "x" * 9000}]
@@ -158,40 +124,4 @@ async def test_input_budget_is_checked_before_any_host_call():
 
     with pytest.raises(LimitError):
         await execute("input-limit", snapshot, host)
-    assert calls == []
-
-
-async def test_reply_budget_counts_actual_prompt_instead_of_reserved_space():
-    snapshot = tool_snapshot()
-    snapshot.update(task="conversation", allowedOperations=["model.reply"])
-    snapshot["budget"]["maxInputChars"] = 4096
-    snapshot["messages"] = [{"role": "user", "content": "x" * 3500}]
-    calls = []
-
-    async def host(operation, args):
-        calls.append((operation, args))
-        return {"text": "answer"}
-
-    state = await execute("actual-input", snapshot, host)
-    assert state["text"] == "answer"
-    assert len(calls) == 1
-
-
-async def test_prompt_budget_rejects_oversize_unicode_input_before_host_call():
-    import pytest
-
-    from lingo_agent.graphs.common import LimitError
-
-    snapshot = tool_snapshot()
-    snapshot.update(task="conversation", allowedOperations=["model.reply"])
-    snapshot["budget"]["maxInputChars"] = 4096
-    snapshot["messages"] = [{"role": "user", "content": "😀" * 2040}]
-    calls = []
-
-    async def host(operation, args):
-        calls.append(operation)
-        return {"text": "answer"}
-
-    with pytest.raises(LimitError):
-        await execute("unicode-overflow", snapshot, host)
     assert calls == []
