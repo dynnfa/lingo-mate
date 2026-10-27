@@ -73,6 +73,14 @@ Python 运行服务通过 `runtime/dispatcher.py` 显式分发 task，各功能�
 
 `/phrase` 与 `/vocabulary` 的显式命令入口继续使用现有会话界面和 Preload API；它们不是页面路由。两者的分析 Prompt 和批量执行由 Python / LangGraph 持有，Renderer 仅展示原有阶段、报告和安全错误。词条内容与报告在可信宿主统一提交，不把图状态或内部工具载荷暴露给界面。运行时职责与协议 v11 见 [Agent Engine README](../agent-engine/README.md)。
 
+### TypeScript 通用运行层
+
+`PythonAgentRuntime` 的每次运行仅保存当前任务绑定与通用运行账本。公开入口通过 `agent-task-binding.ts` 的判别联合静态选择对应 Adapter，不能为一个运行组合多种可选领域 Host。可信 `agent-task-policy.ts` 统一定义权限、预算、并发、流事件模式与完成帧；Main 负责通信、身份、队列、截止和取消，`AgentHost` 负责调用防护、实际调用前的预算预留和输出计量。
+
+任务专属的操作／回执解析、准备顺序、绑定索引、模型依赖与完成核验位于 `src/core/agent/tasks/`。领域 Host 继续保留内容、轮次授权、事务及完成账本。Main 仅在成功帧与当前策略匹配、全部宿主调用结束且 Adapter 核验通过后释放结果；业务提交仍由原有领域 Module 执行。所有任务拒绝提前成功，终止后的回执不触发再次核验或重放。
+
+这次职责拆分保留 Python 唯一 Agent 运行时、Zod 唯一协议来源、公开运行签名及现有持久化格式，不新增动态执行或回退入口。详细接口与计量口径见 [Agent Engine README](../agent-engine/README.md#typescript-宿主任务边界)。
+
 ### 近义词 Agent
 
 `/synonym` 沿用现有显式命令、选择器和报告界面，由 Python / LangGraph 持有 Prompt 与顺序多轮工具流程。TS 的运行账本保管模型消息、供应商回放状态、工具参数及分组内容；Python 只取得绑定索引、轮次和安全回执。Main 装配的唯一近义词模块串行处理跨会话批次，后续词能查询前面新建的分组。
