@@ -4,7 +4,7 @@ from typing import Any, TypedDict, cast
 
 from langgraph.graph import END, START, StateGraph
 
-from lingo_agent.graphs.common import HostCall
+from lingo_agent.workflows.common import HostCall
 
 
 class TtsState(TypedDict):

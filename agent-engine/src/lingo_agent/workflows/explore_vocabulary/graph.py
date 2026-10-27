@@ -3,8 +3,8 @@ from typing import Any, TypedDict, cast
 
 from langgraph.graph import END, START, StateGraph
 
-from lingo_agent.graphs.common import HostCall, LimitError, chars
-from lingo_agent.prompts import explore_vocabulary_system_message
+from lingo_agent.workflows.common import HostCall, LimitError, chars
+from lingo_agent.workflows.explore_vocabulary.prompts import explore_vocabulary_system_message
 
 EXPLORE_VOCABULARY_ITEM_COUNT = 10
 MAX_EXPLORE_VOCABULARY_ATTEMPTS = 3
