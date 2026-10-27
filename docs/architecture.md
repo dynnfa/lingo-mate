@@ -87,6 +87,16 @@ Python 运行服务通过 `runtime/dispatcher.py` 显式分发 task，各功能�
 
 `src/core/llm/` 维护跨功能的模型配置、客户端、供应商传输、流式处理、用量及连接测试；`tool-protocol.ts` 和 `tool-request-policy.ts` 也保留在此，供领域 Adapter 复用。通用模型生产代码不依赖学习功能的类型、错误或实现，原 `src/core/tools/` 中的专属实现已全部归入各功能目录。文件归属不改变 Python 持有 Prompt 与执行流程的边界、宿主授权或业务提交语义；搬迁清单与验证见[领域实现归位计划](plans/2026-10-27-ts-domain-implementation-colocation.md)。
 
+### TypeScript 会话执行与恢复
+
+`src/core/conversation/conversation-module.ts` 保留会话入口、草稿与初始消息保存、普通回复流和后台标题任务。技能执行按持久化语义分开：
+
+- `explore-conversation-execution.ts` 管理探索技能的执行、稳定回复身份、运行期未提交记录、文件批次恢复及淘汰保护。已提交批次只恢复本地回复；缺失批次只有当前进程确认未提交时才能在用户显式重试后重新生成，提交结果不确定时不授予重新生成权限。
+- `stored-conversation-skill-runner.ts` 管理 SQLite 技能执行记录、阶段与原子回复提交。完整报告只恢复反馈；近义词的未完成报告沿原执行继续处理，保留逐词提交结果。
+- `conversation-execution.ts` 为普通回复和两类技能统一管理请求身份、会话互斥、取消与退出等待，后台标题也计入等待范围。持久化错误包装、安全错误映射与诊断集中在 `conversation-errors.ts`，消息展示转换由 `conversation-message.ts` 复用。
+
+这些模块只承担 TypeScript 宿主的会话生命周期与恢复职责；Python 继续持有 Agent 策略、Prompt 和图执行。公开 `ConversationModule` 签名、事件协议、SQLite schema 与 JSON 历史格式保持原样。
+
 ### 近义词 Agent
 
 `/synonym` 沿用现有显式命令、选择器和报告界面，由 Python / LangGraph 持有 Prompt 与顺序多轮工具流程。TS 的运行账本保管模型消息、供应商回放状态、工具参数及分组内容；Python 只取得绑定索引、轮次和安全回执。Main 装配的唯一近义词模块串行处理跨会话批次，后续词能查询前面新建的分组。
