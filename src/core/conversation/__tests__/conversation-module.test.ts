@@ -19,6 +19,7 @@ import { ModelConfigService } from '../../llm/model-config'
 import { LlmClient, type CreateLlmClient } from '../../llm/llm-client'
 import { LlmUsageRecorder } from '../../llm/llm-usage-recorder'
 import { ConversationModule, type ConversationLanguages } from '../conversation-module'
+import type { ConversationSkill } from '../conversation-skill'
 import {
   ConversationBusyError,
   ConversationNotFoundError,
@@ -290,6 +291,88 @@ describe('ConversationModule', () => {
       module.sendMessage({ requestId: OTHER_REQUEST_ID, sessionId, text: 'later' }, () => {})
     ).rejects.toMatchObject({ code: 'AGENT_UNAVAILABLE' })
   })
+
+  it.each(['vocabulary', 'explore-phrase'] as const)(
+    'shares request exclusion and shutdown waiting with %s executions',
+    async (skillId) => {
+      const repository = new MemoryConversationRepository()
+      const skillRepository = new MemorySkillExecutionRepository(repository)
+      const { sessionId } = await repository.seedConversation()
+      let skillSignal: AbortSignal | undefined
+      let finishCleanup!: () => void
+      const cleanup = new Promise<void>((resolve) => {
+        finishCleanup = resolve
+      })
+      const skill: ConversationSkill = {
+        skillId,
+        async run({ signal }) {
+          skillSignal = signal
+          await abortOnSignal(signal).catch(() => undefined)
+          await cleanup
+          return { outcome: 'cancelled' }
+        },
+        feedback() {
+          throw new Error('Cancelled work must not produce feedback')
+        }
+      }
+      const module = createTestConversationModule(
+        new SuccessfulModel(),
+        repository,
+        undefined,
+        new Map([[skillId, skill]]),
+        skillRepository
+      )
+      const events: ConversationEvent[] = []
+      const input =
+        skillId === 'vocabulary'
+          ? {
+              requestId: REQUEST_ID,
+              sessionId,
+              skillId,
+              arguments: { text: 'carry', wordLanguage: 'en' as const }
+            }
+          : {
+              requestId: REQUEST_ID,
+              sessionId,
+              skillId,
+              arguments: { wordLanguage: 'en' as const }
+            }
+      await module.runSkill(input, (event) => events.push(event))
+
+      try {
+        await expect(
+          module.sendMessage({ requestId: OTHER_REQUEST_ID, sessionId, text: 'Hello' }, () => {})
+        ).rejects.toThrow(ConversationBusyError)
+        const another = await repository.seedConversation()
+        await expect(
+          module.sendMessage(
+            { requestId: REQUEST_ID, sessionId: another.sessionId, text: 'Hello' },
+            () => {}
+          )
+        ).rejects.toThrow(RequestBusyError)
+        expect(repository.messages).toHaveLength(1)
+
+        let stopped = false
+        const stopping = module.shutdown().then(() => {
+          stopped = true
+        })
+        await Promise.resolve()
+        expect(skillSignal?.aborted).toBe(true)
+        expect(stopped).toBe(false)
+
+        finishCleanup()
+        await stopping
+        expect(events.map(({ type }) => type)).toEqual(['started', 'cancelled'])
+        expect(repository.messages).toHaveLength(1)
+        await expect(
+          module.runSkill({ ...input, requestId: OTHER_REQUEST_ID }, () => {})
+        ).rejects.toMatchObject({ code: 'AGENT_UNAVAILABLE' })
+      } finally {
+        finishCleanup()
+        await module.shutdown()
+      }
+    }
+  )
 
   it('derives a single-line local title from a /tts command separated by any whitespace', async () => {
     const repository = new MemoryConversationRepository()
