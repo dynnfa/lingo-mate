@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import { SynonymToolExecutor, synonymTools } from '../synonym-tools'
-import type { SynonymRepository } from '../../learning/synonym/synonym-repository'
+import type { SynonymRepository } from '../synonym-repository'
 
 function setup(
   pages = [{ groups: [], nextCursor: null }] as ReturnType<SynonymRepository['findGroups']>[]

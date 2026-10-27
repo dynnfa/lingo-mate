@@ -3,8 +3,8 @@ import {
   PHRASE_EXAMPLE_MAX_LENGTH,
   PHRASE_EXPLANTATION_MAX_LENGTH,
   PHRASE_MAX_LENGTH
-} from '../../shared/phrase'
-import { PhraseError } from '../learning/phrase/parse-phrase-input'
+} from '../../../shared/phrase'
+import { PhraseError } from './parse-phrase-input'
 
 // /phrase 技能仅暴露两个白名单工具。字段名沿用需求拼写 explantation；
 // SQL 固定封装在数据库仓储中，模型只能提供内容绑定值。

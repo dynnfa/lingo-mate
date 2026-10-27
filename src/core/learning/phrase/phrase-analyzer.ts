@@ -1,5 +1,5 @@
 import type { SupportedLocale } from '../../../shared/preferences'
-import type { PhraseInsertContent } from '../../tools/phrase-tools'
+import type { PhraseInsertContent } from './phrase-tools'
 
 export interface AnalyzePhraseInput {
   phrase: string

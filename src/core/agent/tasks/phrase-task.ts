@@ -1,4 +1,4 @@
-import { phraseInsertTools } from '../../tools/phrase-tools'
+import { phraseInsertTools } from '../../learning/phrase/phrase-tools'
 import {
   phraseModelArgsSchema,
   phrasePreparedSchema,

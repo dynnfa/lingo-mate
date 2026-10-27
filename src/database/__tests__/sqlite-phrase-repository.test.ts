@@ -8,7 +8,7 @@ import { openDatabase } from '../database'
 import { MIGRATIONS, migrateDatabase } from '../migrations'
 import { SqlitePhraseRepository } from '../sqlite-phrase-repository'
 import { content } from '../../core/learning/phrase/__tests__/fixtures'
-import type { PhraseInsertContent } from '../../core/tools/phrase-tools'
+import type { PhraseInsertContent } from '../../core/learning/phrase/phrase-tools'
 import type { PhraseSaveStatus } from '../../core/learning/phrase/phrase-repository'
 import type { PhraseBatch } from '../../shared/phrase'
 

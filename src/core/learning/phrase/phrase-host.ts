@@ -9,7 +9,7 @@ import {
   type PhrasePrepared
 } from '../../agent/agent-protocol'
 import { parsePhraseInput, PhraseError } from './parse-phrase-input'
-import { validatePhraseInsertArguments, type PhraseInsertContent } from '../../tools/phrase-tools'
+import { validatePhraseInsertArguments, type PhraseInsertContent } from './phrase-tools'
 import type { PhraseRepository } from './phrase-repository'
 import type { PhraseAnalyzer } from './phrase-analyzer'
 import { abortablePhraseOperation } from './abortable-operation'

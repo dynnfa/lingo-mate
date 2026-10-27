@@ -12,10 +12,7 @@ import {
   type ExplorePhraseReceipt,
   type ExplorePhraseCompletion
 } from '../../agent/agent-protocol'
-import {
-  explorePhraseTools,
-  submitExploredPhrasesArgumentsSchema
-} from '../../tools/explore-phrase-tools'
+import { explorePhraseTools, submitExploredPhrasesArgumentsSchema } from './explore-phrase-tools'
 import { ExplorePhraseError } from './explore-phrase-error'
 import {
   explorePhraseUserContent,

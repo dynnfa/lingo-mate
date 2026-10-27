@@ -6,7 +6,7 @@ import {
   validatePhraseInsertArguments,
   phraseInsertTools,
   PHRASE_INSERT_TOOL_NAME
-} from '../../../tools/phrase-tools'
+} from '../phrase-tools'
 
 type InsertArguments = Record<string, unknown>
 const insertArguments = (overrides: Record<string, unknown> = {}): InsertArguments => ({
