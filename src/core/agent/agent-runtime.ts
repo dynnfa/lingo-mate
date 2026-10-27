@@ -1,3 +1,4 @@
+import { getAgentTaskPolicy } from './agent-task-policy'
 import type { ModelMessage, ModelStreamEvent } from '../llm/language-model'
 import {
   agentSnapshotSchema,
@@ -11,7 +12,6 @@ import {
   type SentencePracticeTask,
   type SentencePracticePrepared,
   type SentencePracticeCompletion,
-  type AgentBudget,
   type AgentErrorCode,
   type VocabularyPrepared,
   type VocabularyAnalysisReceipt,
@@ -38,14 +38,7 @@ import {
   type ExploreVocabularyModelArgs
 } from './agent-protocol'
 
-export const DEFAULT_AGENT_BUDGET: AgentBudget = {
-  timeoutMs: 120_000,
-  maxModelCalls: 3,
-  maxToolCalls: 2,
-  maxSteps: 16,
-  maxInputChars: 32_768,
-  maxOutputChars: 32_768
-}
+export { DEFAULT_AGENT_BUDGET } from './agent-task-policy'
 export interface AgentTask {
   task: AgentSnapshot['task']
   messages: ModelMessage[]
@@ -221,103 +214,14 @@ export class AgentRuntimeError extends Error {
 // Reserve space for the fixed host prompt/operation definitions. Persisted history
 // is never edited; only this execution's copied context is trimmed.
 export function createAgentSnapshot(input: AgentTask): AgentSnapshot {
-  if (input.task === 'tts')
+  const policy = getAgentTaskPolicy(input.task)
+  if (input.task !== 'conversation' && input.task !== 'tool-loop')
     return agentSnapshotSchema.parse({
       ...input,
-      budget: {
-        timeoutMs: 180_000,
-        maxModelCalls: 0,
-        maxToolCalls: 1,
-        maxSteps: 1,
-        maxInputChars: 4096,
-        maxOutputChars: 1024
-      },
-      allowedOperations: ['tts.synthesize']
+      budget: policy.budget,
+      allowedOperations: policy.allowedOperations
     })
-  if (input.task === 'vocabulary-practice-review')
-    return agentSnapshotSchema.parse({
-      ...input,
-      budget: {
-        timeoutMs: 120_000,
-        maxModelCalls: 8,
-        maxToolCalls: 10,
-        maxSteps: 18,
-        maxInputChars: 65_536,
-        maxOutputChars: 4096
-      },
-      allowedOperations: [
-        'vocabulary-practice.prepare',
-        'model.vocabulary-practice-review',
-        'vocabulary-practice.apply',
-        'vocabulary-practice.correct',
-        'vocabulary-practice.finish'
-      ]
-    })
-  if (input.task === 'sentence-practice-hints' || input.task === 'sentence-practice-review')
-    return agentSnapshotSchema.parse({
-      ...input,
-      budget: {
-        timeoutMs: 120_000,
-        maxModelCalls: 1,
-        maxToolCalls: 1,
-        maxSteps: 2,
-        maxInputChars: 65_536,
-        maxOutputChars: 1024
-      },
-      allowedOperations: ['sentence-practice.prepare', `model.${input.task}`]
-    })
-  if (input.task === 'conversation-title')
-    return agentSnapshotSchema.parse({
-      ...input,
-      budget: {
-        timeoutMs: 120_000,
-        maxModelCalls: 1,
-        maxToolCalls: 0,
-        maxSteps: 1,
-        maxInputChars: 32_768,
-        maxOutputChars: 80
-      },
-      allowedOperations: ['model.title']
-    })
-  if (input.task === 'explore-phrase' || input.task === 'explore-vocabulary')
-    return agentSnapshotSchema.parse({
-      ...input,
-      budget: {
-        timeoutMs: 180_000,
-        maxModelCalls: 3,
-        maxToolCalls: 1,
-        maxSteps: 8,
-        maxInputChars: 65_536,
-        maxOutputChars: 32_768
-      },
-      allowedOperations:
-        input.task === 'explore-phrase'
-          ? ['explore-phrase.prepare', 'model.explore-phrase']
-          : ['explore-vocabulary.prepare', 'model.explore-vocabulary']
-    })
-  if (input.task === 'synonym')
-    return agentSnapshotSchema.parse({
-      ...input,
-      budget: {
-        timeoutMs: 180_000,
-        maxModelCalls: 1040,
-        maxToolCalls: 1061,
-        maxSteps: 2200,
-        maxInputChars: 65_536,
-        maxOutputChars: 524_288
-      },
-      allowedOperations: ['synonym.prepare', 'model.synonym', 'synonym.apply', 'synonym.finish']
-    })
-  if (input.task === 'vocabulary' || input.task === 'phrase')
-    return agentSnapshotSchema.parse({
-      ...input,
-      budget: { ...DEFAULT_AGENT_BUDGET, timeoutMs: 180_000, maxModelCalls: 20, maxSteps: 32 },
-      allowedOperations:
-        input.task === 'phrase'
-          ? ['phrase.prepare', 'model.phrase']
-          : ['vocabulary.prepare', 'model.vocabulary']
-    })
-  let remaining = DEFAULT_AGENT_BUDGET.maxInputChars - 4096
+  let remaining = policy.budget.maxInputChars - 4096
   const messages: ModelMessage[] = []
   for (const message of input.messages.slice(-100).reverse()) {
     if (remaining <= 0) break
@@ -332,8 +236,7 @@ export function createAgentSnapshot(input: AgentTask): AgentSnapshot {
   return agentSnapshotSchema.parse({
     ...input,
     messages,
-    budget: { ...DEFAULT_AGENT_BUDGET },
-    allowedOperations:
-      input.task === 'tool-loop' ? ['model.decide', 'learning.lookup'] : ['model.reply']
+    budget: policy.budget,
+    allowedOperations: policy.allowedOperations
   })
 }

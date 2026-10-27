@@ -1,6 +1,34 @@
 import { describe, expect, it, vi } from 'vitest'
 import { AgentHost } from '../agent-host'
-import { createAgentSnapshot } from '../agent-runtime'
+import { createAgentSnapshot, type VocabularyHostOperations } from '../agent-runtime'
+import type { AgentSnapshot } from '../agent-protocol'
+import type { LanguageModel } from '../../llm/language-model'
+import type { AgentTestOperations } from '../agent-task'
+import { createAgentTaskBinding } from '../agent-task-binding'
+
+function createHost(
+  snapshot: AgentSnapshot,
+  resolveModel: () => LanguageModel,
+  operations?: AgentTestOperations,
+  vocabulary?: VocabularyHostOperations
+): AgentHost {
+  if (snapshot.task === 'vocabulary' && vocabulary)
+    return new AgentHost(
+      snapshot,
+      createAgentTaskBinding(snapshot, { task: 'vocabulary', host: vocabulary })
+    )
+  if (snapshot.task === 'tool-loop' && operations)
+    return new AgentHost(
+      snapshot,
+      createAgentTaskBinding(snapshot, { task: 'tool-loop', operations })
+    )
+  if (snapshot.task === 'conversation' || snapshot.task === 'conversation-title')
+    return new AgentHost(
+      snapshot,
+      createAgentTaskBinding(snapshot, { task: snapshot.task, resolveModel })
+    )
+  throw new Error('Missing test binding')
+}
 
 const input = (): import('../agent-runtime').AgentTask => ({
   task: 'conversation' as const,
@@ -13,7 +41,7 @@ describe('AgentHost', () => {
   it('passes Python instructions unchanged to the model bound to this run', async () => {
     const seen: unknown[] = []
     const snapshot = createAgentSnapshot(input())
-    const host = new AgentHost(snapshot, () => ({
+    const host = createHost(snapshot, () => ({
       async *streamReply(input) {
         seen.push(input)
         yield { type: 'text', delta: 'answer' }
@@ -41,7 +69,7 @@ describe('AgentHost', () => {
     ['extra fields', { systemPrompt: 'English', query: 'override' }]
   ] as const)('rejects %s reply instructions before resolving a model', async (_name, args) => {
     const resolve = vi.fn()
-    const host = new AgentHost(createAgentSnapshot(input()), resolve)
+    const host = createHost(createAgentSnapshot(input()), resolve)
     await expect(
       host.call('invalid', 'model.reply', args, () => {}, new AbortController().signal)
     ).rejects.toMatchObject({ code: 'AGENT_PROTOCOL_ERROR' })
@@ -52,7 +80,7 @@ describe('AgentHost', () => {
     snapshot.messages = [{ role: 'user', content: '😀'.repeat(2040) }]
     snapshot.budget.maxInputChars = 4096
     const resolve = vi.fn()
-    const host = new AgentHost(snapshot, resolve)
+    const host = createHost(snapshot, resolve)
     await expect(
       host.call(
         'overflow',
@@ -66,7 +94,7 @@ describe('AgentHost', () => {
   })
   it('denies operations outside the trusted run permissions before touching a model or tool', async () => {
     const model = vi.fn()
-    const host = new AgentHost(createAgentSnapshot(input()), model)
+    const host = createHost(createAgentSnapshot(input()), model)
     await expect(
       host.call(
         'call-1',
@@ -92,7 +120,7 @@ describe('AgentHost', () => {
     )
     const snapshot = createAgentSnapshot(input())
     snapshot.budget.maxModelCalls = 2
-    const host = new AgentHost(snapshot, resolve)
+    const host = createHost(snapshot, resolve)
     const chunks: unknown[] = []
     const signal = new AbortController().signal
     expect(
@@ -139,7 +167,7 @@ describe('AgentHost', () => {
       }
     )
     const lookup = vi.fn(async () => ({ entries: ['carry: transport'] }))
-    const host = new AgentHost(createAgentSnapshot({ ...input(), task: 'tool-loop' }), vi.fn(), {
+    const host = createHost(createAgentSnapshot({ ...input(), task: 'tool-loop' }), vi.fn(), {
       decide: decision,
       lookup
     })
@@ -161,7 +189,7 @@ describe('AgentHost', () => {
   it('enforces the host output limit before accepting a final model decision', async () => {
     const snapshot = createAgentSnapshot({ ...input(), task: 'tool-loop' })
     snapshot.budget.maxOutputChars = 4
-    const host = new AgentHost(snapshot, vi.fn(), {
+    const host = createHost(snapshot, vi.fn(), {
       async decide() {
         return { kind: 'final', text: 'too long' }
       },
@@ -179,7 +207,7 @@ it('budgets vocabulary from the bound term and tool definitions rather than a fi
   const snapshot = createAgentSnapshot({ ...input(), task: 'vocabulary' })
   snapshot.budget.maxInputChars = 4096
   const analyze = vi.fn(async () => ({ inputIndex: 0, status: 'staged' as const }))
-  const host = new AgentHost(snapshot, vi.fn(), undefined, {
+  const host = createHost(snapshot, vi.fn(), undefined, {
     prepare: () => ({ items: [{ inputIndex: 0, term: 'apple', status: 'pending' }] }),
     analyze,
     verifyCompletion: () => {}
@@ -202,7 +230,7 @@ it('generates a title through its own permission and ignores all reasoning', asy
   const seen: unknown[] = []
   const chunks: unknown[] = []
   const snapshot = createAgentSnapshot({ ...input(), task: 'conversation-title' })
-  const host = new AgentHost(snapshot, () => ({
+  const host = createHost(snapshot, () => ({
     async *streamReply(input) {
       seen.push(input)
       yield { type: 'reasoning', delta: 'thought'.repeat(1000) }
@@ -240,8 +268,57 @@ it('generates a title through its own permission and ignores all reasoning', asy
   await expect(
     host.call('reply', 'model.reply', { systemPrompt: 'English' }, () => {}, signal)
   ).rejects.toMatchObject({ code: 'AGENT_PROTOCOL_ERROR' })
-  const conversation = new AgentHost(createAgentSnapshot(input()), vi.fn())
+  const conversation = createHost(createAgentSnapshot(input()), vi.fn())
   await expect(
     conversation.call('title', 'model.title', { systemPrompt: 'English' }, () => {}, signal)
   ).rejects.toMatchObject({ code: 'AGENT_PROTOCOL_ERROR' })
+})
+
+it('does not resolve a model or emit output for a pre-cancelled call', async () => {
+  const resolve = vi.fn()
+  const emit = vi.fn()
+  const host = createHost(createAgentSnapshot(input()), resolve)
+  const controller = new AbortController()
+  controller.abort()
+  await expect(
+    host.call('reply', 'model.reply', { systemPrompt: 'English' }, emit, controller.signal)
+  ).rejects.toMatchObject({ name: 'AbortError' })
+  expect(resolve).not.toHaveBeenCalled()
+  expect(emit).not.toHaveBeenCalled()
+})
+
+it('meters stream deltas once without charging the final text again', async () => {
+  const snapshot = createAgentSnapshot(input())
+  snapshot.budget.maxOutputChars = 6
+  const host = createHost(snapshot, () => ({
+    async *streamReply() {
+      yield { type: 'reasoning', delta: 'ab' }
+      yield { type: 'text', delta: 'cd' }
+      yield { type: 'text', delta: 'ef' }
+    }
+  }))
+  await expect(
+    host.call(
+      'reply',
+      'model.reply',
+      { systemPrompt: 'English' },
+      () => {},
+      new AbortController().signal
+    )
+  ).resolves.toEqual({ text: 'cdef' })
+})
+
+it('does not emit a late model event after cancellation', async () => {
+  const abort = new AbortController()
+  const emit = vi.fn()
+  const host = createHost(createAgentSnapshot(input()), () => ({
+    async *streamReply() {
+      abort.abort()
+      yield { type: 'text', delta: 'late' }
+    }
+  }))
+  await expect(
+    host.call('reply', 'model.reply', { systemPrompt: 'English' }, emit, abort.signal)
+  ).rejects.toMatchObject({ name: 'AbortError' })
+  expect(emit).not.toHaveBeenCalled()
 })
