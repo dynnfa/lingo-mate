@@ -4,9 +4,9 @@ from typing import Any, cast
 
 from langgraph.graph import END, START, StateGraph
 
-from lingo_agent.graphs.common import HostCall, check_input, initial_state, reply_update
-from lingo_agent.prompts import word_concept_system_message
 from lingo_agent.state import LearningState
+from lingo_agent.workflows.common import HostCall, check_input, initial_state, reply_update
+from lingo_agent.workflows.conversation.prompts import word_concept_system_message
 
 
 async def execute_concept(run_id: str, snapshot: dict[str, Any], host: HostCall) -> LearningState:

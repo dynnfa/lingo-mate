@@ -69,6 +69,8 @@ type AppView = 'conversation' | 'settings' | 'recorded' | 'practice' | 'mistakes
 
 ## 对话技能执行边界
 
+Python 运行服务通过 `runtime/dispatcher.py` 显式分发 task，各功能在 `agent-engine/src/lingo_agent/workflows/` 内聚合图、节点、局部状态与 Prompt。`conversation/routing.py` 只根据最新 user 消息选择普通对话或概念图，标题使用独立入口；目录调整不改变 Renderer 接口、协议或宿主权限。
+
 `/phrase` 与 `/vocabulary` 的显式命令入口继续使用现有会话界面和 Preload API；它们不是页面路由。两者的分析 Prompt 和批量执行由 Python / LangGraph 持有，Renderer 仅展示原有阶段、报告和安全错误。词条内容与报告在可信宿主统一提交，不把图状态或内部工具载荷暴露给界面。运行时职责与协议 v11 见 [Agent Engine README](../agent-engine/README.md)。
 
 ### 近义词 Agent
