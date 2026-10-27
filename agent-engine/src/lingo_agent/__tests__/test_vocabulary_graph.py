@@ -1,4 +1,4 @@
-from lingo_agent.graphs.learning import execute
+from lingo_agent.workflows.vocabulary.graph import execute_vocabulary
 
 
 async def test_vocabulary_prepares_and_analyzes_only_new_terms():
@@ -25,8 +25,7 @@ async def test_vocabulary_prepares_and_analyzes_only_new_terms():
         assert "English" in args["systemPrompt"]
         return {"inputIndex": 0, "status": "staged"}
 
-    state = await execute(
-        "run",
+    state = await execute_vocabulary(
         {
             "task": "vocabulary",
             "messages": [{"role": "user", "content": "apple,banana,apple"}],
@@ -51,7 +50,7 @@ async def test_vocabulary_prepares_and_analyzes_only_new_terms():
 async def test_vocabulary_enforces_output_budget_before_finalizing():
     import pytest
 
-    from lingo_agent.graphs.common import LimitError
+    from lingo_agent.workflows.common import LimitError
 
     async def host(operation, args):
         if operation == "vocabulary.prepare":
@@ -59,8 +58,7 @@ async def test_vocabulary_enforces_output_budget_before_finalizing():
         return {"inputIndex": args["inputIndex"], "status": "staged"}
 
     with pytest.raises(LimitError):
-        await execute(
-            "run",
+        await execute_vocabulary(
             {
                 "task": "vocabulary",
                 "outputLanguage": "en",
@@ -100,8 +98,7 @@ async def test_vocabulary_has_two_workers_and_never_calls_existing_or_duplicate_
         active -= 1
         return {"inputIndex": args["inputIndex"], "status": "failed", "code": "UNRECOGNIZED"}
 
-    state = await execute(
-        "run",
+    state = await execute_vocabulary(
         {
             "task": "vocabulary",
             "outputLanguage": "en",
@@ -123,7 +120,7 @@ async def test_vocabulary_has_two_workers_and_never_calls_existing_or_duplicate_
 
 
 def test_vocabulary_prompt_preserves_languages_protocol_and_concept_rules():
-    from lingo_agent.prompts import vocabulary_system_message
+    from lingo_agent.workflows.vocabulary.prompts import vocabulary_system_message
 
     for locale, language in [("en", "English (en)"), ("zh-CN", "Simplified Chinese (zh-CN)")]:
         prompt = vocabulary_system_message(locale)
@@ -148,8 +145,7 @@ async def test_vocabulary_preserves_fatal_host_errors_after_cancelling_the_other
         raise failure
 
     with pytest.raises(RuntimeError) as caught:
-        await execute(
-            "run",
+        await execute_vocabulary(
             {
                 "task": "vocabulary",
                 "outputLanguage": "en",

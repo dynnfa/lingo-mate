@@ -1,6 +1,6 @@
 import pytest
 
-from lingo_agent.graphs.learning import execute
+from lingo_agent.workflows.conversation.title import execute_title as execute
 
 
 def snapshot(output="zh-CN"):
@@ -44,7 +44,7 @@ async def test_title_is_one_independent_call_even_for_commands(output, language)
 
 @pytest.mark.parametrize("limit", ["maxModelCalls", "maxSteps", "maxInputChars"])
 async def test_title_limits_prevent_model_calls(limit):
-    from lingo_agent.graphs.common import LimitError
+    from lingo_agent.workflows.common import LimitError
 
     request = snapshot()
     request["budget"][limit] = 0
@@ -74,8 +74,8 @@ async def test_title_permission_prevents_model_call():
 
 
 async def test_title_counts_actual_utf16_input_and_output():
-    from lingo_agent.graphs.common import LimitError, chars
-    from lingo_agent.prompts import conversation_title_system_message
+    from lingo_agent.workflows.common import LimitError, chars
+    from lingo_agent.workflows.conversation.prompts import conversation_title_system_message
 
     request = snapshot()
     request["messages"][0]["content"] = "😀"

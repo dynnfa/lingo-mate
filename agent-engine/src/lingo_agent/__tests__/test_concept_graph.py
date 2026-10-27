@@ -2,10 +2,13 @@ import asyncio
 
 import pytest
 
-from lingo_agent.graphs.common import LimitError
-from lingo_agent.graphs.concept import execute_concept
-from lingo_agent.graphs.learning import execute
-from lingo_agent.prompts import conversation_system_message, word_concept_system_message
+from lingo_agent.workflows.common import LimitError
+from lingo_agent.workflows.conversation.concept import execute_concept
+from lingo_agent.workflows.conversation.graph import execute_conversation
+from lingo_agent.workflows.conversation.prompts import (
+    conversation_system_message,
+    word_concept_system_message,
+)
 
 
 def snapshot(content="/concept carry", output="zh-CN", target="en"):
@@ -50,41 +53,10 @@ async def test_concept_graph_completes_once_with_original_context_and_prompt(out
 
 
 @pytest.mark.parametrize(
-    "content,role,concept",
-    [
-        ("/concept carry", "user", True),
-        ("/concept", "user", True),
-        (" \t/concept\u3000bank \n", "user", True),
-        ("\ufeff/concept\ufeffbank", "user", True),
-        ("/conceptual drift", "user", False),
-        ("What does /concept mean?", "user", False),
-        ("/Concept carry", "user", False),
-        ("/concept\u0085bank", "user", False),
-        ("/concept carry", "assistant", False),
-        ("another example", "user", False),
-    ],
+    "execute_graph,content", [(execute_concept, "/concept carry"), (execute_conversation, "Hello")]
 )
-async def test_entry_routes_only_latest_user_command(content, role, concept):
-    request = snapshot(content)
-    request["messages"] = [
-        {"role": "user", "content": "/concept bank"},
-        {"role": "assistant", "content": "previous explanation"},
-        {"role": role, "content": content},
-    ]
-    calls = []
-
-    async def host(operation, args):
-        calls.append(operation)
-        return {"text": "answer"}
-
-    state = await execute("routing", request, host)
-    assert state["step"] == ("explain" if concept else "reply")
-    assert calls == ["model.reply"]
-
-
-@pytest.mark.parametrize("content", ["/concept carry", "Hello"])
 @pytest.mark.parametrize("limit", ["maxModelCalls", "maxSteps", "maxInputChars"])
-async def test_reply_limits_reject_before_host_call(content, limit):
+async def test_reply_limits_reject_before_host_call(execute_graph, content, limit):
     request = snapshot(content)
     request["budget"][limit] = 0
     calls = []
@@ -94,12 +66,14 @@ async def test_reply_limits_reject_before_host_call(content, limit):
         return {"text": "answer"}
 
     with pytest.raises(LimitError):
-        await execute("limited", request, host)
+        await execute_graph("limited", request, host)
     assert calls == []
 
 
-@pytest.mark.parametrize("content", ["/concept carry", "Hello"])
-async def test_reply_rejects_unauthorized_operation(content):
+@pytest.mark.parametrize(
+    "execute_graph,content", [(execute_concept, "/concept carry"), (execute_conversation, "Hello")]
+)
+async def test_reply_rejects_unauthorized_operation(execute_graph, content):
     request = snapshot(content)
     request["allowedOperations"] = []
     calls = []
@@ -109,25 +83,29 @@ async def test_reply_rejects_unauthorized_operation(content):
         return {"text": "answer"}
 
     with pytest.raises(ValueError, match="operation not allowed"):
-        await execute("unauthorized", request, host)
+        await execute_graph("unauthorized", request, host)
     assert calls == []
 
 
-@pytest.mark.parametrize("content", ["/concept carry", "Hello"])
-async def test_one_step_budget_allows_exactly_one_reply(content):
+@pytest.mark.parametrize(
+    "execute_graph,content", [(execute_concept, "/concept carry"), (execute_conversation, "Hello")]
+)
+async def test_one_step_budget_allows_exactly_one_reply(execute_graph, content):
     request = snapshot(content)
     request["budget"]["maxSteps"] = 1
 
     async def host(operation, args):
         return {"text": "answer"}
 
-    state = await execute("one-step", request, host)
+    state = await execute_graph("one-step", request, host)
     assert state["steps"] == state["modelCalls"] == 1
     assert state["status"] == "completed"
 
 
-@pytest.mark.parametrize("content", ["/concept carry", "Hello"])
-async def test_reply_counts_actual_input_and_output_in_utf16_units(content):
+@pytest.mark.parametrize(
+    "execute_graph,content", [(execute_concept, "/concept carry"), (execute_conversation, "Hello")]
+)
+async def test_reply_counts_actual_input_and_output_in_utf16_units(execute_graph, content):
     request = snapshot(content)
     prompt = (
         word_concept_system_message
@@ -143,20 +121,22 @@ async def test_reply_counts_actual_input_and_output_in_utf16_units(content):
         calls.append(operation)
         return {"text": "😀"}
 
-    assert (await execute("exact-limit", request, host))["text"] == "😀"
+    assert (await execute_graph("exact-limit", request, host))["text"] == "😀"
     request["budget"]["maxInputChars"] -= 1
     with pytest.raises(LimitError):
-        await execute("input-overflow", request, host)
+        await execute_graph("input-overflow", request, host)
     assert len(calls) == 1
     request["budget"]["maxInputChars"] += 1
     request["budget"]["maxOutputChars"] = 1
     with pytest.raises(LimitError):
-        await execute("output-overflow", request, host)
+        await execute_graph("output-overflow", request, host)
     assert len(calls) == 2
 
 
-@pytest.mark.parametrize("content", ["/concept carry", "Hello"])
-async def test_reply_rejects_prompt_over_4096_utf16_units(content):
+@pytest.mark.parametrize(
+    "execute_graph,content", [(execute_concept, "/concept carry"), (execute_conversation, "Hello")]
+)
+async def test_reply_rejects_prompt_over_4096_utf16_units(execute_graph, content):
     request = snapshot(content, target="😀" * 2048)
     request["budget"]["maxInputChars"] = 32768
     calls = []
@@ -166,7 +146,7 @@ async def test_reply_rejects_prompt_over_4096_utf16_units(content):
         return {"text": "answer"}
 
     with pytest.raises(LimitError):
-        await execute("prompt-overflow", request, host)
+        await execute_graph("prompt-overflow", request, host)
     assert calls == []
 
 

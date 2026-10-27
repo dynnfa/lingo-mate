@@ -4,15 +4,15 @@ from typing import Any, cast
 
 from langgraph.graph import END, START, StateGraph
 
-from lingo_agent.graphs.common import (
+from lingo_agent.state import LearningState
+from lingo_agent.workflows.common import (
     HostCall,
     check_input,
     check_operation,
     check_output,
     initial_state,
 )
-from lingo_agent.prompts import conversation_title_system_message
-from lingo_agent.state import LearningState
+from lingo_agent.workflows.conversation.prompts import conversation_title_system_message
 
 
 async def execute_title(run_id: str, snapshot: dict[str, Any], host: HostCall) -> LearningState:

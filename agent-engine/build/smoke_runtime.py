@@ -150,6 +150,8 @@ class Client:
                 if task in ("vocabulary", "phrase", "explore-phrase", "explore-vocabulary")
                 else ["model.title"]
                 if task == "conversation-title"
+                else ["model.decide", "learning.lookup"]
+                if task == "tool-loop"
                 else ["model.reply"],
                 "budget": {
                     "timeoutMs": 120000 if task == "conversation-title" else 5000,
@@ -159,11 +161,14 @@ class Client:
                     if task == "synonym"
                     else 20
                     if task in ("vocabulary", "phrase", "explore-phrase", "explore-vocabulary")
+                    else 2
+                    if task == "tool-loop"
                     else 1,
                     "maxToolCalls": 1061
                     if task == "synonym"
                     else 1
-                    if task in ("vocabulary", "phrase", "explore-phrase", "explore-vocabulary")
+                    if task
+                    in ("vocabulary", "phrase", "explore-phrase", "explore-vocabulary", "tool-loop")
                     else 0,
                     "maxSteps": 8
                     if task in ("explore-phrase", "explore-vocabulary")
@@ -173,6 +178,8 @@ class Client:
                     if task in ("vocabulary", "phrase", "explore-phrase", "explore-vocabulary")
                     else 1
                     if task == "conversation-title"
+                    else 6
+                    if task == "tool-loop"
                     else 4,
                     "maxInputChars": 32768 if task == "conversation-title" else 8192,
                     "maxOutputChars": 524288
@@ -220,6 +227,34 @@ with tempfile.TemporaryDirectory(prefix="lingo-bundle-") as cwd:
         else:
             idle_rss_kib = None
             idle_cpu_percent = None
+        call = client.run("tool-loop", task="tool-loop")
+        assert call["operation"] == "model.decide" and call["args"] == {"results": []}
+        client.send(
+            "host_result",
+            runId="tool-loop",
+            callId=call["callId"],
+            result={"kind": "tool", "name": "learning.lookup", "query": "carry"},
+        )
+        call = client.receive("host_call")
+        assert call["operation"] == "learning.lookup" and call["args"] == {"query": "carry"}
+        client.send(
+            "host_result",
+            runId="tool-loop",
+            callId=call["callId"],
+            result={"entries": ["carry: transport"]},
+        )
+        call = client.receive("host_call")
+        assert call["operation"] == "model.decide"
+        assert call["args"] == {"results": [{"entries": ["carry: transport"]}]}
+        client.send(
+            "host_result",
+            runId="tool-loop",
+            callId=call["callId"],
+            result={"kind": "final", "text": "explanation"},
+        )
+        event = client.receive("event")
+        assert event["seq"] == 1 and event["event"] == {"type": "text", "delta": "explanation"}
+        assert client.receive("result")["text"] == "explanation"
         call = client.run("tts", task="tts")
         assert call["operation"] == "tts.synthesize" and call["args"] == {}
         client.send("host_result", runId="tts", callId=call["callId"], result={"completed": True})
@@ -583,6 +618,7 @@ print(
             "checks": [
                 "empty-PATH",
                 "handshake",
+                "tool-loop-operations-event-result",
                 "tts-no-model",
                 "vocabulary-practice-languages-tool-loop-correction",
                 "vocabulary-practice-cancel-late-result-failure",

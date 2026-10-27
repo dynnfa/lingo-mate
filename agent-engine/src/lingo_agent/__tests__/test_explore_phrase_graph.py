@@ -1,4 +1,4 @@
-from lingo_agent.graphs.learning import execute
+from lingo_agent.workflows.explore_phrase.graph import execute_explore_phrase
 
 
 def snapshot(locale="zh-CN", **budget):
@@ -33,7 +33,7 @@ async def test_exploration_finishes_after_ten_accepted_items():
         assert "English" in args["systemPrompt"]
         return {"attempt": 1, "acceptedCount": 10, "inputChars": 0}
 
-    state = await execute("run", snapshot(), host)
+    state = await execute_explore_phrase(snapshot(), host)
     assert calls == ["explore-phrase.prepare", "model.explore-phrase"]
     assert state["explorePhrase"] == {"attempts": 1, "acceptedCount": 10}
 
@@ -49,7 +49,7 @@ async def test_exploration_stops_after_three_attempts_with_remaining_items():
         assert "English (en)" in args["systemPrompt"]
         return {"attempt": attempt, "acceptedCount": attempt, "inputChars": 1000}
 
-    state = await execute("run", snapshot("en"), host)
+    state = await execute_explore_phrase(snapshot("en"), host)
     assert attempts == [1, 2, 3]
     assert state["explorePhrase"] == {"attempts": 3, "acceptedCount": 3}
 
@@ -57,7 +57,7 @@ async def test_exploration_stops_after_three_attempts_with_remaining_items():
 async def test_exploration_checks_input_before_calling_the_model():
     import pytest
 
-    from lingo_agent.graphs.common import LimitError
+    from lingo_agent.workflows.common import LimitError
 
     calls = []
 
@@ -66,14 +66,14 @@ async def test_exploration_checks_input_before_calling_the_model():
         return {"acceptedCount": 0, "inputChars": 65536}
 
     with pytest.raises(LimitError):
-        await execute("run", snapshot(), host)
+        await execute_explore_phrase(snapshot(), host)
     assert calls == ["explore-phrase.prepare"]
 
 
 async def test_exploration_rejects_bad_receipts_and_budget_exhaustion():
     import pytest
 
-    from lingo_agent.graphs.common import LimitError
+    from lingo_agent.workflows.common import LimitError
 
     for budget in ({"maxToolCalls": 0}, {"maxSteps": 2}, {"maxOutputChars": 1}):
 
@@ -81,7 +81,7 @@ async def test_exploration_rejects_bad_receipts_and_budget_exhaustion():
             return {"acceptedCount": 0, "inputChars": 1000}
 
         with pytest.raises(LimitError):
-            await execute("run", snapshot(**budget), host)
+            await execute_explore_phrase(snapshot(**budget), host)
 
     async def invalid_host(operation, args):
         if operation == "explore-phrase.prepare":
@@ -89,7 +89,7 @@ async def test_exploration_rejects_bad_receipts_and_budget_exhaustion():
         return {"attempt": args["attempt"] + 1, "acceptedCount": 10, "inputChars": 0}
 
     with pytest.raises(ValueError, match="ownership"):
-        await execute("run", snapshot(), invalid_host)
+        await execute_explore_phrase(snapshot(), invalid_host)
 
     async def insufficient(operation, args):
         if operation == "explore-phrase.prepare":
@@ -97,7 +97,7 @@ async def test_exploration_rejects_bad_receipts_and_budget_exhaustion():
         return {"attempt": args["attempt"], "acceptedCount": 1, "inputChars": 1000}
 
     with pytest.raises(LimitError):
-        await execute("run", snapshot(maxModelCalls=1), insufficient)
+        await execute_explore_phrase(snapshot(maxModelCalls=1), insufficient)
 
 
 async def test_exploration_propagates_cancellation_without_another_attempt():
@@ -115,7 +115,7 @@ async def test_exploration_propagates_cancellation_without_another_attempt():
         started.set()
         await asyncio.Future()
 
-    task = asyncio.create_task(execute("run", snapshot(), host))
+    task = asyncio.create_task(execute_explore_phrase(snapshot(), host))
     await started.wait()
     task.cancel()
     with pytest.raises(asyncio.CancelledError):

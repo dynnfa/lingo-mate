@@ -5,8 +5,8 @@ from typing import Any, TypedDict, cast
 
 from langgraph.graph import END, START, StateGraph
 
-from lingo_agent.graphs.common import HostCall, LimitError, chars
-from lingo_agent.prompts import (
+from lingo_agent.workflows.common import HostCall, LimitError, chars
+from lingo_agent.workflows.vocabulary_practice.prompts import (
     vocabulary_practice_marks_required_message,
     vocabulary_practice_review_system_message,
 )
