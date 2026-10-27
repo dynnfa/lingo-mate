@@ -4,9 +4,9 @@ import {
   EXPLORE_VOCABULARY_EXPLANATION_MAX_LENGTH,
   EXPLORE_VOCABULARY_ITEM_COUNT,
   EXPLORE_VOCABULARY_TERM_MAX_LENGTH
-} from '../../shared/explore-vocabulary'
-import { ExploreVocabularyError } from '../learning/explore-vocabulary/explore-vocabulary-error'
-import type { ExploreVocabularyCandidate } from '../learning/explore-vocabulary/explore-vocabulary-generator'
+} from '../../../shared/explore-vocabulary'
+import { ExploreVocabularyError } from './explore-vocabulary-error'
+import type { ExploreVocabularyCandidate } from './explore-vocabulary-generator'
 
 // /explore-vocabulary 仅暴露一个白名单工具：模型通过 submit_explored_vocabulary
 // 提交候选内容（且只提供三个内容字段）；executionId、身份、时间、语言快照

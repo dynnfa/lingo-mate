@@ -1,14 +1,14 @@
 import {
   sentencePracticeReviewSchema,
   type SentencePracticeReview
-} from '../../shared/sentence-practice'
-import { SentencePracticeError } from '../learning/sentence-practice/parse-sentence-practice-input'
+} from '../../../shared/sentence-practice'
+import { SentencePracticeError } from './parse-sentence-practice-input'
 import type {
   SentencePracticeReviewer,
   SentencePracticeReviewModel
-} from '../learning/sentence-practice/sentence-practice-models'
-import type { RuntimeModelConfig } from './model-config'
-import type { CreateLlmClient } from './llm-client'
+} from './sentence-practice-models'
+import type { RuntimeModelConfig } from '../../llm/model-config'
+import type { CreateLlmClient } from '../../llm/llm-client'
 import { completeSentencePracticeJson } from './llm-sentence-practice-completion'
 
 // 造句点评适配器：单次完成调用，本地按 schema 与本轮词条校验点评，

@@ -3,8 +3,8 @@ import type { ChatCompletionTool } from 'openai/resources/chat/completions'
 import {
   VOCABULARY_PRACTICE_COUNT_MAX,
   VOCABULARY_PRACTICE_MARK_REASON_MAX_LENGTH
-} from '../../shared/vocabulary-practice'
-import { VocabularyPracticeError } from '../learning/vocabulary-practice/parse-vocabulary-practice-input'
+} from '../../../shared/vocabulary-practice'
+import { VocabularyPracticeError } from './parse-vocabulary-practice-input'
 
 // 标红工具：模型只能引用本轮快照内的词条并标记 meaning 字段；
 // reason 是给用户看的错误原因，不携带样式、选择器或脚本。

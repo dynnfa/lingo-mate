@@ -1,5 +1,5 @@
 import type { ListPhraseInput, PhraseBatch, PhraseEntry, PhrasePage } from '../../../shared/phrase'
-import type { PhraseInsertContent } from '../../tools/phrase-tools'
+import type { PhraseInsertContent } from './phrase-tools'
 
 export type PhraseSaveStatus = 'saved' | 'existing'
 

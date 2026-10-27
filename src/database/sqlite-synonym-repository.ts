@@ -16,7 +16,7 @@ import type {
   SynonymSaveResult
 } from '../core/learning/synonym/synonym-repository'
 import { SynonymError } from '../core/learning/synonym/parse-synonym-input'
-import { synonymToolSchemas } from '../core/tools/synonym-tools'
+import { synonymToolSchemas } from '../core/learning/synonym/synonym-tools'
 
 export class SqliteSynonymRepository implements SynonymRepository {
   constructor(private readonly database: Database.Database) {

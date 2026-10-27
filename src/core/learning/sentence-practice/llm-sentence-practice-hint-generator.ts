@@ -3,15 +3,15 @@ import {
   SENTENCE_PRACTICE_HINT_COUNT_MAX,
   SENTENCE_PRACTICE_HINT_COUNT_MIN,
   sentencePracticeHintSchema
-} from '../../shared/sentence-practice'
-import { SentencePracticeError } from '../learning/sentence-practice/parse-sentence-practice-input'
+} from '../../../shared/sentence-practice'
+import { SentencePracticeError } from './parse-sentence-practice-input'
 import type {
   SentenceHint,
   SentenceHintGenerator,
   SentencePracticeHintModel
-} from '../learning/sentence-practice/sentence-practice-models'
-import type { RuntimeModelConfig } from './model-config'
-import type { CreateLlmClient } from './llm-client'
+} from './sentence-practice-models'
+import type { RuntimeModelConfig } from '../../llm/model-config'
+import type { CreateLlmClient } from '../../llm/llm-client'
 import { completeSentencePracticeJson } from './llm-sentence-practice-completion'
 
 // 模型最终输出：正好一个含 hints 数组的 JSON 对象。

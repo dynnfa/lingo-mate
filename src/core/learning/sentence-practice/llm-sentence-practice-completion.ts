@@ -1,7 +1,7 @@
 import { z } from 'zod'
-import { SentencePracticeError } from '../learning/sentence-practice/parse-sentence-practice-input'
-import type { RuntimeModelConfig } from './model-config'
-import { classifyModelRequestError, type CreateLlmClient } from './llm-client'
+import { SentencePracticeError } from './parse-sentence-practice-input'
+import type { RuntimeModelConfig } from '../../llm/model-config'
+import { classifyModelRequestError, type CreateLlmClient } from '../../llm/llm-client'
 
 // 造句练习两次模型调用共用的一次性 JSON 完成辅助：单次请求、无工具
 // 调用；空响应、拒绝回答、非法 JSON 与协议字段缺失都按无效分析处理。

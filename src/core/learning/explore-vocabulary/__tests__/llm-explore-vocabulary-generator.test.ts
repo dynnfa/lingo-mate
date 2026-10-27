@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { LlmExplorePhraseGenerator } from '../llm-explore-phrase-generator'
-import type { CreateLlmClient, LlmClient } from '../llm-client'
-import type { RuntimeModelConfig } from '../model-config'
-const systemPrompt = 'Explain in Simplified Chinese (zh-CN); phrases and examples in English.'
-import type { ExplorePhraseCandidate } from '../../learning/explore-phrase/explore-phrase-generator'
+import { LlmExploreVocabularyGenerator } from '../llm-explore-vocabulary-generator'
+import type { CreateLlmClient, LlmClient } from '../../../llm/llm-client'
+import type { RuntimeModelConfig } from '../../../llm/model-config'
+import type { ExploreVocabularyCandidate } from '../explore-vocabulary-generator'
+
+const systemPrompt = 'Python-owned prompt: terms and examples in English; explain in zh-CN.'
 
 // 通过工厂注入 stub 客户端：适配器测试只验证请求参数与协议校验语义，
 // 不经过真实 SDK；通信与记账由 llm-client 测试覆盖。
@@ -19,10 +20,10 @@ const config: RuntimeModelConfig = {
 }
 const signal = new AbortController().signal
 
-const candidate = (phrase: string): ExplorePhraseCandidate => ({
-  phrase,
-  explanation: `关于 ${phrase} 的释义`,
-  example: `A sentence that uses ${phrase} naturally.`
+const candidate = (term: string): ExploreVocabularyCandidate => ({
+  term,
+  explanation: `关于 ${term} 的释义`,
+  example: `A sentence that uses ${term} naturally.`
 })
 
 const functionCall = (name: string, args: unknown): Record<string, unknown> => ({
@@ -50,18 +51,18 @@ const completionWith = (
 })
 
 const submitCompletion = (items: unknown[]): Record<string, unknown> =>
-  completionWith([functionCall('submit_explored_phrases', { items })])
+  completionWith([functionCall('submit_explored_vocabulary', { items })])
 
-const makeGenerator = (): LlmExplorePhraseGenerator =>
-  new LlmExplorePhraseGenerator(config, 30_000, createClient)
+const makeGenerator = (): LlmExploreVocabularyGenerator =>
+  new LlmExploreVocabularyGenerator(config, 30_000, createClient)
 
 afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('LlmExplorePhraseGenerator', () => {
+describe('LlmExploreVocabularyGenerator', () => {
   it('sends the structured request and returns validated candidates', async () => {
-    const items = Array.from({ length: 10 }, (_unused, index) => candidate(`gen ${index}`))
+    const items = Array.from({ length: 10 }, (_unused, index) => candidate(`gen${index}`))
     complete.mockResolvedValue(submitCompletion(items))
 
     const result = await makeGenerator().generate({
@@ -69,12 +70,12 @@ describe('LlmExplorePhraseGenerator', () => {
       count: 10,
       wordLanguage: 'en',
       explanationLanguage: 'zh-CN',
-      excludedPhrases: ['as a result', 'on the other hand'],
+      excludedTerms: ['reliable', 'hesitate'],
       signal
     })
 
     expect(result).toHaveLength(10)
-    expect(result[0]).toEqual(candidate('gen 0'))
+    expect(result[0]).toEqual(candidate('gen0'))
     const request = complete.mock.calls[0][0]
     expect(request.messages[0]).toMatchObject({ role: 'system' })
     expect(request.messages[0].content).toBe(systemPrompt)
@@ -82,17 +83,17 @@ describe('LlmExplorePhraseGenerator', () => {
       count: 10,
       wordLanguage: 'en',
       explanationLanguage: 'zh-CN',
-      excludedPhrases: ['as a result', 'on the other hand']
+      excludedTerms: ['reliable', 'hesitate']
     })
     expect(request.tools).toHaveLength(1)
-    expect(request.tools[0].function.name).toBe('submit_explored_phrases')
+    expect(request.tools[0].function.name).toBe('submit_explored_vocabulary')
     expect(request.model).toBe('fixture')
-    // 用量沿用合法 operation：phrase_analysis。
-    expect(complete.mock.calls[0][1]).toMatchObject({ operation: 'phrase_analysis' })
+    // 用量沿用合法 operation：vocabulary_analysis。
+    expect(complete.mock.calls[0][1]).toMatchObject({ operation: 'vocabulary_analysis' })
   })
 
   it('rejects more items than requested as a protocol error', async () => {
-    const items = Array.from({ length: 4 }, (_unused, index) => candidate(`over ${index}`))
+    const items = Array.from({ length: 4 }, (_unused, index) => candidate(`over${index}`))
     complete.mockResolvedValue(submitCompletion(items))
     await expect(
       makeGenerator().generate({
@@ -100,7 +101,7 @@ describe('LlmExplorePhraseGenerator', () => {
         count: 3,
         wordLanguage: 'en',
         explanationLanguage: 'en',
-        excludedPhrases: [],
+        excludedTerms: [],
         signal
       })
     ).rejects.toMatchObject({ code: 'INVALID_ANALYSIS' })
@@ -117,7 +118,7 @@ describe('LlmExplorePhraseGenerator', () => {
         count: 10,
         wordLanguage: 'en',
         explanationLanguage: 'en',
-        excludedPhrases: [],
+        excludedTerms: [],
         signal
       })
     ).rejects.toMatchObject({ code: 'INVALID_ANALYSIS' })
@@ -127,7 +128,7 @@ describe('LlmExplorePhraseGenerator', () => {
     ['extra fields on items', submitCompletion([{ ...candidate('a'), extra: true }])],
     ['empty items array', submitCompletion([])],
     ['multiline fields', submitCompletion([{ ...candidate('a'), example: 'line\nbreak' }])],
-    ['missing fields', submitCompletion([{ phrase: 'a' }])]
+    ['missing fields', submitCompletion([{ term: 'a' }])]
   ])('rejects %s', async (_name, response) => {
     complete.mockResolvedValue(response)
     await expect(
@@ -136,7 +137,7 @@ describe('LlmExplorePhraseGenerator', () => {
         count: 10,
         wordLanguage: 'en',
         explanationLanguage: 'en',
-        excludedPhrases: [],
+        excludedTerms: [],
         signal
       })
     ).rejects.toMatchObject({ code: 'INVALID_ANALYSIS' })
@@ -150,7 +151,7 @@ describe('LlmExplorePhraseGenerator', () => {
         count: 10,
         wordLanguage: 'en',
         explanationLanguage: 'en',
-        excludedPhrases: [],
+        excludedTerms: [],
         signal
       })
     ).rejects.toMatchObject({ code: 'MODEL_ERROR' })
@@ -164,12 +165,12 @@ describe('LlmExplorePhraseGenerator', () => {
         count: 10,
         wordLanguage: 'en',
         explanationLanguage: 'en',
-        excludedPhrases: [],
+        excludedTerms: [],
         signal
       })
     ).rejects.toMatchObject({ code: 'TOOL_CALL_NOT_SUPPORTED' })
 
-    const unconfigured = new LlmExplorePhraseGenerator(
+    const unconfigured = new LlmExploreVocabularyGenerator(
       { ...config, configured: false },
       30_000,
       createClient
@@ -180,7 +181,7 @@ describe('LlmExplorePhraseGenerator', () => {
         count: 10,
         wordLanguage: 'en',
         explanationLanguage: 'en',
-        excludedPhrases: [],
+        excludedTerms: [],
         signal
       })
     ).rejects.toMatchObject({ code: 'MODEL_NOT_CONFIGURED' })

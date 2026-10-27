@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { LlmSentencePracticeHintGenerator } from '../llm-sentence-practice-hint-generator'
-import { ModelRequestError, type CreateLlmClient } from '../llm-client'
-import type { RuntimeModelConfig } from '../model-config'
-import { SentencePracticeError } from '../../learning/sentence-practice/parse-sentence-practice-input'
+import { ModelRequestError, type CreateLlmClient } from '../../../llm/llm-client'
+import type { RuntimeModelConfig } from '../../../llm/model-config'
+import { SentencePracticeError } from '../parse-sentence-practice-input'
 
 const config: RuntimeModelConfig = {
   configured: true,

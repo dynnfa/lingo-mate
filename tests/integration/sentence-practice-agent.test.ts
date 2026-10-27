@@ -6,8 +6,8 @@ import {
   AgentSentencePracticeHintGenerator,
   AgentSentencePracticeReviewer
 } from '../../src/core/learning/sentence-practice/sentence-practice-agent'
-import { LlmSentencePracticeHintGenerator } from '../../src/core/llm/llm-sentence-practice-hint-generator'
-import { LlmSentencePracticeReviewer } from '../../src/core/llm/llm-sentence-practice-reviewer'
+import { LlmSentencePracticeHintGenerator } from '../../src/core/learning/sentence-practice/llm-sentence-practice-hint-generator'
+import { LlmSentencePracticeReviewer } from '../../src/core/learning/sentence-practice/llm-sentence-practice-reviewer'
 
 const python = resolve(
   'agent-engine/.venv',

@@ -1,5 +1,5 @@
 import type { ErrorLogger } from './error-logger'
-import type { VocabularyAnalysisFailure } from '../core/llm/llm-vocabulary-analyzer'
+import type { VocabularyAnalysisFailure } from '../core/learning/vocabulary/llm-vocabulary-analyzer'
 
 // AI 导入失败诊断适配器：把分析失败映射为公共按天错误日志的一条记录。
 // 用户明确授权保存失败的模型响应；不记录请求、配置或 SDK 错误对象。
