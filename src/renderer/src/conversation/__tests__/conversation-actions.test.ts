@@ -231,3 +231,14 @@ describe('filterConversationActions', () => {
     expect([...CONVERSATION_ACTIONS]).toEqual(before)
   })
 })
+
+it('submits sentence paragraphs as one skill and rejects longer command names', () => {
+  expect(resolveSkillSubmission('/sentence 今天先这样。\n明天继续。', null)).toBe('sentence')
+  expect(extractSkillDraft('/sentence  今天先这样。\n明天继续。  ', 'sentence')).toEqual({
+    status: 'ok',
+    text: '今天先这样。\n明天继续。'
+  })
+  expect(resolveSkillSubmission('/sentences test', null)).toBeNull()
+  expect(extractSkillDraft('/sentence', 'sentence')).toEqual({ status: 'empty' })
+  expect(parseSlashTrigger('/sentence hello')).toBeUndefined()
+})

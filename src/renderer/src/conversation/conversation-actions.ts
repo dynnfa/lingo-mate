@@ -3,9 +3,16 @@
 // 类型化会话 skill 提交，不作为普通聊天发送。
 
 export type ConversationActionId =
-  'tts' | 'concept' | 'vocabulary' | 'phrase' | 'explore-phrase' | 'explore-vocabulary' | 'synonym'
+  | 'sentence'
+  | 'tts'
+  | 'concept'
+  | 'vocabulary'
+  | 'phrase'
+  | 'explore-phrase'
+  | 'explore-vocabulary'
+  | 'synonym'
 export type SelectedConversationSkillId =
-  'tts' | 'vocabulary' | 'phrase' | 'explore-phrase' | 'explore-vocabulary' | 'synonym'
+  'sentence' | 'tts' | 'vocabulary' | 'phrase' | 'explore-phrase' | 'explore-vocabulary' | 'synonym'
 
 export const VOCABULARY_COMMAND_PREFIX = '/vocabulary'
 export const PHRASE_COMMAND_PREFIX = '/phrase'
@@ -15,6 +22,7 @@ export const EXPLORE_VOCABULARY_COMMAND_PREFIX = '/explore-vocabulary'
 // 各技能命令（含斜杠）的前缀与完整命令模式：选择器建立的技能据此校验草稿，
 // 支持直接输入的技能据此判定提交。命令元数据只在此处维护。
 const SKILL_COMMANDS: Record<SelectedConversationSkillId, { prefix: string; pattern: RegExp }> = {
+  sentence: { prefix: '/sentence', pattern: /^\/sentence\s/u },
   tts: { prefix: '/tts', pattern: /^\/tts\s/u },
   synonym: { prefix: '/synonym', pattern: /^\/synonym\s/u },
   'explore-phrase': {
@@ -31,6 +39,7 @@ const SKILL_COMMANDS: Record<SelectedConversationSkillId, { prefix: string; patt
 
 // 支持直接输入完整命令提交的技能；vocabulary 仍需从选择器选择。
 const TYPED_SKILL_IDS = [
+  'sentence',
   'tts',
   'synonym',
   'phrase',
@@ -93,6 +102,8 @@ export function resolveSkillSubmission(
 // 文案 key 显式枚举：类型以 zh-CN 资源为基准，拼错在类型检查阶段暴露，
 // 双语 key 集合一致性由 resources.test.ts 保证。
 export type ConversationActionTextKey =
+  | 'conversation:actionPicker.actions.sentence.name'
+  | 'conversation:actionPicker.actions.sentence.description'
   | 'conversation:actionPicker.actions.tts.name'
   | 'conversation:actionPicker.actions.tts.description'
   | 'conversation:actionPicker.actions.vocabulary.name'
@@ -155,6 +166,12 @@ export const CONVERSATION_ACTIONS: readonly ConversationActionMeta[] = [
     command: 'synonym',
     nameKey: 'conversation:actionPicker.actions.synonym.name',
     descriptionKey: 'conversation:actionPicker.actions.synonym.description'
+  },
+  {
+    id: 'sentence',
+    command: 'sentence',
+    nameKey: 'conversation:actionPicker.actions.sentence.name',
+    descriptionKey: 'conversation:actionPicker.actions.sentence.description'
   },
   {
     id: 'tts',

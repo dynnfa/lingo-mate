@@ -2,6 +2,7 @@ import { getAgentTaskPolicy } from './agent-task-policy'
 import type { ModelMessage, ModelStreamEvent } from '../llm/language-model'
 import {
   agentSnapshotSchema,
+  type SentencePrepared,
   type TtsCompletion,
   type VocabularyPracticeModelArgs,
   type VocabularyPracticeApplyArgs,
@@ -189,8 +190,21 @@ export interface TtsHostOperations {
 export interface TtsAgentRuntime {
   runTts(input: TtsAgentRunInput, host: TtsHostOperations): Promise<void>
 }
+export interface SentenceHostOperations {
+  prepare(): SentencePrepared
+  model(
+    args: { systemPrompt: string },
+    signal: AbortSignal,
+    maxInputChars: number
+  ): Promise<SentencePracticeCompletion>
+  verifyCompletion(result: SentencePracticeCompletion): void
+}
+export interface SentenceAgentRuntime {
+  runSentence(input: VocabularyAgentRunInput, host: SentenceHostOperations): Promise<void>
+}
 export interface AgentRuntime
   extends
+    SentenceAgentRuntime,
     TtsAgentRuntime,
     VocabularyPracticeAgentRuntime,
     SentencePracticeAgentRuntime,

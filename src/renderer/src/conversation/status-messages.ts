@@ -28,24 +28,28 @@ type IpcFailureKey =
 // 技能相关状态的文案 key：显式枚举，保持类型检查覆盖。
 type SkillStatusKeys = {
   analyzing:
+    | 'conversation:status.analyzingSentence'
     | 'conversation:status.analyzingVocabulary'
     | 'conversation:status.analyzingPhrase'
     | 'conversation:status.analyzingSynonym'
     | 'conversation:status.generatingExplorePhrase'
     | 'conversation:status.generatingExploreVocabulary'
   committing:
+    | 'conversation:status.committingSentence'
     | 'conversation:status.committingVocabulary'
     | 'conversation:status.committingPhrase'
     | 'conversation:status.committingSynonym'
     | 'conversation:status.committingExplorePhrase'
     | 'conversation:status.committingExploreVocabulary'
   descriptionFailed:
+    | 'conversation:status.descriptionFailedSentence'
     | 'conversation:status.descriptionFailedVocabulary'
     | 'conversation:status.descriptionFailedPhrase'
     | 'conversation:status.descriptionFailedSynonym'
     | 'conversation:status.descriptionFailedExplorePhrase'
     | 'conversation:status.descriptionFailedExploreVocabulary'
   descriptionCancelled:
+    | 'conversation:status.descriptionCancelledSentence'
     | 'conversation:status.descriptionCancelledVocabulary'
     | 'conversation:status.descriptionCancelledPhrase'
     | 'conversation:status.descriptionCancelledSynonym'
@@ -54,41 +58,48 @@ type SkillStatusKeys = {
 }
 
 const skillKeys = (skillId: ConversationSkillId | undefined): SkillStatusKeys =>
-  skillId === 'synonym'
+  skillId === 'sentence'
     ? {
-        analyzing: 'conversation:status.analyzingSynonym',
-        committing: 'conversation:status.committingSynonym',
-        descriptionFailed: 'conversation:status.descriptionFailedSynonym',
-        descriptionCancelled: 'conversation:status.descriptionCancelledSynonym'
+        analyzing: 'conversation:status.analyzingSentence',
+        committing: 'conversation:status.committingSentence',
+        descriptionFailed: 'conversation:status.descriptionFailedSentence',
+        descriptionCancelled: 'conversation:status.descriptionCancelledSentence'
       }
-    : skillId === 'phrase'
+    : skillId === 'synonym'
       ? {
-          analyzing: 'conversation:status.analyzingPhrase',
-          committing: 'conversation:status.committingPhrase',
-          descriptionFailed: 'conversation:status.descriptionFailedPhrase',
-          descriptionCancelled: 'conversation:status.descriptionCancelledPhrase'
+          analyzing: 'conversation:status.analyzingSynonym',
+          committing: 'conversation:status.committingSynonym',
+          descriptionFailed: 'conversation:status.descriptionFailedSynonym',
+          descriptionCancelled: 'conversation:status.descriptionCancelledSynonym'
         }
-      : skillId === 'explore-phrase'
+      : skillId === 'phrase'
         ? {
-            // 阶段文案表达“生成短语”，避免误用“收录/收藏成功”。
-            analyzing: 'conversation:status.generatingExplorePhrase',
-            committing: 'conversation:status.committingExplorePhrase',
-            descriptionFailed: 'conversation:status.descriptionFailedExplorePhrase',
-            descriptionCancelled: 'conversation:status.descriptionCancelledExplorePhrase'
+            analyzing: 'conversation:status.analyzingPhrase',
+            committing: 'conversation:status.committingPhrase',
+            descriptionFailed: 'conversation:status.descriptionFailedPhrase',
+            descriptionCancelled: 'conversation:status.descriptionCancelledPhrase'
           }
-        : skillId === 'explore-vocabulary'
+        : skillId === 'explore-phrase'
           ? {
-              analyzing: 'conversation:status.generatingExploreVocabulary',
-              committing: 'conversation:status.committingExploreVocabulary',
-              descriptionFailed: 'conversation:status.descriptionFailedExploreVocabulary',
-              descriptionCancelled: 'conversation:status.descriptionCancelledExploreVocabulary'
+              // 阶段文案表达“生成短语”，避免误用“收录/收藏成功”。
+              analyzing: 'conversation:status.generatingExplorePhrase',
+              committing: 'conversation:status.committingExplorePhrase',
+              descriptionFailed: 'conversation:status.descriptionFailedExplorePhrase',
+              descriptionCancelled: 'conversation:status.descriptionCancelledExplorePhrase'
             }
-          : {
-              analyzing: 'conversation:status.analyzingVocabulary',
-              committing: 'conversation:status.committingVocabulary',
-              descriptionFailed: 'conversation:status.descriptionFailedVocabulary',
-              descriptionCancelled: 'conversation:status.descriptionCancelledVocabulary'
-            }
+          : skillId === 'explore-vocabulary'
+            ? {
+                analyzing: 'conversation:status.generatingExploreVocabulary',
+                committing: 'conversation:status.committingExploreVocabulary',
+                descriptionFailed: 'conversation:status.descriptionFailedExploreVocabulary',
+                descriptionCancelled: 'conversation:status.descriptionCancelledExploreVocabulary'
+              }
+            : {
+                analyzing: 'conversation:status.analyzingVocabulary',
+                committing: 'conversation:status.committingVocabulary',
+                descriptionFailed: 'conversation:status.descriptionFailedVocabulary',
+                descriptionCancelled: 'conversation:status.descriptionCancelledVocabulary'
+              }
 
 export function translateConversationStatus(
   t: StatusTFunction,

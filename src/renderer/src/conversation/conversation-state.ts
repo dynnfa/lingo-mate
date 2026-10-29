@@ -174,6 +174,7 @@ function appendReasoningDelta(current: string, delta: string): string {
 function skillCommandOf(content: string): ConversationSkillId | undefined {
   if (content.startsWith('/tts ')) return 'tts'
   if (content.startsWith('/synonym ')) return 'synonym'
+  if (/^\/sentence(?:\s|$)/u.test(content)) return 'sentence'
   if (content.startsWith('/phrase ')) return 'phrase'
   if (content.startsWith('/vocabulary ')) return 'vocabulary'
   if (content === '/explore-phrase' || content.startsWith('/explore-phrase ')) {

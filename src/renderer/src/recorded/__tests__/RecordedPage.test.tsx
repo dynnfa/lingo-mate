@@ -81,7 +81,7 @@ describe('RecordedPage', () => {
 
     const menu = screen.getByRole('navigation', { name: '已记录词汇菜单' })
     const items = within(menu).getAllByRole('button')
-    expect(items).toHaveLength(3)
+    expect(items).toHaveLength(4)
     expect(items[0]).toHaveTextContent('词汇')
     expect(items[1]).toHaveTextContent('短语')
     expect(items[2]).toHaveTextContent('近义词')

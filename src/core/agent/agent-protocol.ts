@@ -1,9 +1,11 @@
 import { z } from 'zod'
 
-export const AGENT_PROTOCOL_VERSION = 11
+export const AGENT_PROTOCOL_VERSION = 12
 export const MAX_AGENT_SYSTEM_PROMPT_CHARS = 4096
 export const MAX_AGENT_FRAME_BYTES = 262_144
 export const AGENT_OPERATIONS = [
+  'sentence.prepare',
+  'model.sentence',
   'tts.synthesize',
   'vocabulary-practice.prepare',
   'model.vocabulary-practice-review',
@@ -80,6 +82,19 @@ export const agentSnapshotSchema = z.discriminatedUnion('task', [
       maxSteps: z.literal(18),
       maxInputChars: z.literal(65_536),
       maxOutputChars: z.literal(4096)
+    })
+  }),
+  z.strictObject({
+    ...snapshotFields,
+    task: z.literal('sentence'),
+    allowedOperations: z.tuple([z.literal('sentence.prepare'), z.literal('model.sentence')]),
+    budget: z.strictObject({
+      timeoutMs: z.literal(120_000),
+      maxModelCalls: z.literal(1),
+      maxToolCalls: z.literal(1),
+      maxSteps: z.literal(2),
+      maxInputChars: z.literal(65_536),
+      maxOutputChars: z.literal(1024)
     })
   }),
   z.strictObject({
@@ -314,7 +329,13 @@ export const vocabularyPracticeCompletionSchema = z.strictObject({
 })
 export type VocabularyPracticeTurn = z.infer<typeof vocabularyPracticeTurnSchema>
 export type VocabularyPracticeCompletion = z.infer<typeof vocabularyPracticeCompletionSchema>
+export const sentencePreparedSchema = z.strictObject({
+  existing: z.boolean(),
+  inputChars: z.number().int().min(0).max(65_536)
+})
+export type SentencePrepared = z.infer<typeof sentencePreparedSchema>
 export const agentHostResultSchema = z.union([
+  sentencePreparedSchema,
   ttsCompletionSchema,
   vocabularyPracticeTurnSchema,
   vocabularyPracticeAppliedSchema,
@@ -431,6 +452,7 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
     capabilities: z
       .array(
         z.enum([
+          'sentence',
           'tts',
           'vocabulary-practice-review',
           'sentence-practice-hints',
@@ -445,10 +467,22 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
           'explore-vocabulary'
         ])
       )
-      .max(12)
+      .max(13)
   }),
   z.strictObject({ ...run, type: z.literal('run'), snapshot: agentSnapshotSchema }),
   z.discriminatedUnion('operation', [
+    z.strictObject({
+      ...call,
+      type: z.literal('host_call'),
+      operation: z.literal('sentence.prepare'),
+      args: z.strictObject({})
+    }),
+    z.strictObject({
+      ...call,
+      type: z.literal('host_call'),
+      operation: z.literal('model.sentence'),
+      args: agentReplyArgsSchema
+    }),
     z.strictObject({
       ...call,
       type: z.literal('host_call'),
@@ -642,6 +676,11 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
     ...run,
     type: z.literal('vocabulary_practice_result'),
     result: vocabularyPracticeCompletionSchema
+  }),
+  z.strictObject({
+    ...run,
+    type: z.literal('sentence_result'),
+    result: sentencePracticeCompletionSchema
   }),
   z.strictObject({ ...run, type: z.literal('tts_result'), result: ttsCompletionSchema }),
   z.strictObject({ ...run, type: z.literal('cancelled') }),

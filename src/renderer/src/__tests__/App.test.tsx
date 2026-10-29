@@ -258,6 +258,10 @@ function installApiMock(
   }
 
   const api: LingoMateApi = {
+    sentence: {
+      list: async () => ({ status: 'ok', entries: [] }),
+      delete: async ({ id }) => ({ status: 'ok', id, deleted: false })
+    },
     speech: {
       loadConversationAudio: async () => ({ status: 'error', error: { code: 'AUDIO_NOT_FOUND' } }),
       synthesize: async () => ({ status: 'error', error: { code: 'NOT_INSTALLED' } }),
