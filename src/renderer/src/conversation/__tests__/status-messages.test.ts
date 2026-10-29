@@ -104,6 +104,64 @@ describe('conversation status translation', () => {
     ).toBe('短语已处理，但结果描述失败。你可以只重试结果描述。')
   })
 
+  it('keeps sentence phases and result recovery messages distinct from vocabulary', () => {
+    const t = en.t as TFunction<['common', 'conversation', 'errors']>
+    expect(
+      translateConversationStatus(t, {
+        kind: 'skillPhase',
+        phase: 'analyzing',
+        skillId: 'sentence'
+      })
+    ).toBe('Translating…')
+    expect(
+      translateConversationStatus(t, {
+        kind: 'skillPhase',
+        phase: 'committing',
+        skillId: 'sentence'
+      })
+    ).toBe('Saving sentence…')
+    expect(
+      translateConversationStatus(t, {
+        kind: 'skillDescriptionFailed',
+        cancelled: false,
+        skillId: 'sentence'
+      })
+    ).toBe('Sentence saved. Retry to restore the result.')
+    expect(
+      translateConversationStatus(t, {
+        kind: 'skillDescriptionFailed',
+        cancelled: true,
+        skillId: 'sentence'
+      })
+    ).toBe('Sentence saved. Showing the result was cancelled; retry to restore it.')
+  })
+
+  it('preserves dedicated TTS phases and the existing default description messages', () => {
+    const t = en.t as TFunction<['common', 'conversation', 'errors']>
+    expect(
+      translateConversationStatus(t, { kind: 'skillPhase', phase: 'analyzing', skillId: 'tts' })
+    ).toBe('Generating speech…')
+    expect(
+      translateConversationStatus(t, { kind: 'skillPhase', phase: 'committing', skillId: 'tts' })
+    ).toBe('Saving speech…')
+    for (const skillId of [undefined, 'tts'] as const) {
+      expect(
+        translateConversationStatus(t, {
+          kind: 'skillDescriptionFailed',
+          cancelled: false,
+          skillId
+        })
+      ).toBe(
+        'Vocabulary was processed, but the result description failed. You can retry the description.'
+      )
+      expect(
+        translateConversationStatus(t, { kind: 'skillDescriptionFailed', cancelled: true, skillId })
+      ).toBe(
+        'Vocabulary was saved, but the result description was cancelled. You can retry the description.'
+      )
+    }
+  })
+
   it('translates explore-phrase phases with generation wording', () => {
     const zh = createI18n('zh-CN')
     const t = zh.t as TFunction<['common', 'conversation', 'errors']>
