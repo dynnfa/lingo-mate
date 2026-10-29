@@ -237,8 +237,7 @@
       "deleting": "Deleting…",
       "deleteSucceeded": "Deleted \"{{sentence}}\"",
       "columnSource": "Original",
-      "columnTranslation": "Translation",
-      "columnCreatedAt": "Created"
+      "columnTranslation": "Translation"
     }
   },
   "practice": {
