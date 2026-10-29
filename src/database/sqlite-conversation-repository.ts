@@ -1,3 +1,4 @@
+import { sentenceReportSchema } from '../shared/sentence'
 import { ttsReportSchema } from '../shared/speech'
 import { synonymBatchSchema } from '../shared/synonym'
 import type Database from 'better-sqlite3'
@@ -38,7 +39,7 @@ interface SkillExecutionRow {
   session_id: string
   user_message_id: string
   assistant_message_id: string | null
-  skill_id: 'vocabulary' | 'phrase' | 'synonym' | 'tts'
+  skill_id: 'sentence' | 'vocabulary' | 'phrase' | 'synonym' | 'tts'
   arguments_json: string
   explanation_language: 'zh-CN' | 'en'
   phase: ConversationSkillPhase
@@ -279,6 +280,12 @@ function toStoredSkillExecution(row: SkillExecutionRow): StoredConversationSkill
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
+  if (row.skill_id === 'sentence')
+    return {
+      ...common,
+      skillId: 'sentence',
+      ...(row.batch_json ? { batch: sentenceReportSchema.parse(JSON.parse(row.batch_json)) } : {})
+    }
   if (row.skill_id === 'tts')
     return {
       ...common,

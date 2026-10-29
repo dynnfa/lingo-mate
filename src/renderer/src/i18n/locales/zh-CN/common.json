@@ -146,7 +146,8 @@
     "sections": {
       "vocabulary": "词汇",
       "phrase": "短语",
-      "synonym": "近义词"
+      "synonym": "近义词",
+      "sentence": "句子"
     },
     "vocabulary": {
       "detailTitle": "词汇",
@@ -214,6 +215,30 @@
       "loadMore": "加载更多",
       "loadingMore": "正在加载更多…",
       "loadMoreFailed": "加载更多失败"
+    },
+    "sentence": {
+      "detailTitle": "句子",
+      "tableCaption": "已收藏句子列表",
+      "columnActions": "操作",
+      "loading": "正在加载句子…",
+      "loadErrorTitle": "句子读取失败",
+      "retry": "重试",
+      "emptyTitle": "还没有收藏句子",
+      "emptyBody": "在对话中使用 /sentence 命令收藏句子后，会在这里展示。",
+      "loadMore": "加载更多",
+      "loadingMore": "正在加载更多…",
+      "loadMoreFailed": "加载更多失败",
+      "deleteButton": "删除",
+      "deleteButtonLabel": "删除 {{sentence}}",
+      "deleteDialogTitle": "删除句子",
+      "deleteDialogBody": "将删除收藏记录「{{sentence}}」。历史会话消息保持不变。",
+      "deleteDialogCancel": "取消",
+      "deleteDialogConfirm": "删除",
+      "deleting": "删除中…",
+      "deleteSucceeded": "已删除「{{sentence}}」",
+      "columnSource": "原文",
+      "columnTranslation": "译文",
+      "columnCreatedAt": "创建时间"
     }
   },
   "practice": {

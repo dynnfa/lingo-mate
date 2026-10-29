@@ -9,6 +9,13 @@ import {
   taskResultSchema,
   importTaskSchema
 } from '../shared/vocabulary-transfer'
+import {
+  SENTENCE_CHANNELS,
+  listSentenceInputSchema,
+  listSentenceResultSchema,
+  deleteSentenceInputSchema,
+  deleteSentenceResultSchema
+} from '../shared/sentence'
 import { contextBridge, ipcRenderer } from 'electron'
 import { createSpeechApi } from './speech-api'
 import {
@@ -197,6 +204,18 @@ const api: LingoMateApi = {
       const input = usageOverviewInputSchema.parse(rawInput)
       const result: unknown = await ipcRenderer.invoke(USAGE_CHANNELS.getOverview, input)
       return usageOverviewResultSchema.parse(result)
+    }
+  },
+  sentence: {
+    async list(input) {
+      return listSentenceResultSchema.parse(
+        await ipcRenderer.invoke(SENTENCE_CHANNELS.list, listSentenceInputSchema.parse(input))
+      )
+    },
+    async delete(input) {
+      return deleteSentenceResultSchema.parse(
+        await ipcRenderer.invoke(SENTENCE_CHANNELS.delete, deleteSentenceInputSchema.parse(input))
+      )
     }
   },
   vocabulary: {

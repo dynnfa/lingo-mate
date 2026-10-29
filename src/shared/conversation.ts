@@ -12,6 +12,7 @@ import {
   type SpeechApi,
   type TtsReport
 } from './speech'
+import { sentenceTextSchema, type SentenceApi, type SentenceReport } from './sentence'
 import type { PhraseApi, PhraseBatch } from './phrase'
 import type { ExplorePhraseReport } from './explore-phrase'
 import type { ExploreVocabularyReport } from './explore-vocabulary'
@@ -89,6 +90,7 @@ export const conversationSkillIdSchema = z.enum([
   'tts',
   'vocabulary',
   'phrase',
+  'sentence',
   'synonym',
   'explore-phrase',
   'explore-vocabulary'
@@ -137,6 +139,12 @@ export const runConversationSkillInputSchema = z.discriminatedUnion('skillId', [
   }),
   vocabularySkillInputSchema,
   phraseSkillInputSchema,
+  z.strictObject({
+    requestId: identifierSchema,
+    sessionId: identifierSchema,
+    skillId: z.literal('sentence'),
+    arguments: conversationSkillArgumentsSchema.extend({ text: sentenceTextSchema })
+  }),
   synonymSkillInputSchema,
   z.strictObject({
     requestId: identifierSchema,
@@ -291,6 +299,7 @@ export type ConversationSkillArguments = z.infer<typeof conversationSkillArgumen
 // 与内存分派，不进入数据库报告列。
 export type ConversationSkillReport =
   | VocabularyBatch
+  | SentenceReport
   | PhraseBatch
   | SynonymBatch
   | ExplorePhraseReport
@@ -342,6 +351,7 @@ export interface LingoMateApi {
   models: ModelsApi
   usage: UsageApi
   vocabulary: VocabularyApi
+  sentence: SentenceApi
   phrase: PhraseApi
   synonym: SynonymApi
   vocabularyPractice: VocabularyPracticeApi

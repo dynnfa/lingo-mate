@@ -146,7 +146,8 @@
     "sections": {
       "vocabulary": "Vocabulary",
       "phrase": "Phrases",
-      "synonym": "Synonyms"
+      "synonym": "Synonyms",
+      "sentence": "Sentences"
     },
     "vocabulary": {
       "detailTitle": "Vocabulary",
@@ -214,6 +215,30 @@
       "loadMore": "Load more",
       "loadingMore": "Loading more…",
       "loadMoreFailed": "Couldn't load more"
+    },
+    "sentence": {
+      "detailTitle": "Sentences",
+      "tableCaption": "Saved sentence entries",
+      "columnActions": "Actions",
+      "loading": "Loading sentences…",
+      "loadErrorTitle": "Couldn't load sentences",
+      "retry": "Retry",
+      "emptyTitle": "No saved sentences yet",
+      "emptyBody": "Save sentences with the /sentence command in a conversation, and they'll appear here.",
+      "loadMore": "Load more",
+      "loadingMore": "Loading more…",
+      "loadMoreFailed": "Couldn't load more",
+      "deleteButton": "Delete",
+      "deleteButtonLabel": "Delete {{sentence}}",
+      "deleteDialogTitle": "Delete sentence",
+      "deleteDialogBody": "This will delete the saved record for \"{{sentence}}\". Conversation history stays unchanged.",
+      "deleteDialogCancel": "Cancel",
+      "deleteDialogConfirm": "Delete",
+      "deleting": "Deleting…",
+      "deleteSucceeded": "Deleted \"{{sentence}}\"",
+      "columnSource": "Original",
+      "columnTranslation": "Translation",
+      "columnCreatedAt": "Created"
     }
   },
   "practice": {

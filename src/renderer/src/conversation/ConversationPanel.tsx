@@ -102,6 +102,7 @@ export function ConversationPanel({
   // 替换后的草稿仍以 `/` 开头，用锁定抑制避免完成后立即弹回。
   const selectAction = (action: ConversationActionMeta): void => {
     if (
+      action.id === 'sentence' ||
       action.id === 'vocabulary' ||
       action.id === 'phrase' ||
       action.id === 'synonym' ||
@@ -236,13 +237,15 @@ export function ConversationPanel({
       if (parsed.status !== 'ok') {
         setComposerError(
           t(
-            activeSkillId === 'tts'
-              ? 'conversation:composer.ttsRequired'
-              : activeSkillId === 'synonym'
-                ? 'conversation:composer.synonymRequired'
-                : activeSkillId === 'phrase'
-                  ? 'conversation:composer.phraseRequired'
-                  : 'conversation:composer.vocabularyRequired'
+            activeSkillId === 'sentence'
+              ? 'conversation:composer.sentenceRequired'
+              : activeSkillId === 'tts'
+                ? 'conversation:composer.ttsRequired'
+                : activeSkillId === 'synonym'
+                  ? 'conversation:composer.synonymRequired'
+                  : activeSkillId === 'phrase'
+                    ? 'conversation:composer.phraseRequired'
+                    : 'conversation:composer.vocabularyRequired'
           )
         )
         return
@@ -376,17 +379,19 @@ export function ConversationPanel({
             }}
             onKeyDown={handleInputKeyDown}
             placeholder={
-              activeSkillId === 'tts'
-                ? t('conversation:composer.ttsHint')
-                : activeSkillId === 'synonym'
-                  ? t('conversation:composer.synonymHint')
-                  : activeSkillId === 'phrase'
-                    ? t('conversation:composer.phraseHint')
-                    : activeSkillId === 'explore-phrase'
-                      ? t('conversation:composer.explorePhraseHint')
-                      : activeSkillId === 'explore-vocabulary'
-                        ? t('conversation:composer.exploreVocabularyHint')
-                        : t('common:composer.placeholder')
+              activeSkillId === 'sentence'
+                ? t('conversation:composer.sentenceHint')
+                : activeSkillId === 'tts'
+                  ? t('conversation:composer.ttsHint')
+                  : activeSkillId === 'synonym'
+                    ? t('conversation:composer.synonymHint')
+                    : activeSkillId === 'phrase'
+                      ? t('conversation:composer.phraseHint')
+                      : activeSkillId === 'explore-phrase'
+                        ? t('conversation:composer.explorePhraseHint')
+                        : activeSkillId === 'explore-vocabulary'
+                          ? t('conversation:composer.exploreVocabularyHint')
+                          : t('common:composer.placeholder')
             }
             ref={inputRef}
             role="combobox"

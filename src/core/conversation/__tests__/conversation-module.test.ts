@@ -219,6 +219,9 @@ describe('ConversationModule', () => {
       const conversation = await repository.seedConversation()
       const inputs: unknown[] = []
       const runtime: import('../../agent/agent-runtime').AgentRuntime = {
+        runSentence: async () => {
+          throw new Error('Unused sentence runtime')
+        },
         runTts: async () => {
           throw new Error('Unexpected speech task')
         },
@@ -325,6 +328,9 @@ describe('ConversationModule', () => {
       }
     )
     const runtime: import('../../agent/agent-runtime').AgentRuntime = {
+      runSentence: async () => {
+        throw new Error('Unused sentence runtime')
+      },
       runTts: async (input, host) => {
         host.verifyCompletion(await host.synthesize(input.signal))
       },

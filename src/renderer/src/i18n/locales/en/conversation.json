@@ -32,7 +32,11 @@
     "descriptionFailedExploreVocabulary": "Words were generated and saved, but showing the result failed. You can retry to restore it.",
     "descriptionCancelledExploreVocabulary": "Words were generated and saved, but showing the result was cancelled. You can retry to restore it.",
     "synthesizingTts": "Generating speech…",
-    "committingTts": "Saving speech…"
+    "committingTts": "Saving speech…",
+    "analyzingSentence": "Translating…",
+    "committingSentence": "Saving sentence…",
+    "descriptionFailedSentence": "Sentence saved. Retry to restore the result.",
+    "descriptionCancelledSentence": "Sentence saved. Showing the result was cancelled; retry to restore it."
   },
   "composer": {
     "vocabularyRequired": "Enter one or more English words or phrases after /vocabulary.",
@@ -45,7 +49,9 @@
     "exploreVocabularyInvalid": "/explore-vocabulary takes no arguments. Send it as is.",
     "exploreVocabularyHint": "Just send it to generate 10 common English words with meanings and examples; the last 7 rounds are never repeated.",
     "ttsRequired": "Enter English plain text after /tts.",
-    "ttsHint": "For example: /tts Hello, world! Up to 4,000 characters."
+    "ttsHint": "For example: /tts Hello, world! Up to 4,000 characters.",
+    "sentenceRequired": "Enter text to translate or polish after /sentence.",
+    "sentenceHint": "Translate and save the whole passage, or polish text already in your target language. Up to 4,000 characters."
   },
   "thinking": {
     "label": "Model thinking",
@@ -85,6 +91,10 @@
       "tts": {
         "name": "Text to speech",
         "description": "Generate local speech and click words to seek."
+      },
+      "sentence": {
+        "name": "Sentence",
+        "description": "Translate or polish a passage naturally in your target language and save it."
       }
     }
   }

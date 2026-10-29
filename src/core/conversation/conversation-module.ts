@@ -28,6 +28,8 @@ import type { SupportedLocale, TargetLanguage } from '../../shared/preferences'
 import type { ModelMessage } from '../llm/language-model'
 import { ModelConfigValidationError, ModelNotConfiguredError } from '../llm/model-config'
 import { VocabularyError } from '../learning/vocabulary/parse-vocabulary-input'
+import { SentenceError } from '../learning/sentence/sentence-repository'
+import { sentenceTextSchema } from '../../shared/sentence'
 import { PhraseError } from '../learning/phrase/parse-phrase-input'
 import { ExplorePhraseError } from '../learning/explore-phrase/explore-phrase-error'
 import { ExploreVocabularyError } from '../learning/explore-vocabulary/explore-vocabulary-error'
@@ -266,6 +268,7 @@ export class ConversationModule {
     input: RunConversationSkillInput,
     emit: ConversationEventListener
   ): Promise<GenerationAccepted> {
+    if (input.skillId === 'sentence') sentenceTextSchema.parse(input.arguments.text)
     if (input.skillId === 'synonym') parseSynonymInput(input.arguments.text)
     if (input.skillId === 'tts') {
       const parsed = speechInputSchema.safeParse({
@@ -320,13 +323,15 @@ export class ConversationModule {
       updatedAt: now
     }
     const execution: StoredConversationSkillExecution =
-      input.skillId === 'tts'
-        ? { ...executionBase, skillId: 'tts' }
-        : input.skillId === 'synonym'
-          ? { ...executionBase, skillId: 'synonym' }
-          : input.skillId === 'phrase'
-            ? { ...executionBase, skillId: 'phrase' }
-            : { ...executionBase, skillId: 'vocabulary' }
+      input.skillId === 'sentence'
+        ? { ...executionBase, skillId: 'sentence' }
+        : input.skillId === 'tts'
+          ? { ...executionBase, skillId: 'tts' }
+          : input.skillId === 'synonym'
+            ? { ...executionBase, skillId: 'synonym' }
+            : input.skillId === 'phrase'
+              ? { ...executionBase, skillId: 'phrase' }
+              : { ...executionBase, skillId: 'vocabulary' }
     const assistantMessageId = randomUUID()
     this.registerExecution(input.requestId, {
       controller: new AbortController(),
@@ -1146,6 +1151,12 @@ export class ConversationModule {
 
   // Core 只返回安全错误码，不负责界面翻译；内部原因留在产生处。
   private toSafeError(error: unknown): GenerationEventError {
+    if (error instanceof SentenceError) {
+      if (error.code === 'STORAGE_FAILED') return { code: 'PERSISTENCE_ERROR' }
+      return {
+        code: error.code === 'MODEL_NOT_CONFIGURED' ? 'MODEL_NOT_CONFIGURED' : 'MODEL_ERROR'
+      }
+    }
     if (error instanceof SpeechError) return { code: 'SPEECH_ERROR', speechCode: error.code }
     if (error instanceof AgentRuntimeError) return { code: error.code }
     if (error instanceof SynonymError) {
