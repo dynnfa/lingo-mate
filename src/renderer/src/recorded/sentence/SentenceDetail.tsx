@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { normalizeI18nLocale } from '../../i18n'
-import { formatDateTime } from '../../i18n/formatters'
 import { useTranslation } from 'react-i18next'
+import { SpeechText } from '../../speech/SpeechText'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { LoadMoreBar } from '../../components/LoadMoreBar'
 import { StateBlock } from '../../components/StateBlock'
@@ -13,10 +12,10 @@ import type {
 } from '../../../../shared/sentence'
 import { sentenceManagementErrorKey, toSentenceManagementError } from './sentence-messages'
 
-// 已记录页 Sentence 详情：读取收藏句子以表格展示，最右侧操作列支持
-// 按句子 ID单条删除。列表状态机由 useCursorList 持有，删除状态在本组件。
+// 已记录页 Sentence 详情：读取收藏语句以表格展示，最右侧操作列支持
+// 按语句 ID 单条删除。列表状态机由 useCursorList 持有，删除状态在本组件。
 export function SentenceDetail(): React.JSX.Element {
-  const { t, i18n } = useTranslation(['common', 'errors'])
+  const { t } = useTranslation(['common', 'errors'])
 
   const loadPage = useCallback(
     async (
@@ -142,7 +141,6 @@ export function SentenceDetail(): React.JSX.Element {
                 <tr>
                   <th scope="col">{t('recorded.sentence.columnSource')}</th>
                   <th scope="col">{t('recorded.sentence.columnTranslation')}</th>
-                  <th scope="col">{t('recorded.sentence.columnCreatedAt')}</th>
                   <th className="phrase-actions-column" scope="col">
                     {t('recorded.sentence.columnActions')}
                   </th>
@@ -152,11 +150,11 @@ export function SentenceDetail(): React.JSX.Element {
                 {list.entries.map((entry) => (
                   <tr key={entry.id}>
                     <td className="phrase-cell-prewrap">{entry.sourceText}</td>
-                    <td className="phrase-cell-prewrap">{entry.translation}</td>
                     <td className="phrase-cell-prewrap">
-                      <time dateTime={entry.createdAt}>
-                        {formatDateTime(normalizeI18nLocale(i18n.language), entry.createdAt)}
-                      </time>
+                      <SpeechText
+                        text={entry.translation}
+                        sourceId={`sentence:${entry.id}:translation`}
+                      />
                     </td>
                     <td className="phrase-actions-column phrase-actions-cell">
                       <button
