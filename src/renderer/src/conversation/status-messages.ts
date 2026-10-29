@@ -57,49 +57,52 @@ type SkillStatusKeys = {
     | 'conversation:status.descriptionCancelledExploreVocabulary'
 }
 
+const VOCABULARY_STATUS_KEYS: SkillStatusKeys = {
+  analyzing: 'conversation:status.analyzingVocabulary',
+  committing: 'conversation:status.committingVocabulary',
+  descriptionFailed: 'conversation:status.descriptionFailedVocabulary',
+  descriptionCancelled: 'conversation:status.descriptionCancelledVocabulary'
+}
+
+const SKILL_STATUS_KEYS: Record<ConversationSkillId, SkillStatusKeys> = {
+  vocabulary: VOCABULARY_STATUS_KEYS,
+  // TTS 阶段文案单独处理；结果描述继续沿用现有默认文案。
+  tts: VOCABULARY_STATUS_KEYS,
+  sentence: {
+    analyzing: 'conversation:status.analyzingSentence',
+    committing: 'conversation:status.committingSentence',
+    descriptionFailed: 'conversation:status.descriptionFailedSentence',
+    descriptionCancelled: 'conversation:status.descriptionCancelledSentence'
+  },
+  synonym: {
+    analyzing: 'conversation:status.analyzingSynonym',
+    committing: 'conversation:status.committingSynonym',
+    descriptionFailed: 'conversation:status.descriptionFailedSynonym',
+    descriptionCancelled: 'conversation:status.descriptionCancelledSynonym'
+  },
+  phrase: {
+    analyzing: 'conversation:status.analyzingPhrase',
+    committing: 'conversation:status.committingPhrase',
+    descriptionFailed: 'conversation:status.descriptionFailedPhrase',
+    descriptionCancelled: 'conversation:status.descriptionCancelledPhrase'
+  },
+  'explore-phrase': {
+    // 阶段文案表达“生成短语”，避免误用“收录/收藏成功”。
+    analyzing: 'conversation:status.generatingExplorePhrase',
+    committing: 'conversation:status.committingExplorePhrase',
+    descriptionFailed: 'conversation:status.descriptionFailedExplorePhrase',
+    descriptionCancelled: 'conversation:status.descriptionCancelledExplorePhrase'
+  },
+  'explore-vocabulary': {
+    analyzing: 'conversation:status.generatingExploreVocabulary',
+    committing: 'conversation:status.committingExploreVocabulary',
+    descriptionFailed: 'conversation:status.descriptionFailedExploreVocabulary',
+    descriptionCancelled: 'conversation:status.descriptionCancelledExploreVocabulary'
+  }
+}
+
 const skillKeys = (skillId: ConversationSkillId | undefined): SkillStatusKeys =>
-  skillId === 'sentence'
-    ? {
-        analyzing: 'conversation:status.analyzingSentence',
-        committing: 'conversation:status.committingSentence',
-        descriptionFailed: 'conversation:status.descriptionFailedSentence',
-        descriptionCancelled: 'conversation:status.descriptionCancelledSentence'
-      }
-    : skillId === 'synonym'
-      ? {
-          analyzing: 'conversation:status.analyzingSynonym',
-          committing: 'conversation:status.committingSynonym',
-          descriptionFailed: 'conversation:status.descriptionFailedSynonym',
-          descriptionCancelled: 'conversation:status.descriptionCancelledSynonym'
-        }
-      : skillId === 'phrase'
-        ? {
-            analyzing: 'conversation:status.analyzingPhrase',
-            committing: 'conversation:status.committingPhrase',
-            descriptionFailed: 'conversation:status.descriptionFailedPhrase',
-            descriptionCancelled: 'conversation:status.descriptionCancelledPhrase'
-          }
-        : skillId === 'explore-phrase'
-          ? {
-              // 阶段文案表达“生成短语”，避免误用“收录/收藏成功”。
-              analyzing: 'conversation:status.generatingExplorePhrase',
-              committing: 'conversation:status.committingExplorePhrase',
-              descriptionFailed: 'conversation:status.descriptionFailedExplorePhrase',
-              descriptionCancelled: 'conversation:status.descriptionCancelledExplorePhrase'
-            }
-          : skillId === 'explore-vocabulary'
-            ? {
-                analyzing: 'conversation:status.generatingExploreVocabulary',
-                committing: 'conversation:status.committingExploreVocabulary',
-                descriptionFailed: 'conversation:status.descriptionFailedExploreVocabulary',
-                descriptionCancelled: 'conversation:status.descriptionCancelledExploreVocabulary'
-              }
-            : {
-                analyzing: 'conversation:status.analyzingVocabulary',
-                committing: 'conversation:status.committingVocabulary',
-                descriptionFailed: 'conversation:status.descriptionFailedVocabulary',
-                descriptionCancelled: 'conversation:status.descriptionCancelledVocabulary'
-              }
+  SKILL_STATUS_KEYS[skillId ?? 'vocabulary']
 
 export function translateConversationStatus(
   t: StatusTFunction,
