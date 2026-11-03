@@ -1,6 +1,6 @@
 # 公共通信模块与 Adapter 接入
 
-公共模块已提供通信基础设施；生产 Adapter 注册表当前为空，不代表已接入 Telegram、微信、飞书或 Discord。测试只使用内存传输、临时 SQLite 和可控模型；真实平台接入及其 Token 表单需要单独实施和验证。
+公共模块已提供通信基础设施，并静态注册 Telegram HTTPS 长轮询 Adapter。桌面支持创建 Bot 连接、加密保存／替换 Token、两步绑定与逻辑删除。当前已通过可控 Bot API 传输、临时 SQLite、真实 Python JSONL 和可控模型验证；尚未执行真实 Telegram 平台、Electron E2E 或跨 OS 验收，不代表已验证微信、飞书或 Discord。
 
 ## 代码边界
 
@@ -49,26 +49,39 @@
 
 离线队列也由定期清理检查消息有效期，过期后标记 expired，不再执行业务，并保留原接收回执用于去重。其正文和去重记录同样按 7 天／30 天清理，不依赖连接重新上线。
 
-错误码包含 UNBOUND、CHALLENGE_INVALID、CONFIRMATION_INVALID、OWNER_MISMATCH、CAPABILITY_DENIED、UNSUPPORTED_SCOPE、UNSUPPORTED_INPUT、EXPIRED、RATE_LIMITED、QUEUE_FULL、EVENT_CONFLICT、BACKPRESSURE、STOPPED 和 STORAGE_FAILED。`rejected` 是已持久化拒绝，`failed` 表示接收未完成。管理接口将内部失败映射为安全错误，不返回 SDK 错误。
+错误码包含 UNBOUND、CHALLENGE_INVALID、CONFIRMATION_INVALID、OWNER_MISMATCH、CAPABILITY_DENIED、UNSUPPORTED_SCOPE、UNSUPPORTED_INPUT、EXPIRED、RATE_LIMITED、QUEUE_FULL、EVENT_CONFLICT、BACKPRESSURE、STOPPED 和 STORAGE_FAILED。`rejected` 是已持久化拒绝，`failed` 表示接收未完成。无法可靠映射 actor/chat 的更新使用 Main 专用 `receiveRejected`，仅持久化事件 ID、分类与摘要，不创建虚构账号、会话或 Outbox；与标准事件共享唯一键和 10,000 条容量。重复回执及冲突摘要（有界保存）与游标同事务提交，墓碑按 30 天清理。管理接口将内部失败映射为安全错误，不返回 SDK 错误。
 
 ## 实现一个 Adapter
 
 1. 在 `src/main/channels/` 实现 `CommunicationAdapter`，由 Main 将 `AdapterRegistration` 传入 `CommunicationHost`。用 `host.service.addConnection(adapterId, config, credentialRef)` 在可信装配层创建连接；未知 adapterId 在初始化连接前被拒绝。非敏感配置按平台 schema 校验，秘密仅进入凭据库。
-2. `start(context)` 只做一次连接动作。明确可重试的失败抛 `AdapterConnectionError(true)`；在线连接失效调用 `context.disconnected(retryable)`。公共模块决定退避和次数。`stop()` 可重复并释放 SDK；必须遵守 AbortSignal。旧代次回调一律拒绝。
+2. `start(context)` 只做一次连接动作。明确可重试的失败抛 `AdapterConnectionError(true)`；在线连接失效调用 `context.disconnected(retryable, safeCode?, retryAfterMs?)`。公共模块决定退避和次数；平台提供的等待时间同时适用于连接重试，不受本地 60 秒退避上限缩短。`stop()` 可重复并释放 SDK；必须遵守 AbortSignal。旧代次回调一律拒绝。
 3. Adapter 先验证平台原始协议、Webhook 签名和原始大小，再转换为 `inboundEventSchema`。不要传 SDK 对象。connectionId 由 context 闭包绑定，不来自平台正文；平台稳定用户 ID 才能授权，昵称只用于本地核对。
-4. 调用 `await context.receive(event, opaqueCursor)`。仅在 `persisted` 或 `rejected` 后确认 Webhook / 推进 polling offset。`failed` 必须允许重投。公共仓储将游标和 Inbox 在同一事务保存，Adapter 不另存未经确认的游标。
+4. 调用 `await context.receive(event, opaqueCursor)`；无法映射身份时调用 `receiveRejected(envelope, opaqueCursor)`，不能将 schema 校验失败当作已确认。仅在 `persisted` 或 `rejected` 后确认 Webhook / 推进 polling offset。`failed` 必须允许重投。公共仓储将游标和 Inbox 在同一事务保存，Adapter 不另存未经确认的游标。
 5. `encode(text)` 无网络副作用，完成平台转义、长度计算及确定性分片，声明 `encodingVersion`。编码先持久化再发送。每片段最长为能力上限，总数最多 64，回复正文最多 65,536 单元。附件首版不准入；edit / interactions 声明不授予业务权限，首版仍只聚合最终答复。
 6. `send(target, part, identity, signal)` 只执行一次平台发送，关闭 SDK 隐式重试。返回标准 `sent`、明确未发送的 `retry`（可带等待毫秒）、`failed` 或 `uncertain`。禁止把网络超时当成确定未发送。edit 是预留可选契约，当前聚合模式不调用。
 7. 不访问业务数据库、Agent、任意内部 session，也不自行绑定、选择回复目标或重试业务。所有发送必须使用冻结 target。凭据明文只能由 Main 凭据库读取并直接交给 SDK，不进入 Core、Renderer、日志或 Python。
 
-凭据库使用系统 safeStorage 和权限受限的独立文件，仅提供 write / Main read / remove。加密不可用（含 Linux basic_text）时失败，不降级明文。替换凭据先停止旧代次；桌面协议只有提交接口和 hasCredential，不提供秘密回读。平台特有 Token 表单和连接创建 UI 留给具体平台。
+## Telegram 首版
+
+- 使用固定 `https://api.telegram.org` 的 `getMe`、`getWebhookInfo`、`getUpdates`、`sendMessage`；不接受自定义 URL、重定向、SDK 隐式重试或公网监听。响应按流限制 2 MiB，单个更新限制 256 KiB；异常不保留 Token URL、平台描述或 cause。
+- 创建和凭据轮换通过 `getMe` 绑定稳定 bot ID，同 Bot 创建及管理操作串行。轮换先停止旧代次，只接受原 Bot；创建、轮换及应用重启后均需手动启动。创建提交失败清理新凭据文件，启动时仅清理经仓储核对无引用的凭据文件。
+- 启动核验 Bot 身份及 webhook，已有 webhook 或外部 polling 冲突时进入安全错误，须解决后手动启动。每次单一长轮询，`timeout=20`、`limit=20`、`allowed_updates=["message"]`，逐条持久化再推进版本化、绑定 bot ID 的 offset。失败不越过本批更新，不清零游标、不丢弃平台积压。
+- 仅普通人类私聊文本，身份和时间严格校验安全整数。非文本、编辑、非私聊或无可靠身份的更新走持久化拒绝。正文只取顶层 text，给本 Bot 的命令仅规范化 `@username` 后缀，其他 Bot 的命令拒绝。Telegram `language_code` 不改变桌面语言。
+- `telegram` 注册显式启用无参数 `/start` → `/help` 的公共控制别名；仍须绑定。带参数 `/start` 不消费绑定码或票据，也不进入普通对话。其他 Adapter 不受别名影响。
+- 出站 `telegram-plain-v1`：纯文本、不设置 parse mode、不预览链接，每片最多 4,000 UTF-16 单元，确定性分片可还原原文，不拆代理对；同 chat 至少间隔 1 秒，连接级至少间隔 40 ms，取消及等待计入单次发送预算。
+- 每片只调用一次 `sendMessage`，核验返回消息 ID 与冻结私聊 target。明确 429 尊重完整 `retry_after`；发起后的网络故障、5xx 或无法核验的回执为 uncertain，不自动重发。桌面勾选可能重复后仅重试保存片段，不重跑 Agent。
+- 删除先关闭准入、撤销绑定、取消活动任务并抑制待发，再有界停止和清理凭据。停止或清理失败仍在桌面显示并允许重试，不宣告完成或启动替代消费者。保留已提交学习结果与账本。JSON 记录新增字段兼容现有 v15，无需新迁移；验证未打开真实用户数据库。
+
+凭据库使用系统 safeStorage 和权限受限的独立文件，仅提供 write / Main read / remove。加密不可用（含 Linux basic_text）时失败，不降级明文。替换凭据先停止旧代次；桌面协议只有提交接口和 hasCredential，不提供秘密回读。Telegram 已提供专属 Token 表单和连接创建接口，其他平台仍需单独适配。
 
 ## 契约测试和验证
 
 `src/core/communication/__tests__/test-adapter.ts` 提供最终文本和支持交互的两个无网络 Adapter。`adapter-contract.ts` 导出 `runCommunicationAdapterContract(name, makeHarness)` 作为可复用契约入口，`adapter-contract.test.ts` 用两个测试 Adapter 执行；`communication.test.ts`，另覆盖绑定、跨连接隔离、票据重放、取消、游标故障、队列、退避、uncertain、重启、正文清理和有界退出。新 Adapter 应使用可控传输替身跑同一行为，并补充其转义、验签、原始载荷和 SDK 无重试测试。
 
-`tests/integration/communication-agent.test.ts` 对两个 Adapter 均使用真实 Python JSONL 和真实 ConversationModule / sentence 领域存储，用可控模型验证无重复执行、稳定消息关联、报告恢复及外发隐私。数据库迁移测试只打开临时数据库；Main / Preload / 设置页测试验证可信来源、凭据不回读、双语空状态和键盘焦点。
+`tests/integration/communication-agent.test.ts` 对两个测试 Adapter 及真实协议映射的 Telegram Adapter 均使用真实 Python JSONL 和真实 ConversationModule / sentence 领域存储，用可控模型验证无重复执行、稳定消息关联、报告恢复及外发隐私。数据库迁移测试只打开临时数据库；Main / Preload / 设置页测试验证可信来源、凭据不回读、双语空状态和键盘焦点。
 
 应用退出先关闭通信准入、调度及发送，取消渠道业务、有界等待并释放 Adapter，随后关闭 Agent、仓储及日志。晚到回调不再访问仓储。禁用公共模块不会改变桌面原 IPC 及 Python 执行路径；不清空账本或回滚已提交业务。
 
 运行非 E2E 的项目验证命令见实施计划。真实平台需单独完成真实私聊收发、验签、游标重投、账号绑定、发送不确定性、断网、系统休眠及退出验收。任何 E2E 和真实用户数据库操作仍需单独取得用户明确许可。
+
+2026-11-04 验证记录：Telegram 协议／传输／生命周期单元测试、公共 Adapter 契约、管理 IPC 与双语组件测试、真实 Python 普通对话与 sentence 集成均使用替身传输和临时数据。非 E2E 项目检查结果见[实施计划](plans/2026-11-04-telegram-bot-integration.md)。E2E 未执行，按约定默认无问题；真实平台及其他 OS 尚未验收。

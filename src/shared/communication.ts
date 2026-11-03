@@ -1,6 +1,8 @@
 import { z } from 'zod'
 export const COMMUNICATION_CHANNELS = {
   snapshot: 'communication:snapshot',
+  createTelegramConnection: 'communication:createTelegramConnection',
+  deleteConnection: 'communication:deleteConnection',
   start: 'communication:start',
   stop: 'communication:stop',
   createChallenge: 'communication:createChallenge',
@@ -11,9 +13,36 @@ export const COMMUNICATION_CHANNELS = {
   setCredential: 'communication:setCredential'
 } as const
 const id = z.uuid()
-export const communicationErrorSchema = z.strictObject({
-  code: z.enum(['UNTRUSTED_SOURCE', 'INVALID_INPUT', 'COMMUNICATION_FAILED'])
-})
+export const communicationErrorCodeSchema = z.enum([
+  'UNTRUSTED_SOURCE',
+  'INVALID_INPUT',
+  'COMMUNICATION_FAILED',
+  'CREDENTIAL_STORAGE_UNAVAILABLE',
+  'TELEGRAM_DUPLICATE_BOT',
+  'TELEGRAM_BOT_MISMATCH',
+  'TELEGRAM_UNAUTHORIZED',
+  'TELEGRAM_WEBHOOK_CONFLICT',
+  'TELEGRAM_POLL_CONFLICT',
+  'TELEGRAM_CURSOR_INVALID',
+  'TELEGRAM_INVALID_RESPONSE',
+  'TELEGRAM_NETWORK',
+  'TELEGRAM_RESPONSE_TOO_LARGE',
+  'TELEGRAM_RATE_LIMITED',
+  'TELEGRAM_REJECTED',
+  'TELEGRAM_NOT_SENT',
+  'TELEGRAM_ADMISSION_FAILED',
+  'CONNECTION_STOP_FAILED',
+  'CONNECTION_FAILED',
+  'CONNECTION_LOST',
+  'CONNECTION_LIMIT'
+])
+export const communicationErrorSchema = z.strictObject({ code: communicationErrorCodeSchema })
+export const telegramTokenSchema = z
+  .string()
+  .min(20)
+  .max(256)
+  .regex(/^[1-9][0-9]{4,19}:[A-Za-z0-9_-]{20,200}$/u)
+export const createTelegramInputSchema = z.strictObject({ token: telegramTokenSchema })
 const error = z.strictObject({ status: z.literal('error'), error: communicationErrorSchema })
 export const connectionInputSchema = z.strictObject({ connectionId: id })
 export const challengeInputSchema = z.strictObject({
@@ -39,6 +68,10 @@ export const communicationActionResultSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('ok') }),
   error
 ])
+export const createConnectionResultSchema = z.discriminatedUnion('status', [
+  z.strictObject({ status: z.literal('ok'), connectionId: id }),
+  error
+])
 export const challengeResultSchema = z.discriminatedUnion('status', [
   z.strictObject({
     status: z.literal('ok'),
@@ -49,6 +82,7 @@ export const challengeResultSchema = z.discriminatedUnion('status', [
   error
 ])
 export const communicationSnapshotSchema = z.strictObject({
+  installedAdapters: z.array(z.string().max(64)).max(32).optional(),
   receipts: z
     .array(
       z.strictObject({
@@ -77,7 +111,17 @@ export const communicationSnapshotSchema = z.strictObject({
         id,
         adapterId: z.string().max(64),
         state: z.enum(['stopped', 'starting', 'online', 'reconnecting', 'error', 'stopping']),
-        hasCredential: z.boolean()
+        hasCredential: z.boolean(),
+        deleting: z.boolean().optional(),
+        botId: z
+          .string()
+          .regex(/^[1-9][0-9]*$/u)
+          .optional(),
+        username: z
+          .string()
+          .regex(/^[A-Za-z0-9_]{5,32}$/u)
+          .optional(),
+        errorCode: communicationErrorCodeSchema.optional()
       })
     )
     .max(32),
@@ -141,6 +185,10 @@ export const communicationSnapshotResultSchema = z.discriminatedUnion('status', 
 ])
 type ActionResult = z.infer<typeof communicationActionResultSchema>
 export interface CommunicationApi {
+  createTelegramConnection(
+    input: z.infer<typeof createTelegramInputSchema>
+  ): Promise<z.infer<typeof createConnectionResultSchema>>
+  deleteConnection(input: z.infer<typeof connectionInputSchema>): Promise<ActionResult>
   snapshot(): Promise<z.infer<typeof communicationSnapshotResultSchema>>
   start(input: z.infer<typeof connectionInputSchema>): Promise<ActionResult>
   stop(input: z.infer<typeof connectionInputSchema>): Promise<ActionResult>

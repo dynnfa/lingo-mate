@@ -65,7 +65,9 @@ export interface Inbox {
   state: ExecutionState
   receivedAt: number
   expiresAt: number
-  actorId: string
+  conflictDigests?: string[]
+  rejectionKind?: string
+  actorId?: string
   scopeKey: string
   control: boolean
   bindingId?: string
