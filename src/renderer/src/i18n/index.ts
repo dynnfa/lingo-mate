@@ -1,3 +1,5 @@
+import communicationEn from '../../../shared/locales/en/communication.json'
+import communicationZh from '../../../shared/locales/zh-CN/communication.json'
 import vocabularyEn from '../../../shared/locales/en/vocabulary.json'
 import speechEn from '../../../shared/locales/en/speech.json'
 import speechZhCN from '../../../shared/locales/zh-CN/speech.json'
@@ -13,12 +15,20 @@ import conversationZhCN from './locales/zh-CN/conversation.json'
 import errorsZhCN from './locales/zh-CN/errors.json'
 
 export const FALLBACK_LOCALE = 'zh-CN'
-export const I18N_NAMESPACES = ['common', 'conversation', 'errors', 'vocabulary', 'speech'] as const
+export const I18N_NAMESPACES = [
+  'common',
+  'conversation',
+  'errors',
+  'vocabulary',
+  'speech',
+  'communication'
+] as const
 
 // 资源静态打包进渲染进程；不引入 HTTP backend 或语言探测插件，
 // 界面语言统一由 Main 解析后传入，避免浏览器与桌面偏好形成两套来源。
 export const bundledResources = {
   'zh-CN': {
+    communication: communicationZh,
     speech: speechZhCN,
     vocabulary: vocabularyZhCN,
     common: commonZhCN,
@@ -26,6 +36,7 @@ export const bundledResources = {
     errors: errorsZhCN
   },
   en: {
+    communication: communicationEn,
     speech: speechEn,
     vocabulary: vocabularyEn,
     common: commonEn,

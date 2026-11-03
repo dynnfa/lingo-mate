@@ -1,3 +1,4 @@
+import { ChannelsSettings } from './channels/ChannelsSettings'
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -33,6 +34,7 @@ const SETTINGS_SECTIONS = [
     labelKey: 'common:settings.sections.usage',
     titleId: 'settings-section-title-usage'
   },
+  { id: 'channels', labelKey: 'communication:title', titleId: 'settings-section-title-channels' },
   { id: 'speech', labelKey: 'speech:title', titleId: 'settings-section-title-speech' }
 ] as const
 
@@ -47,7 +49,7 @@ interface SettingsPageProps {
 // 一次按键只触发一个动作；退出后由调用方把焦点还给设置按钮。
 // 模型区块有未保存修改时，返回或 Escape 先经过“继续编辑 / 放弃修改”确认。
 export function SettingsPage({ onExit }: SettingsPageProps): React.JSX.Element {
-  const { t } = useTranslation(['common', 'errors', 'speech'])
+  const { t } = useTranslation(['common', 'errors', 'speech', 'communication'])
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false)
   // 活动区块镜像：Escape 分层需要判断模型表单是否可见。
   const [activeSectionId, setActiveSectionId] = useState<SettingsSectionId>('uiLanguage')
@@ -93,6 +95,8 @@ export function SettingsPage({ onExit }: SettingsPageProps): React.JSX.Element {
   }
 
   const sectionBody = (sectionId: SettingsSectionId): React.JSX.Element => {
+    if (sectionId === 'channels')
+      return <ChannelsSettings active={activeSectionId === 'channels'} />
     if (sectionId === 'speech') return <SpeechSettings active={activeSectionId === 'speech'} />
     if (sectionId === 'uiLanguage') return <UiLanguageSection />
     if (sectionId === 'targetLanguage') return <TargetLanguageSection />

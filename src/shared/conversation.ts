@@ -1,3 +1,4 @@
+import type { CommunicationApi } from './communication'
 import type { SynonymApi, SynonymBatch } from './synonym'
 import { z } from 'zod'
 import type { ModelsApi } from './models'
@@ -345,6 +346,7 @@ export interface ConversationApi {
 }
 
 export interface LingoMateApi {
+  communication: CommunicationApi
   speech: SpeechApi
   conversation: ConversationApi
   preferences: PreferencesApi
