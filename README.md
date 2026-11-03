@@ -2,13 +2,13 @@
 
 English | [简体中文](README.zh-CN.md)
 
-A desktop English-learning assistant that connects AI conversations, vocabulary and phrase collection, practice, and mistake review. Keep your learning records locally, connect your own model service, and track token usage.
+A desktop language-learning assistant that connects AI conversations, vocabulary and expression collection, practice, and mistake review. Lingo Mate aims to help people with different native languages learn their chosen target language. Keep your learning records locally, connect your own model service, and track token usage.
 
 Lingo Mate turns material you collect into material you can practice. Saved analyses are reused, duplicate entries are skipped, and practice questions are drawn from your local vocabulary library to reduce unnecessary model calls.
 
 ## Features
 
-The current learning language is **English**. The interface supports **English and Simplified Chinese**.
+The product is designed to grow into a general language-learning assistant. **The current version supports English as its target learning language**, with an **English and Simplified Chinese** interface. Support for additional learning languages requires changes to prompts, validation, storage, practice, and speech; changing the interface language does not add a learning language. See the [language-learning scope and design principles](docs/language-learning-scope.md).
 
 - **Learn through conversation.** Ask language questions, polish sentences, or use `/concept` for explanations. Conversations support history, streaming responses, cancellation, and explicit retry.
 - **Build a personal library.** Save words with `/vocabulary` and phrases with `/phrase`, including explanations and examples. Use `/synonym` to compare related words and their usage.
@@ -19,6 +19,8 @@ The current learning language is **English**. The interface supports **English a
 - **Choose your model and monitor usage.** Save and switch between OpenAI-compatible or Gemini configurations. Review token counts, request counts, and daily and weekly trends when usage data is supplied by the provider.
 
 ## A learning session
+
+The following English examples demonstrate the workflows available in the current version.
 
 1. Ask a question or explore a concept: `/concept present perfect`.
 2. Save words you want to learn: `/vocabulary adapt, adopt, adept`.
