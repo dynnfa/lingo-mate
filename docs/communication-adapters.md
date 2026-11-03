@@ -45,6 +45,10 @@
 
 投递：pending → sending → sent / retry_wait / failed / uncertain / suppressed。只有确定未发送的临时错误可自动重试。超时、异常、非法发送回执和重启时的 sending 均为 uncertain，桌面明确勾选可能重复后才能重试。重试使用同一片段、partId 和编码版本，已确认的片段不重发；编码版本变化时保留待处理状态。解绑、逻辑删除连接或过期阻止未发内容；已发记录保留事实。停止连接保留队列和待发结果，下次显式启动恢复；重启不自动连接平台。
 
+业务调度与投递使用独立的单次运行协调：业务仍在运行时，后续 250 ms tick 可继续投递已保存的回复；重叠 tick 复用同一次投递，避免重复发送。手动启动与自动重连均先中止旧代次并等待旧 Adapter 停止；清理失败或超过 3 秒时保留旧实例并进入 error，不创建替代实例。清理期间显式停止或退出会阻止后续启动。
+
+离线队列也由定期清理检查消息有效期，过期后标记 expired，不再执行业务，并保留原接收回执用于去重。其正文和去重记录同样按 7 天／30 天清理，不依赖连接重新上线。
+
 错误码包含 UNBOUND、CHALLENGE_INVALID、CONFIRMATION_INVALID、OWNER_MISMATCH、CAPABILITY_DENIED、UNSUPPORTED_SCOPE、UNSUPPORTED_INPUT、EXPIRED、RATE_LIMITED、QUEUE_FULL、EVENT_CONFLICT、BACKPRESSURE、STOPPED 和 STORAGE_FAILED。`rejected` 是已持久化拒绝，`failed` 表示接收未完成。管理接口将内部失败映射为安全错误，不返回 SDK 错误。
 
 ## 实现一个 Adapter

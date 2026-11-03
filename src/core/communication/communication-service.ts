@@ -30,6 +30,8 @@ export class CommunicationService {
   >()
   private closed = false
   private flushing?: Promise<void>
+  private delivering?: Promise<void>
+  private deliveryRequested = false
   constructor(
     private readonly repository: CommunicationRepository,
     private readonly business: BusinessPort,
@@ -88,6 +90,42 @@ export class CommunicationService {
     })
     if (!connection) return
     const generation = connection.generation
+    const old = this.adapters.get(id)
+    if (old) {
+      old.controller.abort()
+      this.outbox.stopConnection(id)
+      try {
+        const stopped = await bounded(
+          this.env,
+          Promise.resolve()
+            .then(() => old.adapter.stop())
+            .then(() => true),
+          LIMITS.shutdownMs,
+          () => false
+        )
+        if (!stopped) throw new CommunicationError('CONNECTION_STOP_FAILED')
+      } catch {
+        if (!this.closed)
+          this.repository.transaction((s) => {
+            const c = s.connections.get(id)!
+            if (c.generation === generation && c.state === 'starting') {
+              c.state = 'error'
+              c.error = 'CONNECTION_STOP_FAILED'
+            }
+          })
+        return
+      }
+      if (this.adapters.get(id) === old) this.adapters.delete(id)
+    }
+    // An explicit stop or shutdown during cleanup must not start a new transport.
+    if (
+      this.closed ||
+      !this.repository.read((s) => {
+        const c = s.connections.get(id)!
+        return c.generation === generation && c.state === 'starting'
+      })
+    )
+      return
     const controller = new AbortController()
     let adapter: CommunicationAdapter
     try {
@@ -332,7 +370,29 @@ export class CommunicationService {
       this.flushing = this.runFlush().finally(() => {
         this.flushing = undefined
       })
-    return this.flushing
+    // Delivery ticks must keep progressing while the dispatcher awaits business.
+    return Promise.all([this.flushing, this.flushDeliveries()]).then(() => {})
+  }
+  private flushDeliveries(): Promise<void> {
+    if (this.closed) return Promise.resolve()
+    this.deliveryRequested = true
+    if (!this.delivering) this.delivering = this.runDeliveries()
+    return this.delivering
+  }
+  private async runDeliveries(): Promise<void> {
+    try {
+      while (!this.closed && this.deliveryRequested) {
+        // A tick or business completion during a send requests another snapshot.
+        this.deliveryRequested = false
+        await this.outbox.flush((id) =>
+          this.repository.read((s) => s.connections.get(id)?.state === 'online')
+            ? this.adapters.get(id)?.adapter
+            : undefined
+        )
+      }
+    } finally {
+      this.delivering = undefined
+    }
   }
   private async runFlush(): Promise<void> {
     const due = this.repository.read((s) =>
@@ -342,50 +402,32 @@ export class CommunicationService {
     )
     for (const { id, generation } of due) {
       if (this.closed) return
-      const stillDue = (): boolean =>
-        this.repository.read((s) => {
-          const c = s.connections.get(id)
-          return c?.generation === generation && c.state === 'reconnecting'
-        })
-      if (!stillDue()) continue
-      const old = this.adapters.get(id)
-      old?.controller.abort()
-      if (old) {
-        try {
-          await bounded(
-            this.env,
-            Promise.resolve().then(() => old.adapter.stop()),
-            LIMITS.shutdownMs,
-            () => {}
-          )
-        } catch {
-          if (!this.closed)
-            this.repository.transaction((s) => {
-              const c = s.connections.get(id)!
-              if (c.generation === generation && c.state === 'reconnecting') {
-                c.state = 'error'
-                c.error = 'CONNECTION_STOP_FAILED'
-              }
-            })
-          continue
-        }
-      }
-      if (!this.closed && stillDue()) await this.start(id)
+      const stillDue = this.repository.read((s) => {
+        const c = s.connections.get(id)
+        return c?.generation === generation && c.state === 'reconnecting'
+      })
+      if (stillDue) await this.start(id)
     }
     await this.dispatcher.flush()
-    if (!this.closed)
-      await this.outbox.flush((id) =>
-        this.repository.read((s) => s.connections.get(id)?.state === 'online')
-          ? this.adapters.get(id)?.adapter
-          : undefined
-      )
+    await this.flushDeliveries()
   }
   cleanup(): void {
     const now = this.env.now()
     this.repository.transaction((s) => {
       for (const c of s.challenges.values()) if (c.expiresAt <= now) s.challenges.delete(c.id)
       for (const c of s.confirmations.values()) if (c.expiresAt <= now) s.confirmations.delete(c.id)
-      for (const i of s.inbox.values())
+      for (const i of s.inbox.values()) {
+        // Expiry applies even when a connection stays offline indefinitely.
+        if (['queued', 'received'].includes(i.state) && i.expiresAt <= now) {
+          i.state = 'expired'
+          i.error = 'EXPIRED'
+          if (i.languages)
+            this.outbox.enqueue(
+              s,
+              i,
+              message('rejected', i.languages.uiLanguage, { code: 'EXPIRED' })
+            )
+        }
         if (!['queued', 'received', 'dispatching', 'running'].includes(i.state)) {
           if (now - i.receivedAt > LIMITS.bodyRetentionMs) {
             i.event = undefined
@@ -393,6 +435,7 @@ export class CommunicationService {
           }
           if (now - i.receivedAt > LIMITS.tombstoneMs) s.inbox.delete(i.id)
         }
+      }
       for (const d of s.outbox.values()) {
         this.outbox.suppress(s, d)
         if (
@@ -423,7 +466,7 @@ export class CommunicationService {
     })
     await bounded(
       this.env,
-      Promise.allSettled([...stops, this.flushing]).then(() => {}),
+      Promise.allSettled([...stops, this.flushing, this.delivering]).then(() => {}),
       LIMITS.shutdownMs,
       () => {}
     )

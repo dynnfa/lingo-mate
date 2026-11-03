@@ -1,5 +1,5 @@
 import type { InboundEvent, Receipt } from '../communication-contract'
-import type { Binding } from '../communication-repository'
+import type { Binding, Inbox } from '../communication-repository'
 import { randomUUID, createHash } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { openDatabase } from '../../../database/database'
@@ -339,6 +339,40 @@ it('prevents old callbacks and late delivery after stop, revoke and shutdown', a
   await f.service.shutdown()
   expect((await f.receive()).code).toBe('STOPPED')
 })
+it('expires offline queued messages, retains de-duplication and eventually removes their bodies and tombstones', async () => {
+  const f = fixture()
+  await f.start()
+  await f.bind()
+  const event = f.event('Private offline message')
+  const receipt = await f.adapter.receive(event)
+  const record = (): Inbox | undefined =>
+    f.repository.read((s) => [...s.inbox.values()].find((i) => i.eventId === event.externalEventId))
+  await f.service.stop(f.connectionId)
+  f.advance(299_999)
+  f.service.cleanup()
+  expect(record()?.state).toBe('queued')
+  f.advance(1)
+  f.service.cleanup()
+  expect(record()?.state).toBe('expired')
+  expect(record()?.error).toBe('EXPIRED')
+  await f.start()
+  expect(await f.adapter.receive(event)).toEqual(receipt)
+  await f.service.flush()
+  expect(f.business.execute).not.toHaveBeenCalled()
+  expect(f.adapter.sent.map((p) => p.text).join('')).toContain('EXPIRED')
+  await f.service.stop(f.connectionId)
+  f.advance(8 * 86400_000)
+  f.service.cleanup()
+  expect(record()?.event).toBeUndefined()
+  expect(record()?.receipt).toEqual(receipt)
+  f.advance(23 * 86400_000)
+  f.service.cleanup()
+  expect(record()).toBeUndefined()
+  await f.start()
+  expect((await f.adapter.receive(event)).code).toBe('EXPIRED')
+  await f.service.flush()
+  expect(f.business.execute).not.toHaveBeenCalled()
+})
 it('cleans body before tombstones and rejects old events after tombstone removal', async () => {
   const f = fixture()
   await f.start()
@@ -646,6 +680,114 @@ it('bounds the control queue while preserving immediate cancellation', async () 
   expect((await f.receive('/help')).code).toBe('QUEUE_FULL')
   expect((await f.receive('/cancel')).status).toBe('persisted')
 })
+it('delivers completed replies on later ticks while business is still running, without duplicate sends', async () => {
+  const f = fixture()
+  await f.start()
+  await f.bind()
+  let release!: () => void
+  vi.mocked(f.business.execute).mockImplementation(async (request) => {
+    if (request.text === 'slow')
+      await new Promise<void>((resolve) => {
+        release = resolve
+      })
+    return { status: 'succeeded', text: 'Safe answer' }
+  })
+  await f.receive('fast')
+  await f.receive('slow')
+  const flushing = f.service.flush()
+  await vi.waitFor(() => expect(release).toBeDefined())
+  let completeSend!: () => void
+  const send = vi.spyOn(f.adapter, 'send').mockImplementation(async () => {
+    await new Promise<void>((resolve) => {
+      completeSend = resolve
+    })
+    return { status: 'sent', externalMessageId: 'saved-reply' }
+  })
+  const tick = f.service.flush()
+  const concurrentTick = f.service.flush()
+  try {
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
+    expect(f.business.execute).toHaveBeenCalledTimes(2)
+    completeSend()
+    await vi.waitFor(() =>
+      expect(f.repository.read((s) => [...s.outbox.values()][0].state)).toBe('sent')
+    )
+  } finally {
+    send.mockRestore()
+    completeSend?.()
+    release()
+    await Promise.all([flushing, tick, concurrentTick])
+  }
+})
+it.each([true, false])(
+  'releases the old transport before manual restart (retryable=%s)',
+  async (retryable) => {
+    const f = fixture()
+    await f.start()
+    const old = f.adapter.context!
+    const start = vi.spyOn(f.adapter, 'start')
+    let release!: () => void
+    const stop = vi.spyOn(f.adapter, 'stop').mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve
+        })
+    )
+    old.disconnected(retryable)
+    const restarting = f.service.start(f.connectionId)
+    try {
+      await vi.waitFor(() => expect(stop).toHaveBeenCalledTimes(1))
+      expect(old.signal.aborted).toBe(true)
+      expect(start).not.toHaveBeenCalled()
+      expect((await old.receive(f.event())).code).toBe('STOPPED')
+    } finally {
+      release?.()
+      await restarting
+    }
+    expect(start).toHaveBeenCalledTimes(1)
+    expect(f.repository.read((s) => s.connections.get(f.connectionId)!.state)).toBe('online')
+  }
+)
+it('retains the old adapter on restart cleanup failure instead of replacing it', async () => {
+  const f = fixture()
+  await f.start()
+  const old = f.adapter.context!
+  const start = vi.spyOn(f.adapter, 'start')
+  const stop = vi.spyOn(f.adapter, 'stop').mockRejectedValueOnce(new Error('SDK stop failure'))
+  old.disconnected(true)
+  await f.start()
+  expect(start).not.toHaveBeenCalled()
+  expect(f.repository.read((s) => s.connections.get(f.connectionId)!.error)).toBe(
+    'CONNECTION_STOP_FAILED'
+  )
+  await f.start()
+  expect(stop).toHaveBeenCalledTimes(2)
+  expect(start).toHaveBeenCalledTimes(1)
+})
+it('bounds restart cleanup and does not replace a transport whose stop timed out', async () => {
+  const f = fixture()
+  await f.start()
+  const old = f.adapter.context!
+  const start = vi.spyOn(f.adapter, 'start')
+  vi.spyOn(f.adapter, 'stop').mockImplementation(() => new Promise(() => {}))
+  old.disconnected(true)
+  vi.useFakeTimers()
+  try {
+    const restarting = f.start()
+    await vi.advanceTimersByTimeAsync(2999)
+    expect(f.repository.read((s) => s.connections.get(f.connectionId)!.state)).toBe('starting')
+    await vi.advanceTimersByTimeAsync(1)
+    await restarting
+    expect(old.signal.aborted).toBe(true)
+    expect(start).not.toHaveBeenCalled()
+    expect(f.repository.read((s) => s.connections.get(f.connectionId)!.error)).toBe(
+      'CONNECTION_STOP_FAILED'
+    )
+    expect(vi.getTimerCount()).toBe(0)
+  } finally {
+    vi.useRealTimers()
+  }
+})
 it('leaves a failed stop in a recoverable error state', async () => {
   const f = fixture()
   await f.start()
@@ -655,22 +797,25 @@ it('leaves a failed stop in a recoverable error state', async () => {
   await f.start()
   expect(f.repository.read((s) => s.connections.get(f.connectionId)!.state)).toBe('online')
 })
-it('does not reconnect after an explicit stop while the old transport is closing', async () => {
-  const f = fixture()
-  await f.start()
-  f.adapter.context!.disconnected(true)
-  f.advance(1000)
-  let release!: () => void
-  vi.spyOn(f.adapter, 'stop').mockImplementationOnce(
-    () =>
-      new Promise<void>((resolve) => {
-        release = resolve
-      })
-  )
-  const flushing = f.service.flush()
-  await vi.waitFor(() => expect(release).toBeDefined())
-  await f.service.stop(f.connectionId)
-  release()
-  await flushing
-  expect(f.repository.read((s) => s.connections.get(f.connectionId)!.state)).toBe('stopped')
-})
+it.each([false, true])(
+  'does not reconnect after an explicit stop while the old transport is closing (manual=%s)',
+  async (manual) => {
+    const f = fixture()
+    await f.start()
+    f.adapter.context!.disconnected(true)
+    f.advance(1000)
+    let release!: () => void
+    vi.spyOn(f.adapter, 'stop').mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve
+        })
+    )
+    const flushing = manual ? f.start() : f.service.flush()
+    await vi.waitFor(() => expect(release).toBeDefined())
+    await f.service.stop(f.connectionId)
+    release()
+    await flushing
+    expect(f.repository.read((s) => s.connections.get(f.connectionId)!.state)).toBe('stopped')
+  }
+)
