@@ -17,6 +17,7 @@ import {
   deleteSentenceResultSchema
 } from '../shared/sentence'
 import { contextBridge, ipcRenderer } from 'electron'
+import { createCommunicationApi } from './communication-api'
 import { createSpeechApi } from './speech-api'
 import {
   cancelMessageInputSchema,
@@ -132,6 +133,7 @@ const issueSummary = (issues: ZodIssue[]): Array<{ path: PropertyKey[]; code: st
   issues.map(({ path, code }) => ({ path, code }))
 
 const api: LingoMateApi = {
+  communication: createCommunicationApi(),
   // Includes saved audio reads bound to a conversation message, never file paths.
   speech: createSpeechApi(),
   reportError: async (rawInput) => {

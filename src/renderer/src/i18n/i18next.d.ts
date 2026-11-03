@@ -1,3 +1,4 @@
+import type communication from '../../../shared/locales/zh-CN/communication.json'
 import type vocabulary from '../../../shared/locales/zh-CN/vocabulary.json'
 import type speech from '../../../shared/locales/zh-CN/speech.json'
 import type common from './locales/zh-CN/common.json'
@@ -10,6 +11,7 @@ declare module 'i18next' {
   interface CustomTypeOptions {
     defaultNS: 'common'
     resources: {
+      communication: typeof communication
       speech: typeof speech
       vocabulary: typeof vocabulary
       common: typeof common
