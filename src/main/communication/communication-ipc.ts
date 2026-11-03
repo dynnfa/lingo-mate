@@ -1,3 +1,5 @@
+import { CommunicationError } from '../../core/communication/communication-contract'
+import { TelegramTransportError } from '../channels/telegram/telegram-transport'
 import * as protocol from '../../shared/communication'
 import { noInputSchema, type RegisterTrustedHandler } from '../ipc-guard'
 import type { CommunicationHost } from './communication-host'
@@ -8,7 +10,14 @@ export function registerCommunicationIpc(
   const removers: Array<() => void> = []
   const errors = {
     invalidInputError: () => ({ code: 'INVALID_INPUT' as const }),
-    mapError: () => ({ code: 'COMMUNICATION_FAILED' as const }),
+    mapError: (error: unknown) => {
+      const code = protocol.communicationErrorCodeSchema.safeParse(
+        error instanceof CommunicationError || error instanceof TelegramTransportError
+          ? error.code
+          : undefined
+      )
+      return { code: code.success ? code.data : ('COMMUNICATION_FAILED' as const) }
+    },
     fallbackError: { code: 'COMMUNICATION_FAILED' as const },
     rateLimit: {
       maxRequests: 60,
@@ -32,7 +41,7 @@ export function registerCommunicationIpc(
       inputSchema: protocol.connectionInputSchema,
       resultSchema: protocol.communicationActionResultSchema,
       handler: async (i) => {
-        await host.service.start(i.connectionId)
+        await host.start(i.connectionId)
         return { status: 'ok' as const }
       }
     })
@@ -44,7 +53,7 @@ export function registerCommunicationIpc(
       inputSchema: protocol.connectionInputSchema,
       resultSchema: protocol.communicationActionResultSchema,
       handler: async (i) => {
-        await host.service.stop(i.connectionId)
+        await host.stop(i.connectionId)
         return { status: 'ok' as const }
       }
     })
@@ -117,6 +126,30 @@ export function registerCommunicationIpc(
       resultSchema: protocol.communicationActionResultSchema,
       handler: async (i) => {
         await host.setCredential(i.connectionId, i.credential)
+        return { status: 'ok' as const }
+      }
+    })
+  )
+  removers.push(
+    register({
+      ...errors,
+      channel: protocol.COMMUNICATION_CHANNELS.createTelegramConnection,
+      inputSchema: protocol.createTelegramInputSchema,
+      resultSchema: protocol.createConnectionResultSchema,
+      handler: async (i) => ({
+        status: 'ok' as const,
+        connectionId: await host.createTelegramConnection(i.token)
+      })
+    })
+  )
+  removers.push(
+    register({
+      ...errors,
+      channel: protocol.COMMUNICATION_CHANNELS.deleteConnection,
+      inputSchema: protocol.connectionInputSchema,
+      resultSchema: protocol.communicationActionResultSchema,
+      handler: async (i) => {
+        await host.deleteConnection(i.connectionId)
         return { status: 'ok' as const }
       }
     })

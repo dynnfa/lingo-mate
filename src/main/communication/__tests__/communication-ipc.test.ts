@@ -96,3 +96,28 @@ it('exposes no credentials, routing bodies, digests, internal sessions or cursor
     await f.invoke(C.cancelRequest, { bindingId: randomUUID(), requestId: randomUUID() })
   ).toEqual({ status: 'error', error: { code: 'COMMUNICATION_FAILED' } })
 })
+it('guards Telegram creation and deletion with strict schemas and trusted sources', async () => {
+  const f = setup()
+  const create = vi.spyOn(f.host, 'createTelegramConnection')
+  for (const value of [
+    { token: 'invalid' },
+    { token: '123456:abcdefghijklmnopqrstuvwxyz123456789', adapterId: 'other' },
+    { token: '123456:abcdefghijklmnopqrstuvwxyz123456789', endpoint: 'https://example.com' }
+  ]) {
+    expect(await f.invoke(C.createTelegramConnection, value)).toEqual({
+      status: 'error',
+      error: { code: 'INVALID_INPUT' }
+    })
+  }
+  expect(create).not.toHaveBeenCalled()
+  f.sender.owned = false
+  expect(
+    await f.invoke(C.createTelegramConnection, {
+      token: '123456:abcdefghijklmnopqrstuvwxyz123456789'
+    })
+  ).toEqual({ status: 'error', error: { code: 'UNTRUSTED_SOURCE' } })
+  expect(await f.invoke(C.deleteConnection, { connectionId: f.connectionId })).toEqual({
+    status: 'error',
+    error: { code: 'UNTRUSTED_SOURCE' }
+  })
+})

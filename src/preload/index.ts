@@ -133,6 +133,7 @@ const issueSummary = (issues: ZodIssue[]): Array<{ path: PropertyKey[]; code: st
   issues.map(({ path, code }) => ({ path, code }))
 
 const api: LingoMateApi = {
+  // Narrow Telegram management API; tokens have no read operation.
   communication: createCommunicationApi(),
   // Includes saved audio reads bound to a conversation message, never file paths.
   speech: createSpeechApi(),

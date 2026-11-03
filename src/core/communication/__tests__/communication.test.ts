@@ -84,6 +84,61 @@ function fixture(interactive = false): Fixture {
   }
 }
 
+it('durably rejects transport envelopes, shares event uniqueness and atomically records conflicts and cursors', async () => {
+  const f = fixture()
+  await f.start()
+  const envelope = { externalEventId: 'unknown', kind: 'invalid' as const, digest: 'a'.repeat(64) }
+  const context = f.adapter.context!
+  const receipt = await context.receiveRejected(envelope, 'next-1')
+  expect(receipt).toEqual({ status: 'rejected', code: 'UNSUPPORTED_INPUT' })
+  expect(await context.receiveRejected(envelope, 'next-1')).toEqual(receipt)
+  expect((await f.adapter.receive(f.event('hello', 'alice', 'unknown'), 'next-2')).code).toBe(
+    'EVENT_CONFLICT'
+  )
+  const saved = f.repository.read((s) => ({
+    connection: s.connections.get(f.connectionId)!,
+    inbox: [...s.inbox.values()]
+  }))
+  expect(saved.connection.cursor).toBe('next-2')
+  expect(saved.inbox).toHaveLength(1)
+  expect(saved.inbox[0].conflictDigests).toHaveLength(1)
+  expect(saved.inbox[0].event).toBeUndefined()
+  expect(saved.inbox[0].actorId).toBeUndefined()
+  expect(f.repository.read((s) => s.outbox.size + s.sessions.size)).toBe(0)
+  f.repository.close()
+  expect(
+    (await context.receiveRejected({ ...envelope, externalEventId: 'new' }, 'next-3')).status
+  ).toBe('failed')
+})
+
+it('ignores mutable display names when deduplicating an event', async () => {
+  const f = fixture()
+  await f.start()
+  const event = f.event()
+  const receipt = await f.adapter.receive({ ...event, displayName: 'Alice' })
+  expect(await f.adapter.receive({ ...event, displayName: 'Changed' })).toEqual(receipt)
+})
+
+it('does not declare a timed out stop successful or replace its consumer', async () => {
+  const f = fixture()
+  await f.start()
+  vi.useFakeTimers()
+  try {
+    vi.spyOn(f.adapter, 'stop').mockImplementation(() => new Promise(() => {}))
+    const start = vi.spyOn(f.adapter, 'start')
+    const stopped = expect(f.service.stop(f.connectionId)).rejects.toThrow('CONNECTION_STOP_FAILED')
+    await vi.advanceTimersByTimeAsync(3000)
+    await stopped
+    expect(f.repository.read((s) => s.connections.get(f.connectionId)!.state)).toBe('error')
+    const restarted = f.start()
+    await vi.advanceTimersByTimeAsync(3000)
+    await restarted
+    expect(start).not.toHaveBeenCalled()
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
 describe.each([false, true])('shared adapter contract (interactive=%s)', (interactive) => {
   it('requires local confirmation and isolates actors, connections and capabilities', async () => {
     const f = fixture(interactive)
@@ -819,3 +874,106 @@ it.each([false, true])(
     expect(f.repository.read((s) => s.connections.get(f.connectionId)!.state)).toBe('stopped')
   }
 )
+it('keeps transport rejection and its cursor in one SQLite transaction and bounds retained tombstones', async () => {
+  const f = fixture()
+  await f.start()
+  const envelope = { externalEventId: 'bad', kind: 'invalid' as const, digest: 'a'.repeat(64) }
+  f.db.exec(
+    "CREATE TRIGGER reject_inbox BEFORE INSERT ON communication_inbox BEGIN SELECT RAISE(ABORT, 'disk failure'); END"
+  )
+  expect(await f.adapter.context!.receiveRejected(envelope, 'next')).toEqual({
+    status: 'failed',
+    code: 'STORAGE_FAILED'
+  })
+  expect(f.repository.read((s) => s.connections.get(f.connectionId)!.cursor)).toBeUndefined()
+  f.db.exec('DROP TRIGGER reject_inbox')
+  await f.adapter.context!.receiveRejected(envelope, 'next')
+  f.advance(31 * 86400_000)
+  f.service.cleanup()
+  expect(f.repository.read((s) => s.inbox.size)).toBe(0)
+})
+it('treats /start as help only for explicitly configured adapters and never consumes start parameters as binding codes', async () => {
+  const f = fixture()
+  f.service.registerAdapter('telegram', () => f.adapter, { startAsHelp: true })
+  const id = f.service.addConnection('telegram')
+  await f.service.start(id)
+  const challenge = f.service.createChallenge(id, ['chat'])
+  expect((await f.receive(`/start ${challenge.code}`)).code).toBe('UNBOUND')
+  expect(f.repository.read((s) => JSON.stringify([...s.inbox.values()]))).not.toContain(
+    challenge.code
+  )
+  expect(f.repository.read((s) => s.challenges.get(challenge.challengeId)!.actor)).toBeUndefined()
+  await f.receive(`/bind ${challenge.code}`)
+  f.service.confirmBinding(challenge.challengeId)
+  expect((await f.receive('/start')).status).toBe('persisted')
+  expect((await f.receive('/start parameter')).code).toBe('CAPABILITY_DENIED')
+  await f.service.flush()
+  expect(f.business.execute).not.toHaveBeenCalled()
+  expect(f.adapter.sent.map((p) => p.text).join('')).toContain('Commands:')
+})
+it('does not acknowledge transport rejection on capacity exhaustion, including on existing v15 databases', async () => {
+  const f = fixture()
+  await f.start()
+  expect(f.db.pragma('user_version', { simple: true })).toBe(15)
+  f.repository.transaction((s) => {
+    for (let n = 0; n < 10000; n++) {
+      const id = randomUUID()
+      s.inbox.set(id, {
+        id,
+        connectionId: f.connectionId,
+        eventId: `old-${n}`,
+        digest: 'd',
+        receipt: { status: 'rejected' },
+        state: 'rejected',
+        receivedAt: Date.now(),
+        expiresAt: 0,
+        scopeKey: '',
+        control: false
+      })
+    }
+  })
+  expect(
+    await f.adapter.context!.receiveRejected(
+      { externalEventId: 'overflow', kind: 'invalid', digest: 'a'.repeat(64) },
+      'must-not-advance'
+    )
+  ).toEqual({ status: 'failed', code: 'BACKPRESSURE' })
+  expect(f.repository.read((s) => s.connections.get(f.connectionId)!.cursor)).toBeUndefined()
+})
+it('does not route whitespace-prefixed commands into chat or persist misplaced binding secrets', async () => {
+  const f = fixture()
+  await f.start()
+  await f.bind()
+  expect((await f.receive('  /vocabulary denied')).code).toBe('CAPABILITY_DENIED')
+  expect((await f.receive('  /bind SECRET_BINDING_CODE')).code).toBe('CHALLENGE_INVALID')
+  await f.service.flush()
+  expect(f.business.execute).not.toHaveBeenCalled()
+  expect(f.repository.read((s) => JSON.stringify([...s.inbox.values()]))).not.toContain(
+    'SECRET_BINDING_CODE'
+  )
+})
+it('deduplicates v15 event digests that still include display metadata', async () => {
+  const f = fixture()
+  await f.start()
+  const event = { ...f.event(), displayName: 'Alice' }
+  const receipt = await f.adapter.receive(event)
+  f.repository.transaction((s) => {
+    const inbox = [...s.inbox.values()][0]
+    inbox.digest = createHash('sha256').update(JSON.stringify(inbox.event)).digest('hex')
+  })
+  expect(await f.adapter.receive({ ...event, displayName: 'Changed' }, 'durable-next')).toEqual(
+    receipt
+  )
+})
+it('never shortens a platform reconnect delay to the local backoff cap', async () => {
+  const f = fixture()
+  await f.start()
+  const start = vi.spyOn(f.adapter, 'start')
+  f.adapter.context!.disconnected(true, 'TELEGRAM_RATE_LIMITED', 120000)
+  f.advance(60000)
+  await f.service.flush()
+  expect(start).not.toHaveBeenCalled()
+  f.advance(60000)
+  await f.service.flush()
+  expect(start).toHaveBeenCalledTimes(1)
+})

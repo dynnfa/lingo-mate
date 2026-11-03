@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { TelegramTokenForm } from './TelegramTokenForm'
 import type { CommunicationSnapshot } from '../../../../shared/communication'
 export function ChannelsSettings({ active }: { active: boolean }): React.JSX.Element {
   const { t, i18n } = useTranslation('communication')
@@ -8,6 +9,8 @@ export function ChannelsSettings({ active }: { active: boolean }): React.JSX.Ele
   const [busy, setBusy] = useState(false)
   const [challenge, setChallenge] = useState<{ code: string; expiresAt: number }>()
   const [allowSentence, setAllowSentence] = useState(false)
+  const [tokenForm, setTokenForm] = useState<{ connectionId?: string }>()
+  const [deleteId, setDeleteId] = useState<string>()
   const [retryId, setRetryId] = useState<string>()
   const mounted = useRef(true)
   const focusAfterAction = useRef(false)
@@ -71,7 +74,38 @@ export function ChannelsSettings({ active }: { active: boolean }): React.JSX.Ele
         {t('refresh')}
       </button>
       {error && <p role="alert">{t('error')}</p>}
-      {snapshot?.connections.length === 0 && <p>{t('empty')}</p>}
+      {snapshot?.connections.length === 0 && (
+        <p>{t(snapshot.installedAdapters?.length ? 'installedEmpty' : 'empty')}</p>
+      )}
+      {snapshot?.installedAdapters?.includes('telegram') && (
+        <>
+          <p>{t('telegramGuide')}</p>
+          <button type="button" disabled={busy} onClick={() => setTokenForm({})}>
+            {t('addTelegram')}
+          </button>
+        </>
+      )}
+      {active && tokenForm && (
+        <TelegramTokenForm
+          key={tokenForm.connectionId ?? 'new'}
+          replacing={!!tokenForm.connectionId}
+          onClose={() => {
+            setTokenForm(undefined)
+            refreshButton.current?.focus()
+          }}
+          onSubmit={async (token) => {
+            const result = tokenForm.connectionId
+              ? await window.api.communication.setCredential({
+                  connectionId: tokenForm.connectionId,
+                  credential: token
+                })
+              : await window.api.communication.createTelegramConnection({ token })
+            if (result.status === 'ok') await reload()
+            return result
+          }}
+        />
+      )}
+
       {challenge && (
         <p role="status">
           {t('code', {
@@ -93,10 +127,53 @@ export function ChannelsSettings({ active }: { active: boolean }): React.JSX.Ele
       {snapshot?.connections.map((c) => (
         <section key={c.id} aria-label={c.adapterId}>
           <h3>{c.adapterId}</h3>
+          {c.username && <p>{t('botIdentity', { username: c.username, botId: c.botId })}</p>}
+          <p>{t(c.hasCredential ? 'credentialPresent' : 'credentialMissing')}</p>
+          {c.errorCode && <p role="status">{t(`errors.${c.errorCode}`)}</p>}
+          {c.adapterId === 'telegram' && (
+            <button
+              type="button"
+              disabled={busy || c.deleting}
+              onClick={() => setTokenForm({ connectionId: c.id })}
+            >
+              {t('replaceToken')}
+            </button>
+          )}
+          <button type="button" disabled={busy} onClick={() => setDeleteId(c.id)}>
+            {t('deleteConnection')}
+          </button>
+          {deleteId === c.id && (
+            <div>
+              <p>{t('deletePrompt')}</p>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  void perform(async () => {
+                    const result = await window.api.communication.deleteConnection({
+                      connectionId: c.id
+                    })
+                    if (result.status === 'ok') {
+                      setDeleteId(undefined)
+                      setChallenge(undefined)
+                      setTokenForm(undefined)
+                    }
+                    return result
+                  })
+                }
+              >
+                {t('confirmDelete')}
+              </button>
+              <button type="button" disabled={busy} onClick={() => setDeleteId(undefined)}>
+                {t('cancelForm')}
+              </button>
+            </div>
+          )}
+
           <p>{t('state', { state: t(`states.${c.state}`) })}</p>
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || c.deleting}
             onClick={() =>
               void perform(() => window.api.communication.start({ connectionId: c.id }))
             }
@@ -114,7 +191,7 @@ export function ChannelsSettings({ active }: { active: boolean }): React.JSX.Ele
           </button>
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || c.deleting}
             onClick={() =>
               void perform(async () => {
                 const result = await window.api.communication.createChallenge({
@@ -147,6 +224,13 @@ export function ChannelsSettings({ active }: { active: boolean }): React.JSX.Ele
       {snapshot?.bindings.map((b) => (
         <div key={b.id}>
           <p>{t('account', { actor: b.externalActorId })}</p>
+          <p>
+            {t('permissions', {
+              permissions: b.capabilities
+                .map((cap) => t(cap === 'chat' ? 'grantChat' : 'grantSentence'))
+                .join(', ')
+            })}
+          </p>
           <button
             type="button"
             disabled={busy}
