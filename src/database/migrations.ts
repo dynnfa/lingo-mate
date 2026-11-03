@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { migrateCommunication } from './communication-migration'
 
 interface Migration {
   version: number
@@ -603,7 +604,8 @@ export const MIGRATIONS: Migration[] = [
       if ((database.pragma('foreign_key_check') as unknown[]).length)
         throw new Error('Invalid sentence migration foreign keys')
     }
-  }
+  },
+  { version: 15, up: migrateCommunication }
 ]
 
 export function migrateDatabase(database: Database.Database): void {

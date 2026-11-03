@@ -19,6 +19,7 @@ import type {
   RunConversationSkillInput,
   SendMessageInput
 } from '../../shared/conversation'
+import { SUPPORTED_LOCALES, targetLanguageSchema } from '../../shared/preferences'
 import { runConversationSkillInputSchema } from '../../shared/conversation'
 import type { ModelMessage } from '../llm/language-model'
 import { ModelConfigValidationError, ModelNotConfiguredError } from '../llm/model-config'
@@ -70,6 +71,14 @@ export class SkillLanguageMismatchError extends Error {
   }
 }
 
+// Trusted callers may supply canonical message IDs and an independent language
+// snapshot. Renderer payloads cannot set this context.
+export interface ConversationExecutionContext {
+  languages: ConversationLanguages
+  userMessageId: string
+  assistantMessageId: string
+}
+
 type DraftConversation = Omit<StoredConversation, 'title'> & { title: null }
 
 export class ConversationModule {
@@ -114,6 +123,25 @@ export class ConversationModule {
     return toSummary(conversation)
   }
 
+  async createPersistentConversation(sessionId: string, title: string): Promise<void> {
+    const now = new Date().toISOString()
+    if (await withConversationPersistence(() => this.repository.find(sessionId))) return
+    const parsed = conversationSummarySchema.parse({
+      sessionId,
+      title,
+      createdAt: now,
+      updatedAt: now
+    })
+    await withConversationPersistence(() =>
+      this.repository.create({
+        id: sessionId,
+        title: parsed.title!,
+        createdAt: now,
+        updatedAt: now
+      })
+    )
+  }
+
   async listConversations(): Promise<ConversationSummary[]> {
     const conversations = await withConversationPersistence(() => this.repository.list())
     return conversations.map(toSummary).sort(byMostRecent)
@@ -134,7 +162,8 @@ export class ConversationModule {
 
   async sendMessage(
     input: SendMessageInput,
-    emit: ConversationEventListener
+    emit: ConversationEventListener,
+    context?: ConversationExecutionContext
   ): Promise<GenerationAccepted> {
     if (/^\/tts(?:\s|$)/u.test(input.text)) {
       return this.runSkill(
@@ -144,7 +173,8 @@ export class ConversationModule {
           skillId: 'tts',
           arguments: { text: input.text.replace(/^\/tts(?:\s)?/u, ''), wordLanguage: 'en' }
         },
-        emit
+        emit,
+        context
       )
     }
     const conversation =
@@ -155,19 +185,19 @@ export class ConversationModule {
     }
 
     const userMessage: StoredMessage = {
-      id: randomUUID(),
+      id: context?.userMessageId ?? randomUUID(),
       sessionId: input.sessionId,
       role: 'user',
       content: input.text,
       createdAt: new Date().toISOString()
     }
-    const assistantMessageId = randomUUID()
+    const assistantMessageId = context?.assistantMessageId ?? randomUUID()
     this.executions.register(input.requestId, {
       controller: new AbortController(),
       sessionId: input.sessionId,
       userMessageId: userMessage.id,
       assistantMessageId,
-      languages: this.snapshotLanguages()
+      languages: this.snapshotLanguages(context?.languages)
     })
 
     const titled = this.prepareConversation(userMessage)
@@ -199,7 +229,8 @@ export class ConversationModule {
 
   async runSkill(
     input: RunConversationSkillInput,
-    emit: ConversationEventListener
+    emit: ConversationEventListener,
+    context?: ConversationExecutionContext
   ): Promise<GenerationAccepted> {
     if (input.skillId === 'sentence') sentenceTextSchema.parse(input.arguments.text)
     if (input.skillId === 'synonym') parseSynonymInput(input.arguments.text)
@@ -223,7 +254,7 @@ export class ConversationModule {
 
     // 技能执行的 wordLanguage 来源于目标语言快照；客户端传值与当前设置
     // 不一致时明确拒绝，不接受旧值静默执行。
-    const languages = this.snapshotLanguages()
+    const languages = this.snapshotLanguages(context?.languages)
     if (input.arguments.wordLanguage !== languages.targetLanguage) {
       throw new SkillLanguageMismatchError(input.arguments.wordLanguage, languages.targetLanguage)
     }
@@ -238,13 +269,13 @@ export class ConversationModule {
     }
     const now = new Date().toISOString()
     const userMessage: StoredMessage = {
-      id: randomUUID(),
+      id: context?.userMessageId ?? randomUUID(),
       sessionId: input.sessionId,
       role: 'user',
       content: `/${input.skillId} ${input.arguments.text}`,
       createdAt: now
     }
-    const assistantMessageId = randomUUID()
+    const assistantMessageId = context?.assistantMessageId ?? randomUUID()
     this.executions.register(input.requestId, {
       controller: new AbortController(),
       sessionId: input.sessionId,
@@ -480,8 +511,14 @@ export class ConversationModule {
 
   // 快照只拷贝原始值，不持有 resolver 返回的对象：执行期间设置源变化
   // 不会泄漏进已建立的快照。
-  private snapshotLanguages(): ConversationLanguages {
-    const { outputLanguage, targetLanguage } = this.resolveLanguages()
+  private snapshotLanguages(explicit?: ConversationLanguages): ConversationLanguages {
+    const { outputLanguage, targetLanguage } = explicit ?? this.resolveLanguages()
+    // Validate trusted explicit context as well; do not weaken language admission.
+    if (explicit) {
+      targetLanguageSchema.parse(targetLanguage)
+      if (!SUPPORTED_LOCALES.includes(outputLanguage))
+        throw new Error('Unsupported output language')
+    }
     return { outputLanguage, targetLanguage }
   }
 

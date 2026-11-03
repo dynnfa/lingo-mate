@@ -1,3 +1,5 @@
+import communicationEn from '../../../../shared/locales/en/communication.json'
+import communicationZh from '../../../../shared/locales/zh-CN/communication.json'
 import vocabularyEn from '../../../../shared/locales/en/vocabulary.json'
 import speechEn from '../../../../shared/locales/en/speech.json'
 import speechZhCN from '../../../../shared/locales/zh-CN/speech.json'
@@ -14,6 +16,7 @@ import errorsZhCN from '../locales/zh-CN/errors.json'
 
 const NAMESPACED_RESOURCES = {
   'zh-CN': {
+    communication: communicationZh,
     speech: speechZhCN,
     vocabulary: vocabularyZhCN,
     common: commonZhCN,
@@ -21,6 +24,7 @@ const NAMESPACED_RESOURCES = {
     errors: errorsZhCN
   },
   en: {
+    communication: communicationEn,
     speech: speechEn,
     vocabulary: vocabularyEn,
     common: commonEn,

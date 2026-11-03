@@ -1,3 +1,4 @@
+import { emptyCommunicationApi } from '../../../../tests/fixtures/communication'
 // @vitest-environment jsdom
 import { transferApiStub } from '../recorded/vocabulary/__tests__/helpers/transfer-api'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -258,6 +259,7 @@ function installApiMock(
   }
 
   const api: LingoMateApi = {
+    communication: emptyCommunicationApi(),
     sentence: {
       list: async () => ({ status: 'ok', entries: [] }),
       delete: async ({ id }) => ({ status: 'ok', id, deleted: false })
