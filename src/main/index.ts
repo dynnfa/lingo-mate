@@ -1,3 +1,6 @@
+import { CommunicationHost } from './communication/communication-host'
+import { createCommunicationCredentialStore } from './communication/credential-store'
+import { registerCommunicationIpc } from './communication/communication-ipc'
 import { PythonAgentProcess } from './agent/python-agent-process'
 import { PythonAgentRuntime } from './agent/python-agent-runtime'
 import { resolvePythonAgentLaunch } from './agent/python-agent-launch'
@@ -113,6 +116,10 @@ import { LlmExploreVocabularyGenerator } from '../core/learning/explore-vocabula
 import { JsonFileExploreVocabularyHistoryStore } from './explore-vocabulary-history-store'
 import { createExploreVocabularyFeedbackFormatter } from './explore-vocabulary-feedback'
 
+// A single process owns all communication claims and transport lifecycles.
+const ownsApplication = app.requestSingleInstanceLock()
+if (!ownsApplication) app.quit()
+let communicationHost: CommunicationHost | undefined
 let database: Database.Database | undefined
 let conversationModule: ConversationModule | undefined
 let pythonAgentRuntime: PythonAgentRuntime | undefined
@@ -181,7 +188,8 @@ function createWindow(): void {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  if (!ownsApplication) return
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.lingomate.app')
 
@@ -565,6 +573,32 @@ app.whenReady().then(() => {
     coreDiagnostics
   )
   registerConversationIpc(conversationModule, registerTrustedHandler)
+  communicationHost = new CommunicationHost(
+    database,
+    conversationModule,
+    conversationRepository,
+    createCommunicationCredentialStore(join(app.getPath('userData'), 'communication-credentials')),
+    () => {
+      // A channel cannot silently inherit fallback settings after a read failure.
+      if (!preferencesService) throw new Error('Language settings unavailable')
+      const settings = preferencesService.getLanguageSettings()
+      return {
+        uiLanguage: settings.resolvedUiLanguage,
+        outputLanguage: settings.resolvedUiLanguage,
+        targetLanguage: settings.targetLanguage
+      }
+    },
+    (entry) =>
+      errorLogger.log({
+        source: 'main',
+        module: 'communication',
+        operation: 'lifecycle',
+        message: entry.code,
+        context: entry
+      })
+  )
+  await communicationHost.initialize()
+  registerCommunicationIpc(communicationHost, registerTrustedHandler)
 
   createWindow()
 
@@ -591,12 +625,22 @@ app.on('before-quit', (event) => {
   event.preventDefault()
   if (shutdownStarted) return
   shutdownStarted = true
-  const conversationsStopped = conversationModule?.shutdown()
+  // Channel ingress, dispatch and delivery stop before Agent/storage shutdown.
+  const communicationStopped = communicationHost?.shutdown()
   disposeVocabularyTransfer?.()
   disposeSpeech?.()
   vocabularyPracticeService?.dispose()
   sentencePracticeService?.dispose()
   void (async () => {
+    await communicationStopped?.catch(() => {
+      errorLogger.log({
+        source: 'main',
+        module: 'communication',
+        operation: 'shutdown',
+        message: 'Communication shutdown failed'
+      })
+    })
+    const conversationsStopped = conversationModule?.shutdown()
     // End the child and abort all host calls before closing repositories/logs.
     await pythonAgentRuntime?.dispose()
     let timer: ReturnType<typeof setTimeout> | undefined

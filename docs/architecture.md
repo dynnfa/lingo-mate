@@ -112,3 +112,9 @@ Python 运行服务通过 `runtime/dispatcher.py` 显式分发 task，各功能�
 词汇练习批改由 Python 的 `vocabulary-practice-review` 任务持有 Prompt、多轮标红及补标策略。TS 绑定抽词快照、答案、参考释义及完整模型／工具消息，Python 只接收轮次、分类与输入大小。宿主校验 `vocabulary_practice_result` 后才释放结果并保存错题，保留整批保存及 requestId 幂等重试。开始练习的窗口拥有批改和取消权限，窗口销毁时取消；引擎故障显示安全错误并保留用户答案，后续仅由用户显式提交新请求。
 
 `/tts` 沿用类型化对话技能入口，通过 Python 的确定性单节点图调用宿主 HeadTTS，模型调用预算为 0。首次消息使用本地标题，音频与逐词时间轴保存于 SQLite；消息通过安全描述渲染内嵌播放器，按会话和消息身份读取音频，不向 Renderer 暴露路径。生成完成后等待点击播放，点词跳转保持播放或暂停状态。所有朗读共享一个播放控制器，页面及会话切换停止播放；底部全局播放器已移除，词条朗读在来源旁显示状态和错误。
+
+## 公共通信与外部平台边界
+
+`src/core/communication/` 持有平台无关的绑定、确认、会话映射、Inbox、调度及 Outbox 规则；`src/main/communication/` 装配凭据、业务端口、静态 Adapter 和可信管理 IPC，`src/database/` 实现增量迁移与原子通信仓储。设置页的 channels 区块遵循 PageShell 原有隐藏挂载和焦点规则。
+
+渠道使用独立请求归属，不伪造窗口 IPC。`ConversationModule.createPersistentConversation` 解决内存草稿的重启问题，可信执行 context 显式传入每次语言快照和消息身份，业务仍使用唯一 Python Agent。首版仅开放普通文本与 `/sentence`；恢复依据精确持久化消息或 sentence 报告，不能证明结果时不重放。当前没有生产平台 Adapter，也不因此宣称支持任何平台。接口、预算、保留期及接入验收见[公共通信接入指南](communication-adapters.md)。

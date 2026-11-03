@@ -3,6 +3,10 @@
 - 日期：2026-09-11
 - 状态：待实施
 
+## 公共基础设施复用（2026-11-04）
+
+公共规则由[公共通信模块](2026-11-03-common-communication-module.md)及[Adapter 接入指南](../communication-adapters.md)统一实现，目录以 `src/core/communication/`、`src/main/communication/` 和 `src/shared/communication.ts` 为准，不再新建并行 channels 核心。具体平台仍须实现 Adapter、平台设置与 Main 静态注册，并完成真实账号验收。当前远程白名单仅普通对话与 `/sentence`；本计划要求的词汇收藏和自然语言收藏确认，需要另外审计结果恢复、扩展白名单及 Python 策略，不能因公共模块交付而视为完成。Telegram、微信和本计划状态均保持待实施。
+
 ## 目标与范围
 
 让用户通过 Telegram、微信等聊天平台与 Lingo Mate Agent 通信，在聊天中完成单词收藏、学习问答等操作，并在桌面端查看同一份词库中的结果。
