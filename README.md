@@ -1,72 +1,151 @@
 # Lingo Mate
 
-Lingo Mate is a desktop language-learning agent designed to help people learn with as few tokens as possible. At a time when token costs can make regular AI-assisted learning expensive, Lingo Mate aims to spend your budget only where a language model adds real value: understanding language, explaining concepts, and giving personalized feedback.
+English | [简体中文](README.zh-CN.md)
 
-To reduce unnecessary model calls, Lingo Mate turns vocabulary collection, content management, and practice into dedicated workflows. Analyzed learning material is stored locally for reuse, duplicate and previously saved words are not analyzed again, and vocabulary exercises draw questions from the local library before calling the model only when an answer needs review. You can also choose your own model and track actual token consumption in the usage dashboard.
+A desktop English-learning assistant that connects AI conversations, vocabulary and phrase collection, practice, and mistake review. Keep your learning records locally, connect your own model service, and track token usage.
+
+Lingo Mate turns material you collect into material you can practice. Saved analyses are reused, duplicate entries are skipped, and practice questions are drawn from your local vocabulary library to reduce unnecessary model calls.
 
 ## Features
 
-Lingo Mate currently supports learning English, with an interface available in Simplified Chinese and English.
+The current learning language is **English**. The interface supports **English and Simplified Chinese**.
 
-- **Learning conversations:** Practice expression, rewrite sentences, and ask language questions. Multiple sessions, conversation history, streaming responses, cancellation, and retry are supported.
-- **Vocabulary and phrase collection:** Use `/vocabulary` and `/phrase` to save learning material. The model generates pronunciation, meanings, concept explanations, and examples for words, or explanations and examples for phrases. Saved entries can be reviewed and deleted from dedicated pages.
-- **Phrase exploration:** Use `/explore-phrase` to generate ten common English phrases with meanings and examples, shown as a table in the conversation. The last seven rounds are deduplicated through a local history file, so new rounds always bring fresh phrases.
-- **Synonym comparison:** Use `/synonym` to organize related words and save their meanings and usage distinctions for later comparison.
-- **Vocabulary practice and mistake tracking:** Draw a chosen number of random words from the local library, enter their meanings, and submit answers for model review. Incorrect answers are automatically collected, with error counts, recent mistakes, and answer history available for review.
-- **Sentence practice:** Draw three words from the vocabulary library and receive model-generated phrase hints. Submit a sentence for feedback on word usage, fluency, and grammar, together with a suggested revision.
-- **Vocabulary import and export:** Add batches of words for AI-assisted analysis, import existing learning material with an Excel template, and export the vocabulary library. Imports detect duplicate content.
-- **Bring your own model:** Configure OpenAI-compatible or Gemini endpoints with a Base URL, Model ID, and API key. Save and switch between multiple configurations and test their connections.
-- **Token usage statistics:** Review today's and this week's input, output, and total token usage and request counts. Charts show trends for the last 30 days and eight weeks. Completeness depends on the usage data returned by the model provider.
+- **Learn through conversation.** Ask language questions, polish sentences, or use `/concept` for explanations. Conversations support history, streaming responses, cancellation, and explicit retry.
+- **Build a personal library.** Save words with `/vocabulary` and phrases with `/phrase`, including explanations and examples. Use `/synonym` to compare related words and their usage.
+- **Discover new material.** `/explore-vocabulary` and `/explore-phrase` each generate ten items with meanings and examples. Each workflow checks against its own last seven batches to reduce repetition.
+- **Practice what you collect.** Review meanings with vocabulary exercises and automatic mistake tracking. Sentence practice draws three saved words, offers phrase hints, and gives feedback on usage, fluency, and grammar.
+- **Listen locally.** Read saved vocabulary, phrases, and English examples aloud, or use `/tts` to generate speech in a conversation. Local speech supports pause, resume, stop, and seeking.
+- **Import and export vocabulary.** Analyze batches of new words, import existing material using an Excel template, and export your library. Imports detect duplicates.
+- **Choose your model and monitor usage.** Save and switch between OpenAI-compatible or Gemini configurations. Review token counts, request counts, and daily and weekly trends when usage data is supplied by the provider.
 
-The app is built with Electron, React, and TypeScript, and stores conversations and learning records locally in SQLite. Python / LangGraph is the sole Agent runtime for ordinary conversations and `/concept`, owning command routing, prompts, and in-memory orchestration. Model transport, credentials, storage, usage accounting, and trusted domain validation remain in the TypeScript host. Existing explicit skills, titles, and practice tasks remain in TypeScript pending later migration; new Agent strategies and workflows belong in Python. See the [architecture and Agent boundary conventions](AGENTS.md).
+## A learning session
 
-## Recommended IDE Setup
+1. Ask a question or explore a concept: `/concept present perfect`.
+2. Save words you want to learn: `/vocabulary adapt, adopt, adept`.
+3. Open **Recorded vocabulary** to review their meanings and examples.
+4. Open **Start practicing** for vocabulary or sentence exercises.
+5. Return to the **Mistake book** to review incorrect vocabulary answers.
 
-- [VSCode](https://code.visualstudio.com/) + [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) + [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
+You can also save a phrase with `/phrase break the ice` or discover a new batch with `/explore-phrase`.
 
-## Project Setup
+## Getting started
 
-Run the following commands from the repository root. Development and validation require pnpm, Node.js 22.6+, uv, and Python 3.13.3, as pinned in `agent-engine/.python-version`. Development, full tests, and desktop packaging require the locked Python environment.
+For now, use the source setup below. This README does not yet provide a prebuilt installer download.
 
-### Install
+### Run from source
 
-```bash
-$ pnpm install
-$ pnpm agent:sync
+Install these prerequisites first:
+
+- **Node.js 22.12+** — required by the current Vite / Electron Vite toolchain.
+- **pnpm** — JavaScript dependency management.
+- **uv** — Python environment management.
+- **Python 3.13.3** — pinned in `agent-engine/.python-version`; `uv` manages the project environment.
+
+From the repository root, run:
+
+```sh
+pnpm install
+pnpm agent:sync
+pnpm dev
 ```
 
-### Development
+Development startup uses persistent application data. Use a separate test user-data directory when validating changes; see the [contribution notes](#contributing).
 
-```bash
-$ pnpm dev
+### Connect a model
+
+1. Open **Settings → Models → Add model**.
+2. Select the API type, then enter your service's Base URL, Model ID, and API key if required.
+3. Use **Test draft**, save the configuration, and select it as the **Current model**.
+4. Start a conversation and try one of the examples above.
+
+| Field    | What to enter                                                                                                                                                      |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| API type | `OpenAI-compatible` or `Gemini`, matching your service's protocol                                                                                                  |
+| Base URL | The API root supplied by your service, including any required version path; for example, `https://api.example.com/v1` is an illustrative OpenAI-compatible address |
+| Model ID | The exact model identifier accepted by that endpoint                                                                                                               |
+| API key  | Your service credential; local endpoints that do not require authentication can leave this empty                                                                   |
+
+Remote endpoints require HTTPS; HTTP is allowed for loopback addresses such as `localhost`. Model configuration is done in the app; an `.env` file is not required.
+
+Vocabulary and phrase analysis, exploration, synonym comparison, and vocabulary answer review require tool/function calling support. A successful connection test confirms a minimal text request works; it does not certify every learning workflow. Compatibility depends on both the endpoint and the selected model.
+
+Model requests, including connection tests, may incur charges from your chosen service. Usage statistics depend on the provider's returned data and are not a billing statement.
+
+### Enable local speech
+
+Open **Settings → Speech** and install the speech resources, a download of approximately **327 MB**. After installation, speech synthesis runs locally and does not require an LLM configuration. See the [speech runtime guide](docs/speech-runtime.md) for resource details and validation limits.
+
+### Platform status
+
+The repository includes macOS, Windows, and Linux packaging commands. Documented runtime validation is on **macOS arm64**; other OS/CPU combinations and release signing still require validation in their respective release environments. Packaging configuration alone does not establish platform support. See the [Agent Engine guide](agent-engine/README.md) for the recorded scope.
+
+## Data and privacy
+
+- **Local records:** Conversations, saved learning entries, vocabulary mistakes, and conversation audio are stored in local SQLite. Model settings and exploration histories are stored in separate local files under the application's user-data directory.
+- **Model requests:** AI features send the input and task context they need, such as conversation history, vocabulary, or practice answers, to the endpoint you configure. Local storage does not make these requests offline; data handling at that endpoint depends on the service you choose.
+- **Credentials:** Saved API keys are encrypted through Electron's `safeStorage`. The interface receives a masked preview rather than a stored plaintext key.
+- **Speech resources:** Initial installation downloads model resources from Hugging Face. Subsequent speech synthesis runs locally.
+- **Diagnostics:** Local error logs redact credentials, but failure diagnostics can contain learning text or raw model responses. Review logs before sharing them. See the [logging guide](docs/error-logging.md).
+
+## Development
+
+### Architecture
+
+```text
+React UI → Preload API → Electron Main → TypeScript host / SQLite
+                                      ↔ Python / LangGraph
 ```
 
-Ordinary conversations and `/concept` always run through Python, including when using the local development model. The subprocess starts on the first Agent request. Startup, protocol, or execution failures return an error without silently falling back or replaying the failed request. See the [Agent Engine guide](agent-engine/README.md) for setup and troubleshooting.
+Python owns Agent task routing, prompts, and workflow orchestration for conversations, titles, vocabulary, phrases, synonyms, exploration, sentence practice, vocabulary answer review, and `/tts`. TypeScript owns model transport, credentials, domain validation, persistence, and desktop capabilities. Engine failures surface explicitly without silent fallback or automatic replay.
+
+For implementation details, read the [architecture guide](docs/architecture.md), [Agent Engine guide](agent-engine/README.md), and [project conventions](AGENTS.md).
 
 ### Validation
 
-After syncing the locked Python environment, run checks appropriate to the change:
+Sync the locked Python environment before running the full TypeScript suite, which includes real Python-pipe integration tests:
 
-```bash
-$ pnpm lint
-$ pnpm typecheck
-$ pnpm test
-$ pnpm build
+```sh
+pnpm agent:sync
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
 ```
 
-Python or protocol changes also require `pnpm agent:protocol`, `pnpm agent:test`, and `pnpm agent:check`. Electron behavior changes require `pnpm test:electron`, which builds both the desktop code and the Python runtime before running end-to-end tests. Runtime packaging changes also require `pnpm agent:build` and `pnpm agent:smoke`; see the [Agent Engine guide](agent-engine/README.md) for installation-layout checks.
+Python, protocol, or host integration changes also require:
 
-### Build
-
-Desktop packaging builds a native PyInstaller runtime, so run each command on the target OS and CPU architecture after `pnpm agent:sync`. Packaged applications do not require users to install Python or uv. `pnpm build` alone builds the TypeScript application and does not produce the Python runtime or an installer.
-
-```bash
-# For windows
-$ pnpm build:win
-
-# For macOS
-$ pnpm build:mac
-
-# For Linux
-$ pnpm build:linux
+```sh
+pnpm agent:protocol
+pnpm agent:test
+pnpm agent:check
 ```
+
+For protocol changes, follow the schema-generation instructions in the [Agent Engine guide](agent-engine/README.md). Runtime packaging changes additionally require `pnpm agent:build` and `pnpm agent:smoke`.
+
+Electron E2E tests require explicit user permission before execution under the project conventions. Once authorized, run `pnpm test:electron`; it builds the desktop code and Python runtime before running the tests. Speech validation has additional resource requirements described in the [speech runtime guide](docs/speech-runtime.md).
+
+### Packaging
+
+Run packaging commands on the target OS and CPU architecture after `pnpm agent:sync`:
+
+```sh
+pnpm build:mac
+pnpm build:win
+pnpm build:linux
+```
+
+Each command builds a native PyInstaller runtime. Packaged applications do not require users to install Python or uv. `pnpm build` alone builds the TypeScript application; it does not create the Python runtime or an installer. Installation-layout checks, signing requirements, and platform limits are documented in the [Agent Engine guide](agent-engine/README.md).
+
+## Contributing
+
+Bug reports, feature suggestions, documentation improvements, and focused pull requests are welcome through this repository's Issues and pull requests.
+
+- For bugs, include the OS/CPU, app version or commit, reproduction steps, and expected and actual behavior. Remove credentials and private learning content from any attachments.
+- For larger changes, describe the proposed behavior in an issue before starting implementation.
+- Read [AGENTS.md](AGENTS.md) for architecture boundaries, internationalization, testing, and code organization. New Agent strategies and workflows belong in `agent-engine/`.
+- Add regression tests for reproducible bugs and use test-driven development for business logic, state transitions, and security boundaries. Run the checks relevant to your change and report the results in your pull request.
+- Use disposable data for validation. Obtain explicit user permission before migrating or changing a real user's database, and before running any E2E tests.
+
+## License
+
+A project license has not yet been selected, and this repository currently has no project-level `LICENSE` file. Licensing needs to be finalized before the open-source release. Third-party speech resource notices are recorded separately in [NOTICE.txt](resources/speech/headtts/NOTICE.txt).
