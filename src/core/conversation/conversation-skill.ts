@@ -26,7 +26,13 @@ export type ConversationSkillRunResult =
 
 export interface ConversationSkill {
   readonly skillId:
-    'tts' | 'vocabulary' | 'phrase' | 'synonym' | 'explore-phrase' | 'explore-vocabulary'
+    | 'sentence'
+    | 'tts'
+    | 'vocabulary'
+    | 'phrase'
+    | 'synonym'
+    | 'explore-phrase'
+    | 'explore-vocabulary'
   run(input: ConversationSkillRunInput): Promise<ConversationSkillRunResult>
   // 反馈由持久化报告驱动；实现内部负责判别报告类型并拒绝不匹配的载荷。
   feedback(report: ConversationSkillReport, language: SupportedLocale): string

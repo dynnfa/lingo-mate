@@ -14,6 +14,7 @@ from lingo_agent.workflows.common import LimitError
 from lingo_agent.workflows.explore_phrase.graph import ExplorePhraseState
 from lingo_agent.workflows.explore_vocabulary.graph import ExploreVocabularyState
 from lingo_agent.workflows.phrase.graph import PhraseState
+from lingo_agent.workflows.sentence.graph import SentenceState
 from lingo_agent.workflows.sentence_practice.graph import SentencePracticeState
 from lingo_agent.workflows.synonym.graph import SynonymState
 from lingo_agent.workflows.tts import TtsState
@@ -85,7 +86,13 @@ class Server:
                         seq=self.sequences[run_id],
                         event={"type": "text", "delta": cast(LearningState, state)["text"]},
                     )
-                if snapshot["task"] == "tts":
+                if snapshot["task"] == "sentence":
+                    await self.send(
+                        "sentence_result",
+                        runId=run_id,
+                        result=cast(SentenceState, state)["sentence"],
+                    )
+                elif snapshot["task"] == "tts":
                     await self.send("tts_result", runId=run_id, result=cast(TtsState, state)["tts"])
                 elif snapshot["task"] == "vocabulary-practice-review":
                     await self.send(
@@ -158,6 +165,7 @@ class Server:
             await self.send(
                 "ready",
                 capabilities=[
+                    "sentence",
                     "tts",
                     "vocabulary-practice-review",
                     "sentence-practice-hints",

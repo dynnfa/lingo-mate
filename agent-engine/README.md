@@ -108,7 +108,7 @@ macOS 本地包使用 PyInstaller 的 ad-hoc 签名。正式发行还需原有 A
 
 ## 协议演进与排错
 
-当前协议为 v11。应用提交 `conversation-title`、`conversation`、`vocabulary`、`phrase`、`synonym`、`explore-phrase`、`explore-vocabulary`、`sentence-practice-hints`、`sentence-practice-review`、`vocabulary-practice-review` 或 `tts` 任务，`/concept` 在 Python 内部识别。`model.reply` 与标题专用 `model.title` 必须提供完整 `systemPrompt`，TS 模型适配器原样发送，不再选择 Agent Prompt。Prompt 上限为 4096 个 UTF-16 单元，两端校验实际 Prompt 加历史的总输入预算；旧运行包必须重建。其余显式技能及练习暂沿用 TS 实现，未来新增 Agent 策略和工作流统一在本模块实现。
+当前协议为 v12。应用提交 `sentence`、`conversation-title`、`conversation`、`vocabulary`、`phrase`、`synonym`、`explore-phrase`、`explore-vocabulary`、`sentence-practice-hints`、`sentence-practice-review`、`vocabulary-practice-review` 或 `tts` 任务，`/concept` 在 Python 内部识别。`model.reply` 与标题专用 `model.title` 必须提供完整 `systemPrompt`，TS 模型适配器原样发送，不再选择 Agent Prompt。Prompt 上限为 4096 个 UTF-16 单元，两端校验实际 Prompt 加历史的总输入预算；旧运行包必须重建。其余显式技能及练习暂沿用 TS 实现，未来新增 Agent 策略和工作流统一在本模块实现。
 
 - 修改 Zod 协议后运行 `node --experimental-strip-types scripts/agent-protocol-schema.mjs`，更新共享用例；破坏性修改提升协议版本并重建全部运行包。
 - stdout 专用于协议，Python 不输出用户错误文案或 traceback。stderr 只由 Main 有界接收并进入已有本地错误日志。
@@ -238,3 +238,13 @@ TS 每轮只做一次模型传输，并保留同一批次的模型配置快照�
 ## 工作流目录重构验收
 
 2026-10-27 已完成独立任务分发器及按功能聚合图与 Prompt 的目录迁移。协议保持 v11；40 组迁移前固定 Prompt 输出逐字一致，全部 Python 行为、静态检查及 TypeScript 真实管道测试通过，macOS arm64 原生冻结包的空 PATH 烟测覆盖全部任务（含受控测试工具循环）。具体命令、结果及平台边界见[工作流目录重构计划](../docs/plans/2026-10-27-python-workflow-organization.md#实施记录2026-10-27)。E2E 未执行，按约定默认无问题；其他 OS/CPU 和安装布局留待对应发布环境验收。
+
+## 句子翻译与收藏（协议 v12）
+
+`/sentence` 在 `workflows/sentence/` 使用 `prepare → translate（未收录时）→ END` 图。Prompt 明确译文使用目标语言，保留原意、语气、段落和细节，优先采用母语者自然表达；已是目标语言时润色。用户原文中的指令始终作为待翻译内容。
+
+宿主只开放 `sentence.prepare`、`model.sentence`，Python 只收到输入大小、查重状态和完成回执。原文与译文不跨 JSONL；宿主使用绑定原文和 Python 完整 Prompt 调用模型，严格校验 `{ translation }`，拒绝空结果、额外字段、截断、拒答和超过 32,768 UTF-16 单元的译文。
+
+同原文／目标语言的可取消串行锁覆盖查重、模型与同步事务提交。已存在记录零翻译调用；图完成核验后将 `sentence` 记录及执行报告一起提交。已提交报告的回复恢复不会再次翻译或重新收藏。最多 1 次准备、1 次模型调用和 2 个步骤；拿锁后总截止 120 秒包含启动，供应商请求 60 秒，输入／安全回执／Prompt 为 65,536／1,024／4,096 UTF-16 单元。
+
+新增任务、权限、能力握手与 `sentence_result` 完成帧要求应用和原生运行包一起升级到 v12。运行 `pnpm agent:build` 后的 manifest 从生成协议读取版本；旧 v11 包明确拒绝启动。冻结包烟测覆盖翻译及已有记录跳过模型。

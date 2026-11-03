@@ -9,7 +9,7 @@ it('runs only the bound synthesis with no model dependency and verifies its comp
   expect(await host.call('speech', 'tts.synthesize', {}, noop, abort)).toEqual({ completed: true })
   expect(synthesize).toHaveBeenCalledExactlyOnceWith(abort)
   binding.adapter.verifyCompletion(
-    { v: 11, instanceId: 'test', type: 'tts_result', runId: 'run', result: { completed: true } },
+    { v: 12, instanceId: 'test', type: 'tts_result', runId: 'run', result: { completed: true } },
     ''
   )
   expect(verifyCompletion).toHaveBeenCalledWith({ completed: true })

@@ -358,7 +358,7 @@ describe('ConversationPanel slash trigger and filtering', () => {
 
     const listbox = screen.getByRole('listbox', { name: '可用行动' })
     expect(listbox).toBeInTheDocument()
-    expect(pickerOptions()).toHaveLength(7)
+    expect(pickerOptions()).toHaveLength(8)
     // 首次打开默认高亮第一项
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-concept')
   })
@@ -478,6 +478,8 @@ describe('ConversationPanel picker keyboard selection', () => {
     )
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-synonym')
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-sentence')
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-tts')
     fireEvent.keyDown(input, { key: 'ArrowDown' })
@@ -1004,7 +1006,7 @@ describe('ConversationPanel picker closing and reopen suppression', () => {
 
     fireEvent.change(input, { target: { value: '/' } })
     expect(input).toHaveAttribute('aria-expanded', 'true')
-    expect(pickerOptions()).toHaveLength(7)
+    expect(pickerOptions()).toHaveLength(8)
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-concept')
 
     fireEvent.keyDown(input, { key: 'Enter' })
@@ -1078,7 +1080,7 @@ describe('ConversationPanel picker input method composition', () => {
     fireEvent.change(input, { target: { value: '/收' } })
 
     // 组合期间不刷新候选
-    expect(pickerOptions()).toHaveLength(7)
+    expect(pickerOptions()).toHaveLength(8)
 
     // 组合确认键不选择候选、不发送
     fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
@@ -1136,5 +1138,36 @@ describe('ConversationPanel picker language switch', () => {
     expect(screen.getByRole('option', { name: /Word concept/ })).toHaveTextContent('/concept')
     expect(input).toHaveValue('/co')
     expect(input).toHaveAttribute('aria-activedescendant', 'conversation-action-option-concept')
+  })
+})
+
+it('submits /sentence directly and requires content', () => {
+  const { callbacks } = renderPanel()
+  const input = screen.getByRole('combobox')
+  fireEvent.change(input, { target: { value: '/sentence' } })
+  fireEvent.keyDown(input, { key: 'Enter' })
+  expect(callbacks.onRunSkill).not.toHaveBeenCalled()
+  expect(screen.getByRole('alert')).toHaveTextContent('请在 /sentence 后输入')
+  fireEvent.change(input, { target: { value: '/sentence 今天先这样。\n明天继续。' } })
+  fireEvent.keyDown(input, { key: 'Enter' })
+  expect(callbacks.onRunSkill).toHaveBeenCalledExactlyOnceWith({
+    skillId: 'sentence',
+    text: '今天先这样。\n明天继续。'
+  })
+  expect(callbacks.onSend).not.toHaveBeenCalled()
+})
+it('selects sentence from the picker without sending, then submits its text', () => {
+  const { callbacks } = renderPanel()
+  const input = screen.getByRole('combobox')
+  fireEvent.focus(input)
+  fireEvent.change(input, { target: { value: '/sentence' } })
+  fireEvent.keyDown(input, { key: 'Enter' })
+  expect(input).toHaveValue('/sentence ')
+  expect(callbacks.onRunSkill).not.toHaveBeenCalled()
+  fireEvent.change(input, { target: { value: '/sentence I very like it.' } })
+  fireEvent.keyDown(input, { key: 'Enter' })
+  expect(callbacks.onRunSkill).toHaveBeenCalledExactlyOnceWith({
+    skillId: 'sentence',
+    text: 'I very like it.'
   })
 })

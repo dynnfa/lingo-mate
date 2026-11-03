@@ -12,6 +12,7 @@ from lingo_agent.workflows.explore_vocabulary.graph import (
     execute_explore_vocabulary,
 )
 from lingo_agent.workflows.phrase.graph import PhraseState, execute_phrase
+from lingo_agent.workflows.sentence.graph import SentenceState, execute_sentence
 from lingo_agent.workflows.sentence_practice.graph import (
     SentencePracticeState,
     execute_sentence_practice,
@@ -30,6 +31,7 @@ async def execute(
     run_id: str, snapshot: dict[str, Any], host: HostCall
 ) -> (
     LearningState
+    | SentenceState
     | TtsState
     | VocabularyState
     | PhraseState
@@ -40,6 +42,8 @@ async def execute(
     | VocabularyPracticeState
 ):
     task = snapshot["task"]
+    if task == "sentence":
+        return await execute_sentence(snapshot, host)
     if task == "conversation":
         return await execute_conversation_route(run_id, snapshot, host)
     if task == "conversation-title":

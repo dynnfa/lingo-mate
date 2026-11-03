@@ -65,13 +65,15 @@ export class StoredConversationSkillRunner {
       updatedAt: now
     }
     const execution: StoredConversationSkillExecution =
-      input.skillId === 'tts'
-        ? { ...executionBase, skillId: 'tts' }
-        : input.skillId === 'synonym'
-          ? { ...executionBase, skillId: 'synonym' }
-          : input.skillId === 'phrase'
-            ? { ...executionBase, skillId: 'phrase' }
-            : { ...executionBase, skillId: 'vocabulary' }
+      input.skillId === 'sentence'
+        ? { ...executionBase, skillId: 'sentence' }
+        : input.skillId === 'tts'
+          ? { ...executionBase, skillId: 'tts' }
+          : input.skillId === 'synonym'
+            ? { ...executionBase, skillId: 'synonym' }
+            : input.skillId === 'phrase'
+              ? { ...executionBase, skillId: 'phrase' }
+              : { ...executionBase, skillId: 'vocabulary' }
     await withConversationPersistence(() =>
       this.repository.createExecution(execution, userMessage, conversation)
     )

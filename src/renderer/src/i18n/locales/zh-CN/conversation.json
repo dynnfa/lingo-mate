@@ -32,7 +32,11 @@
     "descriptionFailedExploreVocabulary": "单词已生成并保存，但结果展示失败。你可以重试恢复展示。",
     "descriptionCancelledExploreVocabulary": "单词已生成并保存，但结果展示已取消。你可以重试恢复展示。",
     "synthesizingTts": "正在生成语音…",
-    "committingTts": "正在保存语音…"
+    "committingTts": "正在保存语音…",
+    "analyzingSentence": "正在翻译句子…",
+    "committingSentence": "正在保存句子…",
+    "descriptionFailedSentence": "句子已保存，展示结果失败，可重试恢复。",
+    "descriptionCancelledSentence": "句子已保存，展示结果已取消，可重试恢复。"
   },
   "composer": {
     "vocabularyRequired": "请在 /vocabulary 后输入一个或多个英语单词或短语。",
@@ -45,7 +49,9 @@
     "exploreVocabularyInvalid": "/explore-vocabulary 不需要参数，请直接发送。",
     "exploreVocabularyHint": "直接发送即可生成 10 个常用英语单词、释义与例句；近 7 次结果不会重复。",
     "ttsRequired": "请在 /tts 后输入英语纯文本。",
-    "ttsHint": "例如：/tts Hello, world! 最多 4,000 个字符。"
+    "ttsHint": "例如：/tts Hello, world! 最多 4,000 个字符。",
+    "sentenceRequired": "请在 /sentence 后输入需要翻译或润色的文字。",
+    "sentenceHint": "整段翻译并保存；已是目标语言的内容会做自然度润色，最多 4,000 字符。"
   },
   "thinking": {
     "label": "模型思考过程",
@@ -85,6 +91,10 @@
       "tts": {
         "name": "文本转语音",
         "description": "在本地生成语音，点击原文单词跳转播放位置。"
+      },
+      "sentence": {
+        "name": "句子翻译",
+        "description": "翻译成自然地道的目标语言表达并保存整段内容。"
       }
     }
   }
