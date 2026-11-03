@@ -22,6 +22,7 @@ import type {
 import { runConversationSkillInputSchema } from '../../shared/conversation'
 import type { ModelMessage } from '../llm/language-model'
 import { ModelConfigValidationError, ModelNotConfiguredError } from '../llm/model-config'
+import { sentenceTextSchema } from '../../shared/sentence'
 import type { ConversationSkill } from './conversation-skill'
 import type {
   ConversationSkillRepository,
@@ -200,6 +201,7 @@ export class ConversationModule {
     input: RunConversationSkillInput,
     emit: ConversationEventListener
   ): Promise<GenerationAccepted> {
+    if (input.skillId === 'sentence') sentenceTextSchema.parse(input.arguments.text)
     if (input.skillId === 'synonym') parseSynonymInput(input.arguments.text)
     if (input.skillId === 'tts') {
       const parsed = speechInputSchema.safeParse({

@@ -4,6 +4,7 @@ import type { CoreDiagnostics } from '../error-diagnostics'
 import type { GenerationEventError } from '../../shared/conversation'
 import { SynonymError } from '../learning/synonym/parse-synonym-input'
 import { VocabularyError } from '../learning/vocabulary/parse-vocabulary-input'
+import { SentenceError } from '../learning/sentence/sentence-repository'
 import { PhraseError } from '../learning/phrase/parse-phrase-input'
 import { ExplorePhraseError } from '../learning/explore-phrase/explore-phrase-error'
 import { ExploreVocabularyError } from '../learning/explore-vocabulary/explore-vocabulary-error'
@@ -47,6 +48,12 @@ export async function withConversationPersistence<T>(operation: () => Promise<T>
 
 // Core 只返回安全错误码，不负责界面翻译；内部原因留在产生处。
 export function toConversationEventError(error: unknown): GenerationEventError {
+  if (error instanceof SentenceError) {
+    if (error.code === 'STORAGE_FAILED') return { code: 'PERSISTENCE_ERROR' }
+    return {
+      code: error.code === 'MODEL_NOT_CONFIGURED' ? 'MODEL_NOT_CONFIGURED' : 'MODEL_ERROR'
+    }
+  }
   if (error instanceof SpeechError) return { code: 'SPEECH_ERROR', speechCode: error.code }
   if (error instanceof AgentRuntimeError) return { code: error.code }
   if (error instanceof SynonymError) {

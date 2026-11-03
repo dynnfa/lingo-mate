@@ -12,6 +12,7 @@ export type AgentSuccessFrame = Extract<
       | 'explore_vocabulary_result'
       | 'sentence_practice_result'
       | 'vocabulary_practice_result'
+      | 'sentence_result'
       | 'tts_result'
   }
 >
@@ -33,6 +34,20 @@ export const DEFAULT_AGENT_BUDGET: Readonly<AgentBudget> = Object.freeze({
 })
 
 const policies = {
+  sentence: {
+    budget: {
+      timeoutMs: 120_000,
+      maxModelCalls: 1,
+      maxToolCalls: 1,
+      maxSteps: 2,
+      maxInputChars: 65_536,
+      maxOutputChars: 1024
+    },
+    allowedOperations: ['sentence.prepare', 'model.sentence'],
+    concurrency: { max: 1 },
+    events: 'none',
+    successFrame: 'sentence_result'
+  },
   conversation: {
     budget: DEFAULT_AGENT_BUDGET,
     allowedOperations: ['model.reply'],

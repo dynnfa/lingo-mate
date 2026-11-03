@@ -18,6 +18,9 @@ export function createTestConversationModule(
   return new ConversationModule(
     repository,
     {
+      runSentence: async () => {
+        throw new Error('Unused sentence runtime')
+      },
       runTts: async () => {
         throw new Error('Unexpected speech task')
       },

@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto'
 import type { LanguageModel, ModelStreamEvent } from '../../core/llm/language-model'
 import { AgentHost, type AgentTestOperations } from '../../core/agent/agent-host'
 import {
+  type SentenceHostOperations,
   type TtsHostOperations,
   type TtsAgentRunInput,
   type VocabularyPracticeHostOperations,
@@ -37,6 +38,7 @@ type BatchTask = BatchTaskBindingInput['task']
 
 // Batch snapshots still require one message; the batch graphs never read it.
 const BATCH_MESSAGE: Record<BatchTask, string> = {
+  sentence: 'Bound sentence translation',
   tts: 'Bound speech synthesis',
   'vocabulary-practice-review': 'Bound vocabulary practice',
   'sentence-practice-hints': 'Bound sentence practice',
@@ -161,6 +163,10 @@ export class PythonAgentRuntime implements AgentRuntime {
       bindingInput
     ))
       void event
+  }
+
+  runSentence(input: VocabularyAgentRunInput, host: SentenceHostOperations): Promise<void> {
+    return this.runBatch(input, { task: 'sentence', host })
   }
 
   runTts(input: TtsAgentRunInput, host: TtsHostOperations): Promise<void> {

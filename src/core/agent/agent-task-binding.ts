@@ -1,6 +1,7 @@
 import type { AgentSnapshot } from './agent-protocol'
 import {
   AgentRuntimeError,
+  type SentenceHostOperations,
   type TtsHostOperations,
   type VocabularyPracticeHostOperations,
   type SentencePracticeHostOperations,
@@ -12,6 +13,7 @@ import {
 } from './agent-runtime'
 import type { AgentTaskBinding, AgentTestOperations, ResolveAgentModel } from './agent-task'
 import { getAgentTaskPolicy } from './agent-task-policy'
+import { SentenceTask } from './tasks/sentence-task'
 import { TtsTask } from './tasks/tts-task'
 import { VocabularyPracticeTask } from './tasks/vocabulary-practice-task'
 import { SentencePracticeTask } from './tasks/sentence-practice-task'
@@ -24,6 +26,7 @@ import { ConversationTask } from './tasks/conversation-task'
 import { ToolLoopTask } from './tasks/tool-loop-task'
 
 export type AgentTaskBindingInput =
+  | { task: 'sentence'; host: SentenceHostOperations }
   | { task: 'tts'; host: TtsHostOperations }
   | { task: 'vocabulary-practice-review'; host: VocabularyPracticeHostOperations }
   | {
@@ -51,6 +54,8 @@ export function createAgentTaskBinding(
   const copied = structuredClone(snapshot)
   const policy = getAgentTaskPolicy(input.task)
   switch (input.task) {
+    case 'sentence':
+      return { task: input.task, policy, adapter: new SentenceTask(copied, input.host) }
     case 'tts':
       return { task: input.task, policy, adapter: new TtsTask(input.host) }
     case 'vocabulary-practice-review':

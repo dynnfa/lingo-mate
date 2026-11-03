@@ -26,7 +26,7 @@ it.each(['explore-phrase', 'explore-vocabulary'] as const)(
     expect(model).toHaveBeenCalledExactlyOnceWith(args, abort, 65536)
     binding.adapter.verifyCompletion(
       {
-        v: 11,
+        v: 12,
         instanceId: 'test',
         runId: 'run',
         type: task === 'explore-phrase' ? 'explore_phrase_result' : 'explore_vocabulary_result',
@@ -87,7 +87,7 @@ it.each(['sentence-practice-hints', 'sentence-practice-review'] as const)(
     expect(model).toHaveBeenCalledExactlyOnceWith(args, abort, 65536)
     binding.adapter.verifyCompletion(
       {
-        v: 11,
+        v: 12,
         instanceId: 'test',
         runId: 'run',
         type: 'sentence_practice_result',
@@ -145,7 +145,7 @@ it('forwards synonym index, round and authorized action without reconstructing i
   expect(finish).toHaveBeenCalledExactlyOnceWith({ inputIndex: 0, round: 1, reason: 'terminal' })
   binding.adapter.verifyCompletion(
     {
-      v: 11,
+      v: 12,
       instanceId: 'test',
       runId: 'run',
       type: 'synonym_result',
@@ -194,7 +194,7 @@ it('forwards practice correction instructions and round-bound receipts to the ex
   expect(finish).toHaveBeenCalledExactlyOnceWith({ round: 1, reason: 'terminal' })
   binding.adapter.verifyCompletion(
     {
-      v: 11,
+      v: 12,
       instanceId: 'test',
       runId: 'run',
       type: 'vocabulary_practice_result',

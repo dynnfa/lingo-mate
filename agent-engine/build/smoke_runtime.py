@@ -44,7 +44,7 @@ class Client:
         threading.Thread(target=read, daemon=True).start()
 
     def send(self, kind, **payload):
-        data = {"v": 11, "instanceId": self.instance, "type": kind, **payload}
+        data = {"v": 12, "instanceId": self.instance, "type": kind, **payload}
         self.process.stdin.write((json.dumps(data) + "\n").encode())
         self.process.stdin.flush()
 
@@ -62,6 +62,27 @@ class Client:
         return (time.monotonic() - started) * 1000
 
     def run(self, run_id, task="conversation", content="Hi", output_language="zh-CN"):
+        if task == "sentence":
+            self.send(
+                "run",
+                runId=run_id,
+                snapshot={
+                    "task": task,
+                    "messages": [{"role": "user", "content": "Bound sentence"}],
+                    "outputLanguage": output_language,
+                    "targetLanguage": "en",
+                    "allowedOperations": ["sentence.prepare", "model.sentence"],
+                    "budget": {
+                        "timeoutMs": 120000,
+                        "maxModelCalls": 1,
+                        "maxToolCalls": 1,
+                        "maxSteps": 2,
+                        "maxInputChars": 65536,
+                        "maxOutputChars": 1024,
+                    },
+                },
+            )
+            return self.receive("host_call")
         if task == "tts":
             self.send(
                 "run",
@@ -199,6 +220,27 @@ with tempfile.TemporaryDirectory(prefix="lingo-bundle-") as cwd:
     client = Client(cwd)
     try:
         cold_ms = client.start()
+
+        for existing in (False, True):
+            run_id = f"sentence-{existing}"
+            call = client.run(run_id, task="sentence")
+            assert call["operation"] == "sentence.prepare"
+            client.send(
+                "host_result",
+                runId=run_id,
+                callId=call["callId"],
+                result={"existing": existing, "inputChars": 4000},
+            )
+            if not existing:
+                call = client.receive("host_call")
+                assert call["operation"] == "model.sentence"
+                assert "English" in call["args"]["systemPrompt"]
+                assert "native speaker" in call["args"]["systemPrompt"]
+                client.send(
+                    "host_result", runId=run_id, callId=call["callId"], result={"completed": True}
+                )
+            assert client.receive("sentence_result")["result"] == {"completed": True}
+
         if PLATFORM != "win32":
             idle_rss_kib = int(
                 subprocess.check_output(
@@ -619,6 +661,7 @@ print(
                 "empty-PATH",
                 "handshake",
                 "tool-loop-operations-event-result",
+                "sentence-translation-and-existing",
                 "tts-no-model",
                 "vocabulary-practice-languages-tool-loop-correction",
                 "vocabulary-practice-cancel-late-result-failure",

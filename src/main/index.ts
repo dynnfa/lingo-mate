@@ -16,6 +16,12 @@ import type Database from 'better-sqlite3'
 import { randomUUID } from 'node:crypto'
 import { openDatabase } from '../database/database'
 import { SqliteVocabularyRepository } from '../database/sqlite-vocabulary-repository'
+import { SqliteSentenceRepository } from '../database/sqlite-sentence-repository'
+import { SentenceConversationSkill } from '../core/learning/sentence/sentence-conversation-skill'
+import { SentenceManagementService } from '../core/learning/sentence/sentence-management'
+import { LlmSentenceTranslator } from '../core/learning/sentence/llm-sentence-translator'
+import { registerSentenceIpc } from './sentence-ipc'
+import { createSentenceFeedbackFormatter } from './sentence-feedback'
 import { SqlitePhraseRepository } from '../database/sqlite-phrase-repository'
 import { SqliteLlmUsageRepository } from '../database/sqlite-llm-usage-repository'
 import { VocabularyConversationSkill } from '../core/learning/vocabulary/vocabulary-conversation-skill'
@@ -456,6 +462,14 @@ app.whenReady().then(() => {
     createVocabularyFeedbackFormatter(),
     agentRuntime
   )
+  const sentenceRepository = new SqliteSentenceRepository(database)
+  registerSentenceIpc(new SentenceManagementService(sentenceRepository), registerTrustedHandler)
+  const sentenceSkill = new SentenceConversationSkill(
+    sentenceRepository,
+    () => new LlmSentenceTranslator(modelsService.resolveSnapshot(), createLlmClient),
+    agentRuntime,
+    createSentenceFeedbackFormatter()
+  )
   // /phrase 与 /vocabulary 共用模型配置快照解析与超时策略；用量登记为
   // phrase_analysis，由 LlmClient 按调用上下文自动记账。
   const phraseRepository = new SqlitePhraseRepository(database)
@@ -536,6 +550,7 @@ app.whenReady().then(() => {
   const conversationSkills = new Map<ConversationSkillId, ConversationSkill>([
     [ttsSkill.skillId, ttsSkill],
     [vocabularySkill.skillId, vocabularySkill],
+    [sentenceSkill.skillId, sentenceSkill],
     [phraseSkill.skillId, phraseSkill],
     [synonymSkill.skillId, synonymSkill],
     [exploreSkill.skillId, exploreSkill],
