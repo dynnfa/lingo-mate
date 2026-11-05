@@ -10,6 +10,8 @@ export function emptyCommunicationApi(): CommunicationApi {
       status: 'error',
       error: { code: 'COMMUNICATION_FAILED' }
     }),
+    createQqConnection: async () => ({ status: 'error', error: { code: 'COMMUNICATION_FAILED' } }),
+    replaceQqSecret: ok,
     deleteConnection: ok,
     testConnection: ok,
     start: ok,

@@ -51,7 +51,9 @@ const eventBase = {
   externalThreadId: externalIdSchema.optional(),
   displayName: z.string().max(128).optional(),
   scope: z.enum(['private', 'group', 'topic']),
-  occurredAt: z.number().int().nonnegative()
+  occurredAt: z.number().int().nonnegative(),
+  replyExpiresAt: z.number().int().positive().optional(),
+  externalMessageIndex: externalIdSchema.optional()
 }
 export const inboundEventSchema = z.discriminatedUnion('type', [
   z.strictObject({
@@ -82,13 +84,25 @@ export const adapterCapabilitiesSchema = z.strictObject({
   interactions: z.boolean(),
   attachments: z.boolean(),
   maxTextLength: z.number().int().min(16).max(LIMITS.reply),
-  encodingVersion: z.string().min(1).max(64)
+  encodingVersion: z.string().min(1).max(64),
+  requiresReplyContext: z.literal(true).optional()
 })
 export type AdapterCapabilities = z.infer<typeof adapterCapabilitiesSchema>
 export interface Target {
   externalActorId: string
   externalConversationId: string
   externalThreadId?: string
+}
+export const replyContextSchema = z.strictObject({
+  externalMessageId: externalIdSchema,
+  expiresAt: z.number().int().positive()
+})
+export type ReplyContext = z.infer<typeof replyContextSchema>
+export interface SendIdentity {
+  deliveryId: string
+  partId: string
+  reply?: ReplyContext
+  sequence?: number
 }
 export const encodedPartSchema = z.strictObject({
   text: z.string().min(1).max(LIMITS.reply),
@@ -100,7 +114,7 @@ export type EncodedPart = z.infer<typeof encodedPartSchema>
 export const sendResultSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('sent'), externalMessageId: externalIdSchema }),
   z.strictObject({ status: z.literal('retry'), retryAfterMs: z.number().nonnegative().optional() }),
-  z.strictObject({ status: z.literal('failed') }),
+  z.strictObject({ status: z.literal('failed'), terminal: z.literal(true).optional() }),
   z.strictObject({ status: z.literal('uncertain') })
 ])
 export type SendResult = z.infer<typeof sendResultSchema>

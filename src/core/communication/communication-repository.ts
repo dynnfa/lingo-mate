@@ -8,6 +8,7 @@ import type {
   InboundEvent,
   Languages,
   Receipt,
+  ReplyContext,
   Target
 } from './communication-contract'
 export interface Connection {
@@ -96,6 +97,8 @@ export interface Confirmation {
 export interface DeliveryPart {
   id: string
   encoded: EncodedPart
+  sequence?: number
+  terminal?: true
   state: DeliveryState
   attempts: number
   nextAt: number
@@ -108,6 +111,8 @@ export interface Delivery {
   bindingId: string
   bindingVersion: number
   target: Target
+  reply?: ReplyContext
+  uiLanguage?: Languages['uiLanguage']
   text: string
   createdAt: number
   expiresAt: number

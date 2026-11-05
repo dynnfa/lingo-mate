@@ -42,7 +42,7 @@ export class TestAdapter implements CommunicationAdapter {
     this.sent.push(part)
     return { status: 'sent', externalMessageId }
   }
-  async send(_target: Target, part: EncodedPart): Promise<SendResult> {
+  send: CommunicationAdapter['send'] = async (_target, part) => {
     const result = this.outcomes.shift() ?? {
       status: 'sent',
       externalMessageId: `sent-${this.sent.length}`
