@@ -232,7 +232,14 @@ export class TelegramAdapter implements CommunicationAdapter {
       } catch (error) {
         if (error instanceof TelegramTransportError) {
           if (!error.started) return { status: 'retry' }
-          if (error.status === 429) return { status: 'retry', retryAfterMs: error.retryAfterMs }
+          if (error.status === 429) {
+            // Flood control can apply to the whole bot, including other queued deliveries.
+            this.connectionAt = Math.max(
+              this.connectionAt,
+              this.clock.now() + (error.retryAfterMs ?? 0)
+            )
+            return { status: 'retry', retryAfterMs: error.retryAfterMs }
+          }
           if (error.status && error.status >= 400 && error.status < 500) {
             if (error.status === 401) {
               active.context.disconnected(false, 'TELEGRAM_UNAUTHORIZED')

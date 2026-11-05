@@ -77,6 +77,39 @@ it.each([
   ).toBe(true)
   expect(encodeTelegramText(text)).toEqual(parts)
 })
+it.each([
+  { name: 'newline between full chunks', text: 'a'.repeat(4000) + '\n' + 'b'.repeat(4000) },
+  { name: 'leading newline', text: '\n' + 'a'.repeat(4000) },
+  { name: 'trailing newlines', text: 'a'.repeat(3999) + '\n\n' },
+  { name: 'trailing whitespace after emoji', text: 'a'.repeat(3998) + '🙂\n\n' },
+  { name: 'long whitespace between words', text: 'a\n' + ' '.repeat(5000) + 'b' },
+  {
+    name: 'whitespace requiring a reserved character',
+    text: 'a'.repeat(4000) + ' '.repeat(6000) + 'b'
+  },
+  {
+    name: 'trailing whitespace requiring a reserved character',
+    text: 'a'.repeat(4000) + ' '.repeat(3999)
+  }
+])('encodes $name without emitting a blank message or losing text', ({ text }) => {
+  const parts = encodeTelegramText(text)
+  expect(parts.map((part) => part.text).join('')).toBe(text)
+  expect(
+    parts.every(
+      (part) => part.text.trim().length > 0 && part.text.length <= 4000 && part.text.isWellFormed()
+    )
+  ).toBe(true)
+  expect(encodeTelegramText(text)).toEqual(parts)
+})
+it('rejects text that cannot fit nonblank messages before any parts can be sent', () => {
+  for (const text of [
+    '\n ',
+    ' '.repeat(4000) + 'a',
+    'a' + ' '.repeat(4000),
+    'a' + ' '.repeat(8000) + 'b'
+  ])
+    expect(() => encodeTelegramText(text)).toThrow()
+})
 it('accepts the safe offset boundary, rejects unsafe routing IDs and bounds single updates', () => {
   expect(parseCursor(makeCursor('123', Number.MAX_SAFE_INTEGER), '123')).toBe(
     Number.MAX_SAFE_INTEGER

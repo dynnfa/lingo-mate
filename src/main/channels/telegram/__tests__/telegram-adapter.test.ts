@@ -9,7 +9,7 @@ function fixture(batches: unknown[][] = []): {
   transport: TelegramTransport
   context: AdapterContext
   adapter: TelegramAdapter
-  clock: { now(): number; sleep: Mock<(ms: number) => Promise<void>> }
+  clock: { now(): number; advance(ms: number): void; sleep: Mock<(ms: number) => Promise<void>> }
 } {
   const calls: Array<{ method: string; parameters: Readonly<Record<string, unknown>> }> = []
   const transport: TelegramTransport = {
@@ -33,6 +33,9 @@ function fixture(batches: unknown[][] = []): {
   let time = 0
   const clock = {
     now: () => time,
+    advance: (ms: number) => {
+      time += ms
+    },
     sleep: vi.fn(async (ms: number) => {
       time += ms
     })
@@ -180,6 +183,42 @@ it('aborts the current poll after an authentication failure during send', async 
   expect(f.context.disconnected).toHaveBeenCalledWith(false, 'TELEGRAM_UNAUTHORIZED')
   expect(pollSignal?.aborted).toBe(true)
   await f.adapter.stop()
+})
+it('shares a 429 cooldown across queued deliveries and chats until the full wait expires', async () => {
+  const f = fixture()
+  await f.adapter.start(f.context)
+  const original = f.transport.call
+  const sentAt: number[] = []
+  f.transport.call = async (...args) => {
+    if (args[0] !== 'sendMessage') return original(...args)
+    sentAt.push(f.clock.now())
+    if (sentAt.length === 1) {
+      f.clock.advance(500)
+      throw new TelegramTransportError('TELEGRAM_RATE_LIMITED', true, 429, 120000)
+    }
+    return { message_id: 9, chat: { id: Number(args[1].chat_id), type: 'private' } }
+  }
+  const send = (actor: string, deliveryId: string): Promise<SendResult> =>
+    f.adapter.send(
+      { externalActorId: actor, externalConversationId: actor },
+      { format: 'plain', text: deliveryId },
+      { deliveryId, partId: deliveryId },
+      f.context.signal
+    )
+  try {
+    expect(await Promise.all([send('5', 'first'), send('5', 'same'), send('6', 'other')])).toEqual([
+      { status: 'retry', retryAfterMs: 120000 },
+      { status: 'retry', retryAfterMs: 120000 },
+      { status: 'retry', retryAfterMs: 120000 }
+    ])
+    expect(sentAt).toEqual([0])
+    f.clock.advance(119000)
+    expect(await send('6', 'after-cooldown')).toEqual({ status: 'sent', externalMessageId: '9' })
+    expect(sentAt).toEqual([0, 120500])
+    expect(f.clock.sleep).toHaveBeenCalledWith(1000, expect.any(AbortSignal))
+  } finally {
+    await f.adapter.stop()
+  }
 })
 it('preserves platform retry_after for the public reconnect scheduler', async () => {
   const f = fixture()
