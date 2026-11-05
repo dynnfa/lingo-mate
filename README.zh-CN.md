@@ -38,8 +38,8 @@ Lingo Mate 帮助你把收集的内容变成可以练习的材料。已保存的
 
 请先安装以下依赖：
 
-- **Node.js 22.12+**：满足当前 Vite / Electron Vite 工具链要求。
-- **pnpm**：管理 JavaScript 依赖。
+- **Node.js 22.12+（仅限 22.x 系列）**：满足当前 Vite / Electron Vite 工具链要求，详见下方[安装注意事项](#安装注意事项)。
+- **pnpm（10 及以上）**：管理 JavaScript 依赖。
 - **uv**：管理 Python 环境。
 - **Python 3.13.3**：版本固定在 `agent-engine/.python-version`，项目环境由 `uv` 管理。
 
@@ -50,6 +50,13 @@ pnpm install
 pnpm agent:sync
 pnpm dev
 ```
+
+#### 安装注意事项
+
+- **请使用 Node 22.x 系列。** 不支持 Node 24/26：Electron 二进制安装器在这些版本上会停滞，`pnpm install` 结束时不会下载 Electron 二进制，随后 `pnpm dev` 会报 `Error: Electron uninstall`。`.nvmrc` 已固定版本，供 nvm/fnm 用户自动切换。
+- **依赖构建脚本的批准位置在 `pnpm-workspace.yaml`。** pnpm 10 及以上不再读取 `package.json` 的 `pnpm` 字段。`electron` 和 `esbuild` 需要执行安装脚本；它们的批准（以及对自带预编译产物包的显式拒绝）都在该文件中声明。新增带构建脚本的依赖时请同步更新该文件。
+- **安装完成后校验 Electron 二进制。** `node_modules/electron/path.txt` 应当存在；若缺失，请在 Node 22 环境下执行 `pnpm rebuild electron`。
+- **下载缓慢或被阻断。** 若 Electron 二进制下载缓慢，可在 `~/.npmrc` 配置镜像，例如 `electron_mirror=https://npmmirror.com/mirrors/electron/`。
 
 开发启动会使用持久化的应用数据。验证改动时请使用独立的测试用户数据目录，参见下方的[贡献说明](#参与贡献)。
 
