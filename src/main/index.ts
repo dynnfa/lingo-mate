@@ -1,3 +1,4 @@
+import { telegramRegistration } from './channels/telegram/telegram-registration'
 import { CommunicationHost } from './communication/communication-host'
 import { createCommunicationCredentialStore } from './communication/credential-store'
 import { registerCommunicationIpc } from './communication/communication-ipc'
@@ -595,7 +596,8 @@ app.whenReady().then(async () => {
         operation: 'lifecycle',
         message: entry.code,
         context: entry
-      })
+      }),
+    [telegramRegistration]
   )
   await communicationHost.initialize()
   registerCommunicationIpc(communicationHost, registerTrustedHandler)

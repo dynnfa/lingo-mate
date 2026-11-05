@@ -127,3 +127,11 @@ export class CommunicationError extends Error {
     super(code, options)
   }
 }
+
+// Transport-only admission. No invented actor, route, text or execution authority.
+export const rejectedEnvelopeSchema = z.strictObject({
+  externalEventId: externalIdSchema,
+  kind: z.enum(['invalid', 'unsupported', 'oversized', 'other-bot']),
+  digest: z.string().regex(/^[a-f0-9]{64}$/u)
+})
+export type RejectedEnvelope = z.infer<typeof rejectedEnvelopeSchema>

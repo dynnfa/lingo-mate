@@ -3,8 +3,26 @@ import * as p from '../shared/communication'
 export function createCommunicationApi(): p.CommunicationApi {
   const c = p.COMMUNICATION_CHANNELS
   return {
+    async createTelegramConnection(input) {
+      return p.createConnectionResultSchema.parse(
+        await ipcRenderer.invoke(
+          c.createTelegramConnection,
+          p.createTelegramInputSchema.parse(input)
+        )
+      )
+    },
+    async deleteConnection(input) {
+      return p.communicationActionResultSchema.parse(
+        await ipcRenderer.invoke(c.deleteConnection, p.connectionInputSchema.parse(input))
+      )
+    },
     async snapshot() {
       return p.communicationSnapshotResultSchema.parse(await ipcRenderer.invoke(c.snapshot))
+    },
+    async testConnection(input) {
+      return p.communicationActionResultSchema.parse(
+        await ipcRenderer.invoke(c.testConnection, p.connectionInputSchema.parse(input))
+      )
     },
     async start(input) {
       return p.communicationActionResultSchema.parse(

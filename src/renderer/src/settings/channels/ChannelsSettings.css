@@ -1,0 +1,88 @@
+.channels-settings,
+.channel-card,
+.channel-token-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.channel-card {
+  padding: 14px;
+  border: 1px solid var(--color-border-message);
+  border-radius: 10px;
+  background: var(--color-surface);
+}
+
+.channel-card h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.channel-added-at {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.channel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.channels-settings > button,
+.channel-actions button {
+  padding: 6px 12px;
+  background: var(--color-surface-secondary);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.channel-actions button[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.channel-actions button:hover:not(:disabled, [aria-disabled='true']) {
+  background: var(--color-surface-hover);
+}
+
+.channels-settings > .channel-add-button {
+  align-self: flex-start;
+  color: #fff;
+  background: var(--color-primary);
+}
+
+.channels-settings > .channel-add-button:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.channel-actions .channel-delete-button {
+  color: var(--color-danger);
+}
+
+.channel-token-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.channel-token-form input,
+.channel-token-form select {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--color-border-message);
+  border-radius: 6px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  font: inherit;
+}
+
+.channel-token-form select:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 3px;
+}

@@ -7,6 +7,7 @@ import { PythonAgentRuntime } from '../../src/main/agent/python-agent-runtime'
 import { ConversationModule } from '../../src/core/conversation/conversation-module'
 import { ConversationBusinessPort } from '../../src/main/communication/conversation-business-port'
 import { CommunicationService } from '../../src/core/communication/communication-service'
+import { telegramHarness } from '../fixtures/telegram'
 import { TestAdapter } from '../../src/core/communication/__tests__/test-adapter'
 import { SqliteCommunicationRepository } from '../../src/database/sqlite-communication-repository'
 import { SqliteConversationRepository } from '../../src/database/sqlite-conversation-repository'
@@ -15,7 +16,7 @@ import { SentenceConversationSkill } from '../../src/core/learning/sentence/sent
 import { createSentenceFeedbackFormatter } from '../../src/main/sentence-feedback'
 import { openDatabase } from '../../src/database/database'
 
-it.each([false, true])(
+it.each([false, true, 'telegram'] as const)(
   'uses the same durable conversation port and real Python for adapter interactive=%s',
   async (interactive) => {
     const db = openDatabase(':memory:')
@@ -57,11 +58,14 @@ it.each([false, true])(
       languages: () => ({ uiLanguage: 'en', outputLanguage: 'en', targetLanguage: 'en' }),
       diagnostics: vi.fn()
     })
-    const adapter = new TestAdapter(interactive)
-    service.registerAdapter('fixture', () => adapter)
+    const telegram = interactive === 'telegram' ? telegramHarness() : undefined
+    const adapter = new TestAdapter(interactive === true)
+    service.registerAdapter('fixture', () => telegram?.adapter ?? adapter, {
+      startAsHelp: !!telegram
+    })
     const connectionId = service.addConnection('fixture')
     const receive = (text: string, externalEventId: string = randomUUID()): Promise<Receipt> =>
-      adapter.receive({
+      (telegram?.inject ?? ((event) => adapter.receive(event)))({
         type: 'text',
         text,
         externalEventId,
@@ -82,11 +86,17 @@ it.each([false, true])(
       await service.flush()
       await receive('/sentence 今天先这样吧。')
       await service.flush()
+      expect((await receive('/vocabulary denied')).code).toBe('CAPABILITY_DENIED')
+      await service.flush()
       expect(execute).toHaveBeenCalledTimes(2)
       expect(model.streamReply).toHaveBeenCalledTimes(1)
       expect(translate).toHaveBeenCalledTimes(1)
-      expect(adapter.sent.map((p) => p.text).join('')).toContain('Final answer')
-      expect(adapter.sent.map((p) => p.text).join('')).not.toContain('PRIVATE_REASONING')
+      expect(
+        (telegram ? telegram.sentTexts() : adapter.sent.map((p) => p.text)).join('')
+      ).toContain('Final answer')
+      expect(
+        (telegram ? telegram.sentTexts() : adapter.sent.map((p) => p.text)).join('')
+      ).not.toContain('PRIVATE_REASONING')
       expect(JSON.stringify(wire.mock.calls)).not.toContain('PRIVATE_EXTERNAL_ACTOR')
       expect(JSON.stringify(wire.mock.calls)).not.toContain('PRIVATE_ROUTE')
       // Domain commit / communication completion gap: recover from the report with NO model or write.

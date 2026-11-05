@@ -23,6 +23,7 @@ export class CommunicationService {
   private readonly receiver: InboxReceiver
   private readonly outbox: Outbox
   private readonly dispatcher: Dispatcher
+  private readonly startAliases = new Set<string>()
   private readonly factories = new Map<string, AdapterFactory>()
   private readonly adapters = new Map<
     string,
@@ -42,10 +43,11 @@ export class CommunicationService {
     this.receiver = new InboxReceiver(repository, env, this.identity, this.outbox)
     this.dispatcher = new Dispatcher(repository, env, business, this.outbox)
   }
-  registerAdapter(id: string, factory: AdapterFactory): void {
+  registerAdapter(id: string, factory: AdapterFactory, options?: { startAsHelp?: boolean }): void {
     if (!/^[a-z][a-z0-9-]{0,63}$/u.test(id) || this.factories.has(id))
       throw new CommunicationError('INVALID_ADAPTER')
     this.factories.set(id, factory)
+    if (options?.startAsHelp) this.startAliases.add(id)
   }
   addConnection(
     adapterId: string,
@@ -58,12 +60,17 @@ export class CommunicationService {
       .refine((c) => Object.keys(c).length <= 20)
       .parse(config)
     return this.repository.transaction((s) => {
-      if (s.connections.size >= LIMITS.maxConnections)
+      if (
+        [...s.connections.values()].filter(
+          (c) => c.enabled || c.state !== 'stopped' || !!c.credentialRef
+        ).length >= LIMITS.maxConnections
+      )
         throw new CommunicationError('CONNECTION_LIMIT')
       const id = this.env.id()
       s.connections.set(id, {
         id,
         adapterId,
+        createdAt: this.env.now(),
         enabled: true,
         generation: 0,
         state: 'stopped',
@@ -139,7 +146,16 @@ export class CommunicationService {
             signal: controller.signal,
             cursor: connection.cursor,
             receive: (event, cursor) => this.receive(id, generation, event, cursor),
-            disconnected: (retryable) => this.disconnected(id, generation, retryable)
+            receiveRejected: async (envelope, cursor) => {
+              if (this.closed) return { status: 'failed', code: 'STOPPED' }
+              try {
+                return this.receiver.receiveRejected(id, generation, envelope, cursor)
+              } catch {
+                return { status: 'failed', code: 'STORAGE_FAILED' }
+              }
+            },
+            disconnected: (retryable, code, retryAfterMs) =>
+              this.disconnected(id, generation, retryable, code, retryAfterMs)
           })
           .then(() => true),
         LIMITS.connectMs,
@@ -166,7 +182,9 @@ export class CommunicationService {
         this.disconnected(
           id,
           generation,
-          error instanceof AdapterConnectionError && error.retryable
+          error instanceof AdapterConnectionError && error.retryable,
+          error instanceof AdapterConnectionError ? error.code : undefined,
+          error instanceof AdapterConnectionError ? error.retryAfterMs : undefined
         )
         controller.abort()
         const failed = this.adapters.get(id)
@@ -183,17 +201,27 @@ export class CommunicationService {
       }
     }
   }
-  private disconnected(id: string, generation: number, retryable: boolean): void {
+  private disconnected(
+    id: string,
+    generation: number,
+    retryable: boolean,
+    code?: string,
+    retryAfterMs?: number
+  ): void {
     if (this.closed) return
     this.repository.transaction((s) => {
       const c = s.connections.get(id)
       if (!c || c.generation !== generation || !['online', 'starting'].includes(c.state)) return
       c.attempts++
       c.state = retryable && c.attempts <= LIMITS.reconnectAttempts ? 'reconnecting' : 'error'
-      c.error = retryable ? 'CONNECTION_LOST' : 'CONNECTION_FAILED'
+      c.error = code ?? (retryable ? 'CONNECTION_LOST' : 'CONNECTION_FAILED')
       c.reconnectAt =
         c.state === 'reconnecting'
-          ? this.env.now() + Math.min(LIMITS.retryMaxMs, LIMITS.retryBaseMs * 2 ** (c.attempts - 1))
+          ? this.env.now() +
+            Math.max(
+              Number.isFinite(retryAfterMs) && retryAfterMs! > 0 ? retryAfterMs! : 0,
+              Math.min(LIMITS.retryMaxMs, LIMITS.retryBaseMs * 2 ** (c.attempts - 1))
+            )
           : undefined
     })
   }
@@ -205,7 +233,13 @@ export class CommunicationService {
   ): Promise<Receipt> {
     if (this.closed) return { status: 'failed', code: 'STOPPED' }
     try {
-      const receipt = this.receiver.receive(id, generation, event, cursor)
+      const receipt = this.receiver.receive(
+        id,
+        generation,
+        event,
+        cursor,
+        this.repository.read((s) => this.startAliases.has(s.connections.get(id)!.adapterId))
+      )
       if (receipt.status === 'persisted' && receipt.requestId) {
         const inbox = this.repository.read((s) =>
           [...s.inbox.values()].find((i) => i.receipt.requestId === receipt.requestId)
@@ -247,17 +281,20 @@ export class CommunicationService {
     })
     if (!connection) return
     const active = this.adapters.get(id)
-    this.adapters.delete(id)
     active?.controller.abort()
     this.outbox.stopConnection(id)
     // Stop receiving first. Queued tasks and saved deliveries remain for a later start.
     try {
-      await bounded(
+      const stopped = await bounded(
         this.env,
-        Promise.resolve().then(() => active?.adapter.stop()),
+        Promise.resolve()
+          .then(() => active?.adapter.stop())
+          .then(() => true),
         LIMITS.shutdownMs,
-        () => {}
+        () => false
       )
+      if (!stopped) throw new CommunicationError('CONNECTION_STOP_FAILED')
+      if (this.adapters.get(id) === active) this.adapters.delete(id)
     } catch {
       if (!this.closed)
         this.repository.transaction((s) => {
@@ -276,14 +313,17 @@ export class CommunicationService {
       })
   }
   async deleteConnection(id: string): Promise<void> {
-    await this.stop(id)
     const bindings = this.repository.transaction((s) => {
-      s.connections.get(id)!.enabled = false
+      const connection = s.connections.get(id)
+      if (!connection) throw new CommunicationError('NOT_FOUND')
+      connection.enabled = false
+      for (const c of s.challenges.values()) if (c.connectionId === id) c.consumed = true
       return [...s.bindings.values()]
         .filter((b) => b.connectionId === id && !b.revoked)
         .map((b) => b.id)
     })
     bindings.forEach((binding) => this.revokeBinding(binding))
+    await this.stop(id)
   }
   createChallenge(
     id: string,
