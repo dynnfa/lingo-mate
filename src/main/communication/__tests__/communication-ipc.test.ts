@@ -84,6 +84,14 @@ it('uses source and schema guards before changing any channel state', async () =
   ).toEqual({ status: 'error', error: { code: 'INVALID_INPUT' } })
   expect(f.connectionState()).toBe('stopped')
   expect(await f.invoke(C.start, { connectionId: f.connectionId })).toEqual({ status: 'ok' })
+  expect(
+    (await f.invoke(C.snapshot)) as { snapshot: { connections: Array<{ started: boolean }> } }
+  ).toMatchObject({ snapshot: { connections: [{ started: true }] } })
+  expect(await f.invoke(C.stop, { connectionId: f.connectionId })).toEqual({ status: 'ok' })
+  expect(
+    (await f.invoke(C.snapshot)) as { snapshot: { connections: Array<{ started: boolean }> } }
+  ).toMatchObject({ snapshot: { connections: [{ started: false }] } })
+  expect(await f.invoke(C.start, { connectionId: f.connectionId })).toEqual({ status: 'ok' })
   f.sender.destroy()
   expect(f.connectionState()).toBe('online')
 })
@@ -97,7 +105,15 @@ it('exposes no credentials, routing bodies, digests, internal sessions or cursor
     status: 'ok',
     snapshot: {
       installedAdapters: [],
-      connections: [{ id: f.connectionId, adapterId: 'test', createdAt: expect.any(Number) }]
+      connections: [
+        {
+          id: f.connectionId,
+          adapterId: 'test',
+          createdAt: expect.any(Number),
+          started: false,
+          bindingCount: 0
+        }
+      ]
     }
   })
   expect(
@@ -154,5 +170,43 @@ it('validates source and connection ID before testing and maps failures safely',
   expect(await f.invoke(C.testConnection, { connectionId: f.connectionId })).toEqual({
     status: 'error',
     error: { code: 'COMMUNICATION_FAILED' }
+  })
+})
+
+it('guards binding creation and confirmation and returns an actionable expired-code error', async () => {
+  const f = setup()
+  const create = vi.spyOn(f.host.service, 'createChallenge')
+  const confirm = vi.spyOn(f.host.service, 'confirmBinding')
+  f.sender.owned = false
+  expect(
+    await f.invoke(C.createChallenge, { connectionId: f.connectionId, capabilities: ['chat'] })
+  ).toEqual({ status: 'error', error: { code: 'UNTRUSTED_SOURCE' } })
+  expect(await f.invoke(C.confirmBinding, { challengeId: randomUUID() })).toEqual({
+    status: 'error',
+    error: { code: 'UNTRUSTED_SOURCE' }
+  })
+  f.sender.owned = true
+  expect(
+    await f.invoke(C.createChallenge, { connectionId: f.connectionId, capabilities: ['tts'] })
+  ).toEqual({ status: 'error', error: { code: 'INVALID_INPUT' } })
+  expect(
+    await f.invoke(C.confirmBinding, { challengeId: randomUUID(), externalActorId: 'forged' })
+  ).toEqual({ status: 'error', error: { code: 'INVALID_INPUT' } })
+  expect(create).not.toHaveBeenCalled()
+  expect(confirm).not.toHaveBeenCalled()
+  expect(await f.invoke(C.confirmBinding, { challengeId: randomUUID() })).toEqual({
+    status: 'error',
+    error: { code: 'CHALLENGE_INVALID' }
+  })
+  expect(
+    await f.invoke(C.createChallenge, {
+      connectionId: f.connectionId,
+      capabilities: ['chat', 'sentence']
+    })
+  ).toMatchObject({
+    status: 'ok',
+    challengeId: expect.any(String),
+    code: expect.any(String),
+    expiresAt: expect.any(Number)
   })
 })

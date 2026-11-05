@@ -7,10 +7,12 @@ import type {
 } from '../../../../shared/communication'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { ChannelTokenDialog } from './ChannelTokenDialog'
+import { ChannelBinding, type BindingCodeResult } from './ChannelBinding'
 import './ChannelsSettings.css'
 
 type Connection = CommunicationSnapshot['connections'][number]
 type ActionResult = Awaited<ReturnType<CommunicationApi['testConnection']>>
+type ConnectionAction = 'start' | 'stop'
 type Dialog =
   | { kind: 'add' }
   | { kind: 'edit' | 'delete'; connection: Connection }
@@ -25,9 +27,19 @@ function ActiveChannelsSettings(): React.JSX.Element {
   const [snapshot, setSnapshot] = useState<CommunicationSnapshot>()
   const [loadFailed, setLoadFailed] = useState(false)
   const [dialog, setDialog] = useState<Dialog>()
+  const [initialBindingResults, setInitialBindingResults] = useState<
+    Partial<Record<string, BindingCodeResult>>
+  >({})
+  const [showBindingReminder, setShowBindingReminder] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<CommunicationErrorCode>()
   const [testing, setTesting] = useState<ReadonlySet<string>>(() => new Set())
+  const [switching, setSwitching] = useState<ReadonlySet<string>>(() => new Set())
+  const [actionErrors, setActionErrors] = useState<Partial<Record<string, CommunicationErrorCode>>>(
+    {}
+  )
+  const pendingFocus = useRef<{ id: string; action: ConnectionAction } | undefined>(undefined)
+  const [settledActions, setSettledActions] = useState(0)
   const addButton = useRef<HTMLButtonElement>(null)
   const returnFocusRef = useRef<HTMLElement>(null)
   const loadVersion = useRef(0)
@@ -52,6 +64,24 @@ function ActiveChannelsSettings(): React.JSX.Element {
       clearTimeout(timer)
     }
   }, [reload])
+
+  const awaitingBinding = snapshot?.connections.some((connection) => !!connection.bindingChallenge)
+  useEffect(() => {
+    if (!awaitingBinding) return
+    const timer = setInterval(() => void reload(), 2000)
+    return () => clearInterval(timer)
+  }, [awaitingBinding, reload])
+
+  // A successful switch replaces the pressed button; move focus to its replacement.
+  useEffect(() => {
+    const target = pendingFocus.current
+    if (!target) return
+    pendingFocus.current = undefined
+    const selector = target.action === 'start' ? '.channel-stop-button' : '.channel-start-button'
+    document
+      .querySelector<HTMLButtonElement>(`article[data-connection-id="${target.id}"] ${selector}`)
+      ?.focus()
+  }, [snapshot, settledActions])
 
   const open = (next: Dialog, trigger: HTMLButtonElement): void => {
     returnFocusRef.current = trigger
@@ -81,15 +111,66 @@ function ActiveChannelsSettings(): React.JSX.Element {
     setDialog((current) => (current === pending ? { ...pending, outcome } : current))
   }
 
+  const runConnectionAction = async (
+    connection: Connection,
+    action: ConnectionAction,
+    trigger: HTMLButtonElement
+  ): Promise<void> => {
+    setActionErrors((current) => {
+      if (!(connection.id in current)) return current
+      const rest = { ...current }
+      delete rest[connection.id]
+      return rest
+    })
+    setSwitching((current) => new Set(current).add(connection.id))
+    let outcome: ActionResult
+    try {
+      outcome =
+        action === 'start'
+          ? await window.api.communication.start({ connectionId: connection.id })
+          : await window.api.communication.stop({ connectionId: connection.id })
+    } catch {
+      outcome = { status: 'error', error: { code: 'COMMUNICATION_FAILED' as const } }
+    }
+    setSwitching((current) => {
+      const next = new Set(current)
+      next.delete(connection.id)
+      return next
+    })
+    if (outcome.status === 'ok') {
+      pendingFocus.current = { id: connection.id, action }
+      await reload()
+      setSettledActions((count) => count + 1)
+    } else {
+      setActionErrors((current) => ({ ...current, [connection.id]: outcome.error.code }))
+      trigger.focus()
+    }
+  }
+
   const saveToken = async (token: string): Promise<ActionResult> => {
-    const result =
-      dialog?.kind === 'edit'
-        ? await window.api.communication.setCredential({
-            connectionId: dialog.connection.id,
-            credential: token
-          })
-        : await window.api.communication.createTelegramConnection({ token })
-    if (result.status === 'ok') await reload()
+    if (dialog?.kind === 'edit') {
+      const result = await window.api.communication.setCredential({
+        connectionId: dialog.connection.id,
+        credential: token
+      })
+      if (result.status === 'ok') await reload()
+      return result
+    }
+    const result = await window.api.communication.createTelegramConnection({ token })
+    if (result.status === 'ok') {
+      let binding: BindingCodeResult
+      try {
+        binding = await window.api.communication.createChallenge({
+          connectionId: result.connectionId,
+          capabilities: ['chat', 'sentence']
+        })
+      } catch {
+        binding = { status: 'error', error: { code: 'COMMUNICATION_FAILED' } }
+      }
+      setInitialBindingResults((current) => ({ ...current, [result.connectionId]: binding }))
+      setShowBindingReminder(true)
+      await reload()
+    }
     return result
   }
 
@@ -101,6 +182,11 @@ function ActiveChannelsSettings(): React.JSX.Element {
         connectionId: connection.id
       })
       if (result.status === 'ok') {
+        setInitialBindingResults((current) => {
+          const next = { ...current }
+          delete next[connection.id]
+          return next
+        })
         returnFocusRef.current = addButton.current
         await reload()
         close()
@@ -154,10 +240,16 @@ function ActiveChannelsSettings(): React.JSX.Element {
       )}
       {connections?.map((connection) => {
         const headingId = `channel-${connection.id}`
+        const actionError = actionErrors[connection.id]
         const added =
           connection.createdAt === undefined ? undefined : new Date(connection.createdAt)
         return (
-          <article className="channel-card" key={connection.id} aria-labelledby={headingId}>
+          <article
+            className="channel-card"
+            key={connection.id}
+            aria-labelledby={headingId}
+            data-connection-id={connection.id}
+          >
             <h3 id={headingId}>{channelName(connection)}</h3>
             <p className="channel-added-at">
               {added ? (
@@ -168,7 +260,44 @@ function ActiveChannelsSettings(): React.JSX.Element {
                 t('addedAtUnknown')
               )}
             </p>
+            {connection.adapterId === 'telegram' && (
+              <ChannelBinding
+                connection={connection}
+                initialResult={initialBindingResults[connection.id]}
+                reload={reload}
+              />
+            )}
             <div className="channel-actions">
+              {connection.started ? (
+                <>
+                  <span className="channel-started">{t('started')}</span>
+                  <button
+                    type="button"
+                    className="channel-stop-button"
+                    disabled={connection.deleting || connection.adapterId !== 'telegram'}
+                    aria-disabled={switching.has(connection.id) || undefined}
+                    onClick={(event) => {
+                      if (!switching.has(connection.id))
+                        void runConnectionAction(connection, 'stop', event.currentTarget)
+                    }}
+                  >
+                    {t('stopChannel')}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="channel-start-button"
+                  disabled={connection.deleting || connection.adapterId !== 'telegram'}
+                  aria-disabled={switching.has(connection.id) || undefined}
+                  onClick={(event) => {
+                    if (!switching.has(connection.id))
+                      void runConnectionAction(connection, 'start', event.currentTarget)
+                  }}
+                >
+                  {t('startChannel')}
+                </button>
+              )}
               <button
                 type="button"
                 disabled={connection.deleting || connection.adapterId !== 'telegram'}
@@ -195,6 +324,11 @@ function ActiveChannelsSettings(): React.JSX.Element {
                 {t('deleteChannel')}
               </button>
             </div>
+            {actionError && (
+              <p className="settings-error" role="alert">
+                {t(`errors.${actionError}`)}
+              </p>
+            )}
           </article>
         )
       })}
@@ -204,6 +338,17 @@ function ActiveChannelsSettings(): React.JSX.Element {
           installedAdapters={snapshot.installedAdapters}
           onClose={close}
           onSave={saveToken}
+          returnFocusRef={returnFocusRef}
+        />
+      )}
+      {!dialog && showBindingReminder && (
+        <ConfirmDialog
+          open
+          title={t('bindingReminderTitle')}
+          description={t('bindingReminder')}
+          confirmLabel={t('bindingReminderClose')}
+          onCancel={() => setShowBindingReminder(false)}
+          onConfirm={() => setShowBindingReminder(false)}
           returnFocusRef={returnFocusRef}
         />
       )}

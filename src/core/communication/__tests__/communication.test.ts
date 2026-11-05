@@ -119,6 +119,20 @@ it('ignores mutable display names when deduplicating an event', async () => {
   expect(await f.adapter.receive({ ...event, displayName: 'Changed' })).toEqual(receipt)
 })
 
+it('persists an explicit start marker that survives restarts and is cleared by stop', async () => {
+  const f = fixture()
+  await f.start()
+  expect(f.repository.read((s) => s.connections.get(f.connectionId)!.autoStart)).toBe(true)
+  const persisted = new SqliteCommunicationRepository(f.db)
+  expect(persisted.read((s) => s.connections.get(f.connectionId)!.autoStart)).toBe(true)
+  persisted.close()
+  await f.service.recover()
+  expect(f.repository.read((s) => s.connections.get(f.connectionId)!.autoStart)).toBe(true)
+  await f.start()
+  await f.service.stop(f.connectionId)
+  expect(f.repository.read((s) => s.connections.get(f.connectionId)!.autoStart)).toBe(false)
+})
+
 it('does not declare a timed out stop successful or replace its consumer', async () => {
   const f = fixture()
   await f.start()
