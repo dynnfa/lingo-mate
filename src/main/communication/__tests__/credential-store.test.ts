@@ -30,3 +30,19 @@ it('stores only encrypted bytes, reads only via Main, rejects unsafe references 
     rmSync(directory, { recursive: true, force: true })
   }
 })
+it('prunes only unreferenced credential files, preserving referenced files and unrelated names', async () => {
+  const { existsSync, writeFileSync } = await import('node:fs')
+  const directory = mkdtempSync(join(tmpdir(), 'lingo-credential-prune-'))
+  try {
+    const store = createCommunicationCredentialStore(directory)
+    const live = store.write('live')
+    const orphan = store.write('orphan')
+    writeFileSync(join(directory, 'unrelated'), 'keep')
+    store.prune!([live])
+    expect(store.read(live)).toBe('live')
+    expect(existsSync(join(directory, orphan))).toBe(false)
+    expect(existsSync(join(directory, 'unrelated'))).toBe(true)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

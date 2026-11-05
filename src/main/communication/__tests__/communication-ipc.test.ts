@@ -2,6 +2,7 @@ import type { CommunicationCredentialStore } from '../credential-store'
 import { randomUUID } from 'node:crypto'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { openDatabase } from '../../../database/database'
+import { SqliteCommunicationRepository } from '../../../database/sqlite-communication-repository'
 import { SqliteConversationRepository } from '../../../database/sqlite-conversation-repository'
 import { createTestConversationModule } from '../../../../tests/fixtures/conversation'
 import { CommunicationHost } from '../communication-host'
@@ -29,6 +30,7 @@ function setup(): {
   invoke: (channel: string, value?: unknown) => unknown
   sender: FakeSender
   vault: CommunicationCredentialStore
+  connectionState: () => string | undefined
 } {
   const db = openDatabase(':memory:')
   const repository = new SqliteConversationRepository(db)
@@ -64,7 +66,10 @@ function setup(): {
   const sender = new FakeSender()
   const invoke = (channel: string, value?: unknown): unknown =>
     registeredHandler(channel)({ sender }, value)
-  return { host, connectionId, invoke, sender, vault }
+  const connections = new SqliteCommunicationRepository(db)
+  const connectionState = (): string | undefined =>
+    connections.read((state) => state.connections.get(connectionId)?.state)
+  return { host, connectionId, invoke, sender, vault, connectionState }
 }
 it('uses source and schema guards before changing any channel state', async () => {
   const f = setup()
@@ -77,10 +82,10 @@ it('uses source and schema guards before changing any channel state', async () =
   expect(
     await f.invoke(C.start, { connectionId: f.connectionId, sessionId: randomUUID() })
   ).toEqual({ status: 'error', error: { code: 'INVALID_INPUT' } })
-  expect(f.host.snapshot().connections[0].state).toBe('stopped')
+  expect(f.connectionState()).toBe('stopped')
   expect(await f.invoke(C.start, { connectionId: f.connectionId })).toEqual({ status: 'ok' })
   f.sender.destroy()
-  expect(f.host.snapshot().connections[0].state).toBe('online')
+  expect(f.connectionState()).toBe('online')
 })
 it('exposes no credentials, routing bodies, digests, internal sessions or cursors', async () => {
   const f = setup()
@@ -88,11 +93,66 @@ it('exposes no credentials, routing bodies, digests, internal sessions or cursor
   expect(f.vault.write).toHaveBeenCalledWith('SECRET')
   const snapshot = await f.invoke(C.snapshot)
   expect(JSON.stringify(snapshot)).not.toMatch(/SECRET|credentialRef|digest|sessionId|cursor/)
-  expect(snapshot).toMatchObject({
+  expect(snapshot).toEqual({
     status: 'ok',
-    snapshot: { connections: [{ hasCredential: true }] }
+    snapshot: {
+      installedAdapters: [],
+      connections: [{ id: f.connectionId, adapterId: 'test', createdAt: expect.any(Number) }]
+    }
   })
   expect(
     await f.invoke(C.cancelRequest, { bindingId: randomUUID(), requestId: randomUUID() })
   ).toEqual({ status: 'error', error: { code: 'COMMUNICATION_FAILED' } })
+})
+it('guards Telegram creation and deletion with strict schemas and trusted sources', async () => {
+  const f = setup()
+  const create = vi.spyOn(f.host, 'createTelegramConnection')
+  for (const value of [
+    { token: 'invalid' },
+    { token: '123456:abcdefghijklmnopqrstuvwxyz123456789', adapterId: 'other' },
+    { token: '123456:abcdefghijklmnopqrstuvwxyz123456789', endpoint: 'https://example.com' }
+  ]) {
+    expect(await f.invoke(C.createTelegramConnection, value)).toEqual({
+      status: 'error',
+      error: { code: 'INVALID_INPUT' }
+    })
+  }
+  expect(create).not.toHaveBeenCalled()
+  f.sender.owned = false
+  expect(
+    await f.invoke(C.createTelegramConnection, {
+      token: '123456:abcdefghijklmnopqrstuvwxyz123456789'
+    })
+  ).toEqual({ status: 'error', error: { code: 'UNTRUSTED_SOURCE' } })
+  expect(await f.invoke(C.deleteConnection, { connectionId: f.connectionId })).toEqual({
+    status: 'error',
+    error: { code: 'UNTRUSTED_SOURCE' }
+  })
+})
+
+it('validates source and connection ID before testing and maps failures safely', async () => {
+  const f = setup()
+  const test = vi.spyOn(f.host, 'testConnection').mockResolvedValueOnce(undefined)
+  f.sender.owned = false
+  expect(await f.invoke(C.testConnection, { connectionId: f.connectionId })).toEqual({
+    status: 'error',
+    error: { code: 'UNTRUSTED_SOURCE' }
+  })
+  f.sender.owned = true
+  expect(
+    await f.invoke(C.testConnection, { connectionId: f.connectionId, credential: 'SECRET' })
+  ).toEqual({
+    status: 'error',
+    error: { code: 'INVALID_INPUT' }
+  })
+  expect(test).not.toHaveBeenCalled()
+  expect(await f.invoke(C.testConnection, { connectionId: f.connectionId })).toEqual({
+    status: 'ok'
+  })
+  expect(test).toHaveBeenCalledWith(f.connectionId)
+  test.mockRejectedValueOnce(new Error('SECRET'))
+  expect(await f.invoke(C.testConnection, { connectionId: f.connectionId })).toEqual({
+    status: 'error',
+    error: { code: 'COMMUNICATION_FAILED' }
+  })
 })

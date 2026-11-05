@@ -4,8 +4,14 @@ export function emptyCommunicationApi(): CommunicationApi {
   return {
     snapshot: async () => ({
       status: 'ok',
-      snapshot: { connections: [], challenges: [], bindings: [], requests: [], deliveries: [] }
+      snapshot: { installedAdapters: [], connections: [] }
     }),
+    createTelegramConnection: async () => ({
+      status: 'error',
+      error: { code: 'COMMUNICATION_FAILED' }
+    }),
+    deleteConnection: ok,
+    testConnection: ok,
     start: ok,
     stop: ok,
     confirmBinding: ok,

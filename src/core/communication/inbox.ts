@@ -1,12 +1,18 @@
 import {
   CommunicationError,
   inboundEventSchema,
+  rejectedEnvelopeSchema,
   languagesSchema,
   LIMITS,
   type Capability,
   type Receipt
 } from './communication-contract'
-import { activeBinding, type CommunicationRepository, type Inbox } from './communication-repository'
+import {
+  activeBinding,
+  type CommunicationRepository,
+  type CommunicationState,
+  type Inbox
+} from './communication-repository'
 import type { IdentityBinding } from './identity-binding'
 import type { CommunicationEnvironment } from './environment'
 import type { Outbox } from './outbox'
@@ -23,34 +29,31 @@ export class InboxReceiver {
     private readonly identity: IdentityBinding,
     private readonly outbox: Outbox
   ) {}
-  receive(connectionId: string, generation: number, raw: unknown, cursor?: string): Receipt {
+  receive(
+    connectionId: string,
+    generation: number,
+    raw: unknown,
+    cursor?: string,
+    startAsHelp = false
+  ): Receipt {
     const parsed = inboundEventSchema.safeParse(raw)
     if (!parsed.success || (cursor !== undefined && cursor.length > LIMITS.cursor))
       return { status: 'failed', code: 'INVALID_INPUT' }
     const event = parsed.data
-    const digest = this.env.digest(JSON.stringify(event))
+    const digest = this.env.digest(JSON.stringify({ ...event, displayName: undefined }))
+    if (startAsHelp && event.type === 'text' && /^\/start\s*$/u.test(event.text))
+      event.text = '/help'
     return this.repository.transaction((s) => {
       const connection = s.connections.get(connectionId)
       if (
         !connection ||
+        !connection.enabled ||
         connection.generation !== generation ||
         !['starting', 'online'].includes(connection.state)
       )
         return { status: 'failed', code: 'STOPPED' }
-      const duplicate = [...s.inbox.values()].find(
-        (i) => i.connectionId === connectionId && i.eventId === event.externalEventId
-      )
-      if (duplicate) {
-        if (duplicate.digest !== digest) {
-          this.env.diagnostics({ code: 'EVENT_CONFLICT', connectionId })
-          return { status: 'rejected', code: 'EVENT_CONFLICT' }
-        }
-        if (cursor !== undefined) {
-          connection.cursor = cursor
-          connection.cursorVersion++
-        }
-        return duplicate.receipt
-      }
+      const duplicate = this.duplicate(s, connectionId, event.externalEventId, digest, cursor)
+      if (duplicate) return duplicate
       if (s.inbox.size >= LIMITS.records) return { status: 'failed', code: 'BACKPRESSURE' }
       const now = this.env.now(),
         id = this.env.id()
@@ -92,7 +95,11 @@ export class InboxReceiver {
             inbox,
             message('rejected', this.env.languages().uiLanguage, { code })
           )
-        if (event.type === 'interaction' || /^\/(bind|confirm)(?:\s|$)/u.test(text))
+        if (
+          event.type === 'interaction' ||
+          /^\/(bind|confirm)(?:\s|$)/u.test(text.trimStart()) ||
+          (startAsHelp && /^\/start(?:\s|$)/u.test(text))
+        )
           inbox.event = undefined
         return inbox.receipt
       }
@@ -201,6 +208,86 @@ export class InboxReceiver {
       inbox.state = 'queued'
       inbox.receipt = { status: 'persisted', requestId: this.env.id() }
       return inbox.receipt
+    })
+  }
+  private duplicate(
+    s: CommunicationState,
+    connectionId: string,
+    eventId: string,
+    digest: string,
+    cursor?: string
+  ): Receipt | undefined {
+    const previous = [...s.inbox.values()].find(
+      (i) => i.connectionId === connectionId && i.eventId === eventId
+    )
+    if (!previous) return undefined
+    if (cursor !== undefined) {
+      const connection = s.connections.get(connectionId)!
+      connection.cursor = cursor
+      connection.cursorVersion++
+    }
+    // v15 records may still hash displayName. Compare their retained canonical
+    // event before upgrading the digest, without replaying an execution.
+    const canonical = previous.event
+      ? this.env.digest(JSON.stringify({ ...previous.event, displayName: undefined }))
+      : undefined
+    if (
+      previous.digest === digest ||
+      (canonical === digest && previous.digest === this.env.digest(JSON.stringify(previous.event)))
+    ) {
+      previous.digest = digest
+      return previous.receipt
+    }
+    previous.conflictDigests ??= []
+    if (!previous.conflictDigests.includes(digest) && previous.conflictDigests.length < 4)
+      previous.conflictDigests.push(digest)
+    return { status: 'rejected', code: 'EVENT_CONFLICT' }
+  }
+  receiveRejected(
+    connectionId: string,
+    generation: number,
+    raw: unknown,
+    cursor?: string
+  ): Receipt {
+    const parsed = rejectedEnvelopeSchema.safeParse(raw)
+    if (!parsed.success || (cursor !== undefined && cursor.length > LIMITS.cursor))
+      return { status: 'failed', code: 'INVALID_INPUT' }
+    const envelope = parsed.data
+    const digest = this.env.digest(JSON.stringify(envelope))
+    return this.repository.transaction((s) => {
+      const connection = s.connections.get(connectionId)
+      if (
+        !connection ||
+        connection.generation !== generation ||
+        !connection.enabled ||
+        !['starting', 'online'].includes(connection.state)
+      )
+        return { status: 'failed', code: 'STOPPED' }
+      const duplicate = this.duplicate(s, connectionId, envelope.externalEventId, digest, cursor)
+      if (duplicate) return duplicate
+      if (s.inbox.size >= LIMITS.records) return { status: 'failed', code: 'BACKPRESSURE' }
+      const now = this.env.now(),
+        id = this.env.id()
+      const receipt: Receipt = { status: 'rejected', code: 'UNSUPPORTED_INPUT' }
+      s.inbox.set(id, {
+        id,
+        connectionId,
+        eventId: envelope.externalEventId,
+        digest,
+        rejectionKind: envelope.kind,
+        receipt,
+        state: 'rejected',
+        error: receipt.code,
+        receivedAt: now,
+        expiresAt: now,
+        scopeKey: '',
+        control: false
+      })
+      if (cursor !== undefined) {
+        connection.cursor = cursor
+        connection.cursorVersion++
+      }
+      return receipt
     })
   }
   cancel(bindingId: string, scopeKey: string, requestId?: string): string[] {

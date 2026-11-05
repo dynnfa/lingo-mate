@@ -1,0 +1,25 @@
+# pnpm >= 10 reads dependency-build approvals only from this file; the same
+# list in package.json's "pnpm" field is silently ignored.
+# - pnpm 10/11 read the "onlyBuiltDependencies" list below.
+# - pnpm 12 requires an explicit true/false decision per script-shipping
+#   dependency in "allowBuilds". false keeps the historical behavior: the
+#   script never runs (these packages ship prebuilt artifacts and worked
+#   without their install scripts).
+onlyBuiltDependencies:
+  - electron
+  - esbuild
+allowBuilds:
+  electron: true
+  esbuild: true
+  "@met4citizen/headtts": false
+  electron-winstaller: false
+  onnxruntime-node: false
+  protobufjs: false
+  sharp: false
+
+# yauzl@2 read streams stall mid-entry on Node 24.16+/26.1+ (reproduced here
+# on Node 26.13; see thejoshwolfe/yauzl#177 and electron/electron#51619),
+# which makes electron's install.js silently extract nothing or hang. yauzl 3
+# fixes the stream handling; electron depends on yauzl only via extract-zip.
+overrides:
+  yauzl: ^3.4.0
