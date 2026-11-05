@@ -143,6 +143,7 @@ React Renderer -> Preload API -> Electron Main -> TypeScript Core
 
 ## 开发约定
 
+- 新建 Git 分支统一使用 `feature/` 前缀，例如 `feature/sentence-practice`。
 - Electron、Renderer 和宿主领域代码使用 TypeScript，避免无必要的 `any` 和 `@ts-ignore`；`agent-engine/` 使用 Python 类型标注，并通过既有 Ruff 与严格 mypy 检查。
 - 保持模块职责单一；组件、IPC handler 和 Agent 工具不应承担多个领域职责。
 - IPC channel 使用稳定、可读的领域命名，并集中定义，避免散落的字符串常量。
