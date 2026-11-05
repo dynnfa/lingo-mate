@@ -17,6 +17,8 @@ export interface Connection {
   enabled: boolean
   generation: number
   state: ConnectionState
+  // Durable user intent to keep this connection running across app restarts.
+  autoStart?: boolean
   config: Record<string, string>
   credentialRef?: string
   error?: string

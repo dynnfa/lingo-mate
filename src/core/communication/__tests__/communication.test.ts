@@ -20,7 +20,7 @@ interface Fixture {
   event(text?: string, actorId?: string, eventId?: string): TextEvent
   receive(text?: string, actor?: string, eventId?: string): Promise<Receipt>
   bind(actor?: string): Promise<Binding>
-  start(): Promise<void>
+  start(): ReturnType<CommunicationService['start']>
   advance(ms: number): void
   db: ReturnType<typeof openDatabase>
 }
@@ -59,7 +59,7 @@ function fixture(interactive = false): Fixture {
     occurredAt: now,
     text
   })
-  const start = (): Promise<void> => service.start(connectionId)
+  const start = (): ReturnType<CommunicationService['start']> => service.start(connectionId)
   const receive = (text = 'hello', actor = 'alice', eventId?: string): Promise<Receipt> =>
     adapter.receive(event(text, actor, eventId))
   const bind = async (actor = 'alice'): Promise<Binding> => {
@@ -117,6 +117,20 @@ it('ignores mutable display names when deduplicating an event', async () => {
   const event = f.event()
   const receipt = await f.adapter.receive({ ...event, displayName: 'Alice' })
   expect(await f.adapter.receive({ ...event, displayName: 'Changed' })).toEqual(receipt)
+})
+
+it('persists an explicit start marker that survives restarts and is cleared by stop', async () => {
+  const f = fixture()
+  await f.start()
+  expect(f.repository.read((s) => s.connections.get(f.connectionId)!.autoStart)).toBe(true)
+  const persisted = new SqliteCommunicationRepository(f.db)
+  expect(persisted.read((s) => s.connections.get(f.connectionId)!.autoStart)).toBe(true)
+  persisted.close()
+  await f.service.recover()
+  expect(f.repository.read((s) => s.connections.get(f.connectionId)!.autoStart)).toBe(true)
+  await f.start()
+  await f.service.stop(f.connectionId)
+  expect(f.repository.read((s) => s.connections.get(f.connectionId)!.autoStart)).toBe(false)
 })
 
 it('does not declare a timed out stop successful or replace its consumer', async () => {

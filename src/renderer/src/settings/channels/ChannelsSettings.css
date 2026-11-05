@@ -26,6 +26,11 @@
   font-size: 13px;
 }
 
+.channel-started {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
 .channel-actions {
   display: flex;
   flex-wrap: wrap;
@@ -85,4 +90,59 @@
 .channel-token-form select:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 3px;
+}
+
+.channel-binding {
+  display: grid;
+  gap: 8px;
+  padding-block: 12px;
+  border-block: 1px solid var(--color-border-message);
+}
+
+.channel-binding-status,
+.channel-binding-hint,
+.channel-binding-candidate p {
+  margin: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.channel-binding-hint {
+  color: var(--color-text-secondary);
+}
+
+.channel-binding-code {
+  display: grid;
+  gap: 5px;
+  font-size: 13px;
+}
+
+.channel-binding-code input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--color-border-message);
+  border-radius: 6px;
+  color: var(--color-text);
+  background: var(--color-surface-secondary);
+  font-family: monospace;
+}
+
+.channel-binding-actions,
+.channel-binding-candidate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.channel-binding button {
+  padding: 6px 12px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-secondary);
+  font-size: 13px;
+}
+
+.channel-binding button:hover:not(:disabled) {
+  background: var(--color-surface-hover);
 }

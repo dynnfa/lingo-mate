@@ -70,6 +70,61 @@ it('creates stopped verified connections without exposing secrets and serializes
   expect(f.host.snapshot().connections).toMatchObject([{ id, username: 'lingo_bot' }])
   expect(JSON.stringify(f.host.snapshot())).not.toContain(token)
 })
+it('projects binding progress without exposing codes or digests and requires desktop confirmation', async () => {
+  const f = fixture()
+  const id = await f.host.createTelegramConnection(token)
+  expect(f.host.snapshot().connections[0]).toMatchObject({ bindingCount: 0 })
+  const challenge = f.host.service.createChallenge(id, ['chat', 'sentence'])
+  expect(f.host.snapshot().connections[0]).toMatchObject({
+    bindingChallenge: { challengeId: challenge.challengeId, expiresAt: challenge.expiresAt }
+  })
+  await f.host.start(id)
+  const receipt = await f.adapter.receive({
+    type: 'text',
+    externalEventId: '1',
+    externalMessageId: '1',
+    externalActorId: '12345',
+    externalConversationId: '12345',
+    displayName: 'Alice',
+    scope: 'private',
+    occurredAt: Date.now(),
+    text: `/bind ${challenge.code}`
+  })
+  expect(receipt.code).toBe('AWAITING_CONFIRMATION')
+  const snapshot = f.host.snapshot()
+  expect(snapshot.connections[0]).toMatchObject({
+    bindingCount: 0,
+    bindingChallenge: {
+      challengeId: challenge.challengeId,
+      expiresAt: challenge.expiresAt,
+      externalActorId: '12345',
+      displayName: 'Alice'
+    }
+  })
+  expect(JSON.stringify(snapshot)).not.toMatch(/digest|capabilities|principalId|credentialRef/)
+  expect(JSON.stringify(snapshot)).not.toContain(challenge.code)
+  f.host.service.confirmBinding(challenge.challengeId)
+  expect(f.host.snapshot().connections[0]).toMatchObject({ bindingCount: 1 })
+  expect(f.host.snapshot().connections[0].bindingChallenge).toBeUndefined()
+})
+it('omits expired, exhausted and superseded binding challenges from the desktop snapshot', async () => {
+  const f = fixture()
+  const id = await f.host.createTelegramConnection(token)
+  const first = f.host.service.createChallenge(id, ['chat'])
+  const current = f.host.service.createChallenge(id, ['chat'])
+  expect(f.host.snapshot().connections[0].bindingChallenge?.challengeId).toBe(current.challengeId)
+  const repository = new SqliteCommunicationRepository(f.db)
+  repository.transaction((s) => {
+    s.challenges.get(current.challengeId)!.expiresAt = Date.now() - 1
+  })
+  expect(f.host.snapshot().connections[0].bindingChallenge).toBeUndefined()
+  const exhausted = f.host.service.createChallenge(id, ['chat'])
+  repository.transaction((s) => {
+    s.challenges.get(exhausted.challengeId)!.attempts = 5
+  })
+  expect(f.host.snapshot().connections[0].bindingChallenge).toBeUndefined()
+  expect(() => f.host.service.confirmBinding(first.challengeId)).toThrow('CHALLENGE_INVALID')
+})
 it('stops before rotation, refuses a different bot, retains the old reference and requires explicit restart', async () => {
   const f = fixture()
   const id = await f.host.createTelegramConnection(token)
@@ -149,6 +204,68 @@ it('persists the time of creation and preserves it through credential rotation',
     )
     .run(id)
   expect(f.host.snapshot().connections[0].createdAt).toBeUndefined()
+})
+
+it('persists an auto-start marker and resumes only marked connections after a restart', async () => {
+  const f = fixture()
+  const marked = await f.host.createTelegramConnection(token)
+  f.verify.mockResolvedValueOnce({ botId: '654321', username: 'other_bot' })
+  const unmarked = await f.host.createTelegramConnection(token)
+  expect(f.host.snapshot().connections).toMatchObject([
+    { id: marked, started: false },
+    { id: unmarked, started: false }
+  ])
+  await f.host.start(marked)
+  expect(
+    f.db
+      .prepare(
+        "SELECT json_extract(data, '$.autoStart') AS autoStart FROM communication_connections WHERE id = ?"
+      )
+      .get(marked)
+  ).toEqual({ autoStart: 1 })
+  expect(f.host.snapshot().connections).toMatchObject([
+    { id: marked, started: true },
+    { id: unmarked, started: false }
+  ])
+  await f.host.shutdown()
+  const repository = new SqliteConversationRepository(f.db)
+  const module = createTestConversationModule(
+    {
+      async *streamReply() {
+        yield { type: 'text', delta: 'answer' }
+      }
+    },
+    repository
+  )
+  const relaunched = new CommunicationHost(
+    f.db,
+    module,
+    repository,
+    { write: vi.fn(() => randomUUID()), read: vi.fn(() => token), remove: vi.fn() },
+    () => ({ uiLanguage: 'en', outputLanguage: 'en', targetLanguage: 'en' }),
+    vi.fn(),
+    [{ adapterId: 'telegram', create: () => new TestAdapter(false), startAsHelp: true }]
+  )
+  // Runs before the fixture cleanup closes the shared database handle.
+  close.unshift(async () => {
+    await relaunched.shutdown()
+    await module.shutdown()
+  })
+  await relaunched.initialize()
+  await vi.waitFor(() => expect(f.connectionState(marked)).toBe('online'))
+  expect(f.connectionState(unmarked)).toBe('stopped')
+  expect(relaunched.snapshot().connections).toMatchObject([
+    { id: marked, started: true },
+    { id: unmarked, started: false }
+  ])
+  await relaunched.stop(marked)
+  expect(
+    f.db
+      .prepare(
+        "SELECT json_extract(data, '$.autoStart') AS autoStart FROM communication_connections WHERE id = ?"
+      )
+      .get(marked)
+  ).toEqual({ autoStart: 0 })
 })
 
 it('tests the selected stored credential without starting a connection or writing data', async () => {

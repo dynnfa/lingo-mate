@@ -35,7 +35,9 @@ export const communicationErrorCodeSchema = z.enum([
   'CONNECTION_STOP_FAILED',
   'CONNECTION_FAILED',
   'CONNECTION_LOST',
-  'CONNECTION_LIMIT'
+  'CONNECTION_LIMIT',
+  'CHALLENGE_INVALID',
+  'ALREADY_BOUND'
 ])
 export type CommunicationErrorCode = z.infer<typeof communicationErrorCodeSchema>
 export const communicationErrorSchema = z.strictObject({ code: communicationErrorCodeSchema })
@@ -95,7 +97,18 @@ export const communicationSnapshotSchema = z.strictObject({
           .regex(/^[A-Za-z0-9_]{5,32}$/u)
           .optional(),
         createdAt: z.number().int().nonnegative().max(8.64e15).optional(),
-        deleting: z.boolean().optional()
+        started: z.boolean(),
+        autoStart: z.literal(true).optional(),
+        deleting: z.boolean().optional(),
+        bindingCount: z.number().int().nonnegative().optional(),
+        bindingChallenge: z
+          .strictObject({
+            challengeId: id,
+            expiresAt: z.number().int().nonnegative().max(8.64e15),
+            externalActorId: z.string().min(1).max(256).optional(),
+            displayName: z.string().max(128).optional()
+          })
+          .optional()
       })
     )
     .max(32)
