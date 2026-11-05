@@ -16,3 +16,10 @@ allowBuilds:
   onnxruntime-node: false
   protobufjs: false
   sharp: false
+
+# yauzl@2 read streams stall mid-entry on Node 24.16+/26.1+ (reproduced here
+# on Node 26.13; see thejoshwolfe/yauzl#177 and electron/electron#51619),
+# which makes electron's install.js silently extract nothing or hang. yauzl 3
+# fixes the stream handling; electron depends on yauzl only via extract-zip.
+overrides:
+  yauzl: ^3.4.0

@@ -38,7 +38,7 @@ For now, use the source setup below. This README does not yet provide a prebuilt
 
 Install these prerequisites first:
 
-- **Node.js 22.12+ (22.x line only)** — required by the current Vite / Electron Vite toolchain; see the [installation notes](#installation-notes) below.
+- **Node.js 22.12+** (22.x line recommended) — required by the current Vite / Electron Vite toolchain; see the [installation notes](#installation-notes) below.
 - **pnpm (10+)** — JavaScript dependency management.
 - **uv** — Python environment management.
 - **Python 3.13.3** — pinned in `agent-engine/.python-version`; `uv` manages the project environment.
@@ -53,7 +53,7 @@ pnpm dev
 
 #### Installation notes
 
-- **Stay on the Node 22.x line.** Node 24/26 are not supported: Electron's binary installer stalls on them, so `pnpm install` finishes without downloading the Electron binary and `pnpm dev` then fails with `Error: Electron uninstall`. `.nvmrc` pins the version for nvm/fnm users.
+- **Prefer Node 22 (22.12+).** It is the line this toolchain is validated on; `.nvmrc` pins it for nvm/fnm users. Node 24.16+/26.1+ changed core stream behavior so `yauzl@2` — used by Electron's binary installer — stalls mid-extraction: `pnpm install` ends without the Electron binary and `pnpm dev` then fails with `Error: Electron uninstall`. The `yauzl` override in `pnpm-workspace.yaml` repairs the installer on those lines (verified on Node 26); other toolchain stages are still only validated on Node 22.
 - **Dependency build-script approvals live in `pnpm-workspace.yaml`.** pnpm 10 and newer no longer read the `pnpm` field in `package.json`. `electron` and `esbuild` must run their install scripts; their approvals (and explicit refusals for packages that ship prebuilt artifacts) are declared there. Update that file when adding dependencies with build scripts.
 - **Verify the Electron binary after installing.** `node_modules/electron/path.txt` should exist. If it is missing, run `pnpm rebuild electron` with Node 22 active.
 - **Slow or blocked downloads.** If the Electron binary download is slow, set a mirror in `~/.npmrc`, for example `electron_mirror=https://npmmirror.com/mirrors/electron/`.
