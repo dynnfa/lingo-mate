@@ -530,3 +530,94 @@ it('shows the automatically generated code even if polling discovers the new car
     )
   ).toHaveValue('late-code')
 })
+
+it('shows QQ setup in Chinese, clears AppSecret and creates a chat-only binding by default', async () => {
+  const { api, snapshot, setActive } = setup('zh-CN')
+  snapshot.installedAdapters.push('qq')
+  api.createQqConnection = vi.fn<typeof api.createQqConnection>(async () => ({
+    status: 'error',
+    error: { code: 'QQ_UNAUTHORIZED' }
+  }))
+  const add = screen.getByRole('button', { name: '添加渠道' })
+  await waitFor(() => expect(add).toBeEnabled())
+  fireEvent.click(add)
+  fireEvent.change(screen.getByRole('combobox', { name: '渠道类型' }), { target: { value: 'qq' } })
+  expect(screen.getByRole('option', { name: 'QQ 机器人' })).toBeVisible()
+  fireEvent.change(screen.getByLabelText('AppID'), { target: { value: '123456' } })
+  const secret = screen.getByLabelText('AppSecret')
+  expect(secret).toHaveAttribute('type', 'password')
+  fireEvent.change(secret, { target: { value: 'fixture-secret' } })
+  fireEvent.submit(secret.closest('form')!)
+  await waitFor(() =>
+    expect(api.createQqConnection).toHaveBeenCalledWith({
+      appId: '123456',
+      appSecret: 'fixture-secret'
+    })
+  )
+  expect(secret).toHaveValue('')
+  await waitFor(() => expect(secret).toHaveFocus())
+  fireEvent.keyDown(secret, { key: 'Escape' })
+  expect(add).toHaveFocus()
+
+  snapshot.connections = [
+    { id, adapterId: 'qq', appId: '123456', state: 'online', started: true, credentialSaved: true }
+  ]
+  api.createChallenge = vi.fn<typeof api.createChallenge>(async () => ({
+    status: 'error',
+    error: { code: 'CHALLENGE_INVALID' }
+  }))
+  // Reopen the settings to load the newly online card without waiting for the poll.
+  setActive(false)
+  setActive(true)
+  const card = await screen.findByRole('article', { name: 'QQ 机器人 · AppID 123456' })
+  const sentence = within(card).getByRole('checkbox', { name: '允许 /sentence 收录句子' })
+  expect(sentence).not.toBeChecked()
+  fireEvent.click(within(card).getByRole('button', { name: '生成绑定码' }))
+  await waitFor(() =>
+    expect(api.createChallenge).toHaveBeenCalledWith({
+      connectionId: id,
+      capabilities: ['chat']
+    })
+  )
+  await waitFor(() => expect(sentence).toBeEnabled())
+  fireEvent.click(sentence)
+  fireEvent.click(within(card).getByRole('button', { name: '生成绑定码' }))
+  await waitFor(() =>
+    expect(api.createChallenge).toHaveBeenLastCalledWith({
+      connectionId: id,
+      capabilities: ['chat', 'sentence']
+    })
+  )
+})
+
+it('shows QQ status in English and unbinds only the confirmed OpenID with focus restored', async () => {
+  const { api, snapshot } = setup('en', [
+    {
+      id,
+      adapterId: 'qq',
+      appId: '123456',
+      state: 'online',
+      started: true,
+      credentialSaved: true,
+      bindingCount: 1,
+      bindings: [{ bindingId: otherId, openId: 'OPENID_1' }]
+    }
+  ])
+  api.revokeBinding = vi.fn<typeof api.revokeBinding>(async () => {
+    snapshot.connections[0].bindingCount = 0
+    snapshot.connections[0].bindings = []
+    return { status: 'ok' }
+  })
+  const card = await screen.findByRole('article', { name: 'QQ Bot · AppID 123456' })
+  expect(within(card).getByText('Online')).toBeVisible()
+  const unbind = within(card).getByRole('button', { name: 'Unbind QQ account OPENID_1' })
+  fireEvent.click(unbind)
+  const dialog = screen.getByRole('dialog', { name: 'Unbind' })
+  expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+  fireEvent.keyDown(dialog, { key: 'Escape' })
+  expect(unbind).toHaveFocus()
+  fireEvent.click(unbind)
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Unbind' }))
+  expect(await within(card).findByText('No account bound')).toHaveFocus()
+  expect(api.revokeBinding).toHaveBeenCalledWith({ bindingId: otherId })
+})

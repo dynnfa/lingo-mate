@@ -1,3 +1,4 @@
+import { AdapterConnectionError } from '../../core/communication/communication-adapter'
 import { CommunicationError } from '../../core/communication/communication-contract'
 import { TelegramTransportError } from '../channels/telegram/telegram-transport'
 import * as protocol from '../../shared/communication'
@@ -12,7 +13,9 @@ export function registerCommunicationIpc(
     invalidInputError: () => ({ code: 'INVALID_INPUT' as const }),
     mapError: (error: unknown) => {
       const code = protocol.communicationErrorCodeSchema.safeParse(
-        error instanceof CommunicationError || error instanceof TelegramTransportError
+        error instanceof CommunicationError ||
+          error instanceof TelegramTransportError ||
+          error instanceof AdapterConnectionError
           ? error.code
           : undefined
       )
@@ -138,6 +141,28 @@ export function registerCommunicationIpc(
       resultSchema: protocol.communicationActionResultSchema,
       handler: async (i) => {
         await host.setCredential(i.connectionId, i.credential)
+        return { status: 'ok' as const }
+      }
+    })
+  )
+  removers.push(
+    register({
+      ...errors,
+      channel: protocol.COMMUNICATION_CHANNELS.createQqConnection,
+      inputSchema: protocol.createQqInputSchema,
+      resultSchema: protocol.createConnectionResultSchema,
+      handler: async (i) => ({
+        status: 'ok' as const,
+        connectionId: await host.createQqConnection(i.appId, i.appSecret)
+      })
+    }),
+    register({
+      ...errors,
+      channel: protocol.COMMUNICATION_CHANNELS.replaceQqSecret,
+      inputSchema: protocol.replaceQqSecretInputSchema,
+      resultSchema: protocol.communicationActionResultSchema,
+      handler: async (i) => {
+        await host.replaceQqSecret(i.connectionId, i.appSecret)
         return { status: 'ok' as const }
       }
     })

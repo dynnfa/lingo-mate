@@ -6,6 +6,8 @@ import type {
   CommunicationSnapshot
 } from '../../../../shared/communication'
 
+import { ConfirmDialog } from '../../components/ConfirmDialog'
+
 export type BindingCodeResult = Awaited<ReturnType<CommunicationApi['createChallenge']>>
 
 export function ChannelBinding({
@@ -24,6 +26,11 @@ export function ChannelBinding({
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
   const [now, setNow] = useState(Date.now)
+  const qq = connection.adapterId === 'qq'
+  const canGenerate = !qq || connection.state === 'online'
+  const [sentenceAllowed, setSentenceAllowed] = useState(false)
+  const [revoke, setRevoke] = useState<NonNullable<typeof connection.bindings>[number]>()
+  const revokeFocus = useRef<HTMLElement | null>(null)
   const status = useRef<HTMLParagraphElement>(null)
   // Polling may show a newly created card before its automatic code arrives.
   const current = localResult === undefined ? initialResult : localResult
@@ -44,7 +51,7 @@ export function ChannelBinding({
   const expired = !!expiresAt && expiresAt <= now
 
   const generate = async (): Promise<void> => {
-    if (busy) return
+    if (busy || !canGenerate) return
     setBusy(true)
     setError(undefined)
     setLocalResult(null)
@@ -52,7 +59,7 @@ export function ChannelBinding({
     try {
       const result = await window.api.communication.createChallenge({
         connectionId: connection.id,
-        capabilities: ['chat', 'sentence']
+        capabilities: !qq || sentenceAllowed ? ['chat', 'sentence'] : ['chat']
       })
       setLocalResult(result)
       setNow(Date.now())
@@ -94,6 +101,24 @@ export function ChannelBinding({
     }
   }
 
+  const unbind = async (): Promise<void> => {
+    if (!revoke || busy) return
+    setBusy(true)
+    setError(undefined)
+    try {
+      const result = await window.api.communication.revokeBinding({ bindingId: revoke.bindingId })
+      if (result.status === 'ok') {
+        revokeFocus.current = status.current
+        await reload()
+        setRevoke(undefined)
+      } else setError(result.error.code)
+    } catch {
+      setError('COMMUNICATION_FAILED')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="channel-binding">
       <p ref={status} tabIndex={-1} role="status" className="channel-binding-status">
@@ -111,7 +136,9 @@ export function ChannelBinding({
           spellCheck={false}
         />
       </label>
-      <p className="channel-binding-hint">{t('bindingInstructions')}</p>
+      <p className="channel-binding-hint">
+        {t(qq ? 'qqBindingInstructions' : 'bindingInstructions')}
+      </p>
       <p className="channel-binding-hint">{t('bindingCodePrivacy')}</p>
       {active && (
         <p className="channel-binding-hint">
@@ -127,10 +154,21 @@ export function ChannelBinding({
           {t('bindingCodeExpired')}
         </p>
       )}
+      {qq && (
+        <label className="channel-binding-hint">
+          <input
+            type="checkbox"
+            checked={sentenceAllowed}
+            disabled={busy || connection.deleting}
+            onChange={(event) => setSentenceAllowed(event.target.checked)}
+          />
+          {t('qqSentencePermission')}
+        </label>
+      )}
       <div className="channel-binding-actions">
         <button
           type="button"
-          disabled={busy || connection.deleting}
+          disabled={busy || connection.deleting || !canGenerate}
           onClick={() => void generate()}
         >
           {t(code || challenge ? 'regenerateBindingCode' : 'generateBindingCode')}
@@ -145,7 +183,7 @@ export function ChannelBinding({
       {active?.externalActorId && (
         <div className="channel-binding-candidate">
           <p>
-            {t('bindingCandidate', {
+            {t(qq ? 'qqBindingCandidate' : 'bindingCandidate', {
               name: active.displayName || t('unnamedAccount'),
               userId: active.externalActorId
             })}
@@ -159,7 +197,42 @@ export function ChannelBinding({
           </button>
         </div>
       )}
-      {displayError && (
+      {connection.bindings?.map((binding) => (
+        <div key={binding.bindingId} className="channel-binding-candidate">
+          <p>{t('qqBoundAccount', { userId: binding.openId })}</p>
+          <button
+            type="button"
+            disabled={busy || connection.deleting}
+            aria-label={t('qqUnbindAccount', { userId: binding.openId })}
+            onClick={(event) => {
+              revokeFocus.current = event.currentTarget
+              setError(undefined)
+              setRevoke(binding)
+            }}
+          >
+            {t('qqUnbind')}
+          </button>
+        </div>
+      ))}
+      {revoke && (
+        <ConfirmDialog
+          open
+          title={t('qqUnbind')}
+          tone="danger"
+          description={t('qqUnbindPrompt', { userId: revoke.openId })}
+          confirmLabel={t('qqUnbind')}
+          cancelLabel={t('cancelForm')}
+          busy={busy}
+          error={error && error !== 'COPY_FAILED' ? t(`errors.${error}`) : undefined}
+          onCancel={() => {
+            setRevoke(undefined)
+            setError(undefined)
+          }}
+          onConfirm={() => void unbind()}
+          returnFocusRef={revokeFocus}
+        />
+      )}
+      {displayError && !revoke && (
         <p role="alert" className="settings-error">
           {displayError === 'COPY_FAILED' ? t('bindingCopyFailed') : t(`errors.${displayError}`)}
         </p>

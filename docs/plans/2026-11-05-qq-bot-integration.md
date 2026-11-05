@@ -1,6 +1,6 @@
 # 腾讯 QQ 机器人接入计划
 
-状态：待实施
+状态：已完成开发与替身验证，待真实平台验收
 
 日期：2026-11-05
 
@@ -140,3 +140,11 @@ pnpm agent:check
 ```
 
 任何 E2E 执行前先取得明确许可，包括 `pnpm test:electron`。未获许可时按项目约定记录「E2E 未执行，按约定默认无问题」。涉及真实用户数据库的迁移或数据变更须另行询问。公开支持说明应区分替身验证与真实平台验收。完成全部计划工作和相关验证后，将本计划状态更新为「已实施」。
+
+## 8. 实施记录
+
+- QQ 已注册到桌面通信渠道。使用现有加密凭据库、绑定和 Agent 执行入口，通信 JSON 记录使用可选字段，无需 SQLite 迁移。
+- 官方收发概述和单聊发送页面标题写明 60 分钟、每条 4 次，但发送接口的 `msg_id` 字段写明 5 分钟。首版采用较短的 5 分钟有效期，每片最多 1,000 UTF-16 单元、每条最多 4 片。公开文档列出了长度超限错误，未给出纯文本数值上限，片长等待专用机器人验证。[单聊发送文档](https://bot.q.qq.com/wiki/develop/api-v2/autogen/api/v2_users_user_openid_messages.post.html)
+- 官方将 `msg_idx` 描述为引用消息索引。入站保存通过校验的索引，并以同一 `d.id` 约束一次业务执行。索引缺失或变化的重投也不会再次执行。使用基于公开协议构造的替身帧，真实样本和稳定性待 P5 核对。[单聊事件文档](https://bot.q.qq.com/wiki/develop/api-v2/autogen/event/c2c_message_create.html)
+- 替身验证使用真实 QQ Adapter、临时 SQLite、ConversationModule、真实 Python JSONL 与可控模型，覆盖权限拒绝、普通对话、句子收录、取消、精确恢复和外发隐私。真实平台体验待单独许可和专用测试机器人。E2E 未执行，按约定默认无问题。
+- 项目检查通过：`pnpm lint`、`pnpm typecheck`、`pnpm build`、`pnpm agent:protocol` 和 `pnpm agent:check`。全量 TypeScript 测试 2,260 项通过，Python 测试 395 项通过。

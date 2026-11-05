@@ -19,7 +19,8 @@
   "chooseChannel": "Select a channel",
   "noChannelTypes": "No channel types are available.",
   "adapters": {
-    "telegram": "Telegram"
+    "telegram": "Telegram",
+    "qq": "QQ Bot"
   },
   "channelName": "{{adapter}} · @{{username}}",
   "addedAt": "Added {{date}}",
@@ -60,7 +61,14 @@
     "CONNECTION_LOST": "The connection was lost.",
     "CONNECTION_LIMIT": "The connection limit was reached.",
     "CHALLENGE_INVALID": "The code has expired or is invalid. Generate a new code and send the binding command again.",
-    "ALREADY_BOUND": "This account is already bound."
+    "ALREADY_BOUND": "This account is already bound.",
+    "QQ_DUPLICATE_APP": "This QQ AppID already has a connection.",
+    "QQ_UNAUTHORIZED": "The QQ AppID or AppSecret is invalid or has been revoked.",
+    "QQ_GATEWAY_UNAVAILABLE": "QQ did not allow the WebSocket connection. Check event delivery mode and direct message permissions.",
+    "QQ_INVALID_RESPONSE": "QQ returned an invalid response.",
+    "QQ_NETWORK": "Could not reach QQ.",
+    "QQ_RATE_LIMITED": "QQ is limiting requests. Wait before retrying.",
+    "QQ_ADMISSION_FAILED": "The QQ event could not be saved. The channel will retry the connection."
   },
   "bindingReminderTitle": "Bind your Telegram account",
   "bindingReminder": "Your channel has been added. Start the channel, copy the binding command from its card and send it in a private chat with this Bot. Return here to check the account and confirm binding. Messages will not receive replies until binding is complete.",
@@ -82,5 +90,31 @@
   "boundAccounts_other": "Bound accounts: {{count}}",
   "bindingCandidate": "Account awaiting confirmation: {{name}} (Telegram user ID: {{userId}}). Confirm only if this is your account.",
   "unnamedAccount": "Unnamed account",
-  "confirmAccountBinding": "Confirm account binding"
+  "confirmAccountBinding": "Confirm account binding",
+  "qqTruncated": "Reply shortened. See the full answer on desktop.",
+  "qqAppId": "AppID",
+  "qqAppSecret": "AppSecret",
+  "qqChannelName": "QQ Bot · AppID {{appId}}",
+  "qqSetup": "Enable WebSocket and direct messages for the bot in the QQ Open Platform. Keep Lingo Mate running and start the channel after opening the app. Lingo Mate sends up to four replies within five minutes of the original message.",
+  "qqCredentialSaved": "AppSecret saved securely.",
+  "qqCredentialMissing": "Add an AppSecret before starting the channel.",
+  "qqInvalidInput": "Enter a valid AppID and AppSecret.",
+  "qqTestSuccess": "Credentials accepted and the QQ gateway is reachable. Start the channel to subscribe to events.",
+  "editQqSecret": "Replace AppSecret",
+  "saveQqSecret": "Save AppSecret",
+  "qqBindingInstructions": "Start the channel, then send /bind <code> in a direct message to the bot. Confirm the QQ account here.",
+  "qqSentencePermission": "Allow /sentence to save sentences",
+  "qqBindingCandidate": "Confirm that this is your QQ account {{name}} (OpenID {{userId}}).",
+  "qqBoundAccount": "QQ account · OpenID {{userId}}",
+  "qqUnbind": "Unbind",
+  "qqUnbindAccount": "Unbind QQ account {{userId}}",
+  "qqUnbindPrompt": "Remove learning access for QQ account {{userId}}?",
+  "qqState": {
+    "stopped": "Stopped",
+    "starting": "Connecting",
+    "online": "Online",
+    "reconnecting": "Reconnecting",
+    "error": "Connection error",
+    "stopping": "Stopping"
+  }
 }

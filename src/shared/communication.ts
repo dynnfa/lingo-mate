@@ -1,6 +1,8 @@
 import { z } from 'zod'
 export const COMMUNICATION_CHANNELS = {
   snapshot: 'communication:snapshot',
+  createQqConnection: 'communication:createQqConnection',
+  replaceQqSecret: 'communication:replaceQqSecret',
   createTelegramConnection: 'communication:createTelegramConnection',
   deleteConnection: 'communication:deleteConnection',
   testConnection: 'communication:testConnection',
@@ -19,6 +21,13 @@ export const communicationErrorCodeSchema = z.enum([
   'INVALID_INPUT',
   'COMMUNICATION_FAILED',
   'CREDENTIAL_STORAGE_UNAVAILABLE',
+  'QQ_DUPLICATE_APP',
+  'QQ_UNAUTHORIZED',
+  'QQ_GATEWAY_UNAVAILABLE',
+  'QQ_INVALID_RESPONSE',
+  'QQ_NETWORK',
+  'QQ_RATE_LIMITED',
+  'QQ_ADMISSION_FAILED',
   'TELEGRAM_DUPLICATE_BOT',
   'TELEGRAM_BOT_MISMATCH',
   'TELEGRAM_UNAUTHORIZED',
@@ -47,6 +56,20 @@ export const telegramTokenSchema = z
   .max(256)
   .regex(/^[1-9][0-9]{4,19}:[A-Za-z0-9_-]{20,200}$/u)
 export const createTelegramInputSchema = z.strictObject({ token: telegramTokenSchema })
+export const qqAppIdSchema = z.string().regex(/^[1-9][0-9]{0,19}$/u)
+export const qqAppSecretSchema = z
+  .string()
+  .min(1)
+  .max(256)
+  .regex(/^[!-~]+$/u)
+export const createQqInputSchema = z.strictObject({
+  appId: qqAppIdSchema,
+  appSecret: qqAppSecretSchema
+})
+export const replaceQqSecretInputSchema = z.strictObject({
+  connectionId: id,
+  appSecret: qqAppSecretSchema
+})
 const error = z.strictObject({ status: z.literal('error'), error: communicationErrorSchema })
 export const connectionInputSchema = z.strictObject({ connectionId: id })
 export const challengeInputSchema = z.strictObject({
@@ -86,7 +109,7 @@ export const challengeResultSchema = z.discriminatedUnion('status', [
   error
 ])
 export const communicationSnapshotSchema = z.strictObject({
-  installedAdapters: z.array(z.literal('telegram')).max(1),
+  installedAdapters: z.array(z.enum(['telegram', 'qq'])).max(2),
   connections: z
     .array(
       z.strictObject({
@@ -95,6 +118,20 @@ export const communicationSnapshotSchema = z.strictObject({
         username: z
           .string()
           .regex(/^[A-Za-z0-9_]{5,32}$/u)
+          .optional(),
+        appId: qqAppIdSchema.optional(),
+        state: z
+          .enum(['stopped', 'starting', 'online', 'reconnecting', 'error', 'stopping'])
+          .optional(),
+        errorCode: communicationErrorCodeSchema.optional(),
+        credentialSaved: z.boolean().optional(),
+        bindings: z
+          .array(
+            z.strictObject({
+              bindingId: id,
+              openId: z.string().min(1).max(256)
+            })
+          )
           .optional(),
         createdAt: z.number().int().nonnegative().max(8.64e15).optional(),
         started: z.boolean(),
@@ -120,6 +157,10 @@ export const communicationSnapshotResultSchema = z.discriminatedUnion('status', 
 ])
 type ActionResult = z.infer<typeof communicationActionResultSchema>
 export interface CommunicationApi {
+  createQqConnection(
+    input: z.infer<typeof createQqInputSchema>
+  ): Promise<z.infer<typeof createConnectionResultSchema>>
+  replaceQqSecret(input: z.infer<typeof replaceQqSecretInputSchema>): Promise<ActionResult>
   createTelegramConnection(
     input: z.infer<typeof createTelegramInputSchema>
   ): Promise<z.infer<typeof createConnectionResultSchema>>

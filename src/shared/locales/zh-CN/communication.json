@@ -19,7 +19,8 @@
   "chooseChannel": "请选择渠道",
   "noChannelTypes": "暂无可添加的渠道类型。",
   "adapters": {
-    "telegram": "Telegram"
+    "telegram": "Telegram",
+    "qq": "QQ 机器人"
   },
   "channelName": "{{adapter}} · @{{username}}",
   "addedAt": "添加于 {{date}}",
@@ -60,7 +61,14 @@
     "CONNECTION_LOST": "连接已断开。",
     "CONNECTION_LIMIT": "已达到连接数量上限。",
     "CHALLENGE_INVALID": "绑定码已过期或无效，请重新生成并发送绑定命令。",
-    "ALREADY_BOUND": "此账号已绑定。"
+    "ALREADY_BOUND": "此账号已绑定。",
+    "QQ_DUPLICATE_APP": "此 QQ AppID 已有连接。",
+    "QQ_UNAUTHORIZED": "QQ AppID 或 AppSecret 无效，或凭据已被撤销。",
+    "QQ_GATEWAY_UNAVAILABLE": "QQ 未允许 WebSocket 连接。请检查事件接收方式及单聊权限。",
+    "QQ_INVALID_RESPONSE": "QQ 返回了无效响应。",
+    "QQ_NETWORK": "无法连接 QQ。",
+    "QQ_RATE_LIMITED": "QQ 正在限制请求频率，请稍后重试。",
+    "QQ_ADMISSION_FAILED": "QQ 事件未能保存，渠道将尝试重连。"
   },
   "bindingReminderTitle": "请绑定 Telegram 账号",
   "bindingReminder": "渠道已添加。请先启动渠道，复制卡片中的绑定命令并用自己的 Telegram 账号私聊此 Bot 发送，再回到这里核对账号并确认绑定。绑定完成前，发送消息不会收到回复。",
@@ -82,5 +90,31 @@
   "boundAccounts_other": "已绑定账号：{{count}}",
   "bindingCandidate": "待确认账号：{{name}}（Telegram 用户 ID：{{userId}}）。请确认这是你自己的账号后再绑定。",
   "unnamedAccount": "未命名账号",
-  "confirmAccountBinding": "确认绑定账号"
+  "confirmAccountBinding": "确认绑定账号",
+  "qqTruncated": "回复已截断，完整答案可在桌面端查看。",
+  "qqAppId": "AppID",
+  "qqAppSecret": "AppSecret",
+  "qqChannelName": "QQ 机器人 · AppID {{appId}}",
+  "qqSetup": "请在 QQ 开放平台为机器人启用 WebSocket 和单聊权限。保持 Lingo Mate 运行，每次打开应用后手动启动渠道。Lingo Mate 会在原消息发出后的 5 分钟内回复，每条消息最多回复 4 次。",
+  "qqCredentialSaved": "AppSecret 已加密保存。",
+  "qqCredentialMissing": "请先设置 AppSecret，再启动渠道。",
+  "qqInvalidInput": "请输入有效的 AppID 和 AppSecret。",
+  "qqTestSuccess": "凭据有效且可访问 QQ 网关。启动渠道后才能订阅事件。",
+  "editQqSecret": "替换 AppSecret",
+  "saveQqSecret": "保存 AppSecret",
+  "qqBindingInstructions": "启动渠道后，在 QQ 私聊中向机器人发送 /bind <绑定码>，再回到这里确认 QQ 账号。",
+  "qqSentencePermission": "允许 /sentence 收录句子",
+  "qqBindingCandidate": "请确认这是你自己的 QQ 账号 {{name}}（OpenID {{userId}}）。",
+  "qqBoundAccount": "QQ 账号 · OpenID {{userId}}",
+  "qqUnbind": "解绑",
+  "qqUnbindAccount": "解绑 QQ 账号 {{userId}}",
+  "qqUnbindPrompt": "撤销 QQ 账号 {{userId}} 的学习权限？",
+  "qqState": {
+    "stopped": "已停止",
+    "starting": "连接中",
+    "online": "在线",
+    "reconnecting": "重连中",
+    "error": "连接失败",
+    "stopping": "正在停止"
+  }
 }

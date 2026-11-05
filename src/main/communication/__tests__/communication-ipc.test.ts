@@ -242,3 +242,31 @@ it('guards binding creation and confirmation and returns an actionable expired-c
     expiresAt: expect.any(Number)
   })
 })
+
+it('guards QQ configuration and rotates only the existing QQ connection secret', async () => {
+  const f = setup()
+  const create = vi.spyOn(f.host, 'createQqConnection').mockResolvedValue(f.connectionId)
+  const rotate = vi.spyOn(f.host, 'replaceQqSecret').mockResolvedValue(undefined)
+  const input = { appId: '123456', appSecret: 'fixture-secret' }
+  f.sender.owned = false
+  expect(await f.invoke(C.createQqConnection, input)).toMatchObject({
+    error: { code: 'UNTRUSTED_SOURCE' }
+  })
+  f.sender.owned = true
+  expect(
+    await f.invoke(C.createQqConnection, { ...input, endpoint: 'https://example.com' })
+  ).toMatchObject({ error: { code: 'INVALID_INPUT' } })
+  expect(
+    await f.invoke(C.replaceQqSecret, { connectionId: f.connectionId, ...input })
+  ).toMatchObject({ error: { code: 'INVALID_INPUT' } })
+  expect(create).not.toHaveBeenCalled()
+  expect(rotate).not.toHaveBeenCalled()
+  expect(await f.invoke(C.createQqConnection, input)).toEqual({
+    status: 'ok',
+    connectionId: f.connectionId
+  })
+  expect(
+    await f.invoke(C.replaceQqSecret, { connectionId: f.connectionId, appSecret: input.appSecret })
+  ).toEqual({ status: 'ok' })
+  expect(rotate).toHaveBeenCalledWith(f.connectionId, input.appSecret)
+})
