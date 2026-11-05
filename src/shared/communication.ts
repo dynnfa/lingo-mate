@@ -3,6 +3,7 @@ export const COMMUNICATION_CHANNELS = {
   snapshot: 'communication:snapshot',
   createTelegramConnection: 'communication:createTelegramConnection',
   deleteConnection: 'communication:deleteConnection',
+  testConnection: 'communication:testConnection',
   start: 'communication:start',
   stop: 'communication:stop',
   createChallenge: 'communication:createChallenge',
@@ -36,6 +37,7 @@ export const communicationErrorCodeSchema = z.enum([
   'CONNECTION_LOST',
   'CONNECTION_LIMIT'
 ])
+export type CommunicationErrorCode = z.infer<typeof communicationErrorCodeSchema>
 export const communicationErrorSchema = z.strictObject({ code: communicationErrorCodeSchema })
 export const telegramTokenSchema = z
   .string()
@@ -82,101 +84,21 @@ export const challengeResultSchema = z.discriminatedUnion('status', [
   error
 ])
 export const communicationSnapshotSchema = z.strictObject({
-  installedAdapters: z.array(z.string().max(64)).max(32).optional(),
-  receipts: z
-    .array(
-      z.strictObject({
-        id,
-        connectionId: id,
-        state: z.enum([
-          'received',
-          'queued',
-          'dispatching',
-          'running',
-          'succeeded',
-          'failed',
-          'cancelled',
-          'expired',
-          'rejected',
-          'interrupted'
-        ]),
-        code: z.string().max(64).optional()
-      })
-    )
-    .max(50)
-    .optional(),
+  installedAdapters: z.array(z.literal('telegram')).max(1),
   connections: z
     .array(
       z.strictObject({
         id,
         adapterId: z.string().max(64),
-        state: z.enum(['stopped', 'starting', 'online', 'reconnecting', 'error', 'stopping']),
-        hasCredential: z.boolean(),
-        deleting: z.boolean().optional(),
-        botId: z
-          .string()
-          .regex(/^[1-9][0-9]*$/u)
-          .optional(),
         username: z
           .string()
           .regex(/^[A-Za-z0-9_]{5,32}$/u)
           .optional(),
-        errorCode: communicationErrorCodeSchema.optional()
+        createdAt: z.number().int().nonnegative().max(8.64e15).optional(),
+        deleting: z.boolean().optional()
       })
     )
-    .max(32),
-  challenges: z
-    .array(
-      z.strictObject({ id, connectionId: id, actor: z.string().max(256), expiresAt: z.number() })
-    )
-    .max(32),
-  bindings: z
-    .array(
-      z.strictObject({
-        id,
-        connectionId: id,
-        externalActorId: z.string().max(256),
-        capabilities: z.array(z.enum(['chat', 'sentence']))
-      })
-    )
-    .max(256),
-  requests: z
-    .array(
-      z.strictObject({
-        requestId: id,
-        bindingId: id,
-        state: z.enum([
-          'received',
-          'queued',
-          'dispatching',
-          'running',
-          'succeeded',
-          'failed',
-          'cancelled',
-          'expired',
-          'rejected',
-          'interrupted'
-        ])
-      })
-    )
-    .max(50),
-  deliveries: z
-    .array(
-      z.strictObject({
-        id,
-        connectionId: id,
-        state: z.enum([
-          'pending',
-          'sending',
-          'retry_wait',
-          'sent',
-          'failed',
-          'uncertain',
-          'suppressed'
-        ])
-      })
-    )
-    .max(50)
+    .max(32)
 })
 export type CommunicationSnapshot = z.infer<typeof communicationSnapshotSchema>
 export const communicationSnapshotResultSchema = z.discriminatedUnion('status', [
@@ -188,6 +110,7 @@ export interface CommunicationApi {
   createTelegramConnection(
     input: z.infer<typeof createTelegramInputSchema>
   ): Promise<z.infer<typeof createConnectionResultSchema>>
+  testConnection(input: z.infer<typeof connectionInputSchema>): Promise<ActionResult>
   deleteConnection(input: z.infer<typeof connectionInputSchema>): Promise<ActionResult>
   snapshot(): Promise<z.infer<typeof communicationSnapshotResultSchema>>
   start(input: z.infer<typeof connectionInputSchema>): Promise<ActionResult>

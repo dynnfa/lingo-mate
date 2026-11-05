@@ -1,321 +1,248 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { TelegramTokenForm } from './TelegramTokenForm'
-import type { CommunicationSnapshot } from '../../../../shared/communication'
-export function ChannelsSettings({ active }: { active: boolean }): React.JSX.Element {
+import type {
+  CommunicationApi,
+  CommunicationErrorCode,
+  CommunicationSnapshot
+} from '../../../../shared/communication'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { ChannelTokenDialog } from './ChannelTokenDialog'
+import './ChannelsSettings.css'
+
+type Connection = CommunicationSnapshot['connections'][number]
+type ActionResult = Awaited<ReturnType<CommunicationApi['testConnection']>>
+type Dialog =
+  | { kind: 'add' }
+  | { kind: 'edit' | 'delete'; connection: Connection }
+  | { kind: 'test'; connection: Connection; outcome?: ActionResult }
+
+export function ChannelsSettings({ active }: { active: boolean }): React.JSX.Element | null {
+  return active ? <ActiveChannelsSettings /> : null
+}
+
+function ActiveChannelsSettings(): React.JSX.Element {
   const { t, i18n } = useTranslation('communication')
   const [snapshot, setSnapshot] = useState<CommunicationSnapshot>()
-  const [error, setError] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [challenge, setChallenge] = useState<{ code: string; expiresAt: number }>()
-  const [allowSentence, setAllowSentence] = useState(false)
-  const [tokenForm, setTokenForm] = useState<{ connectionId?: string }>()
-  const [deleteId, setDeleteId] = useState<string>()
-  const [retryId, setRetryId] = useState<string>()
-  const mounted = useRef(true)
-  const focusAfterAction = useRef(false)
-  const refreshButton = useRef<HTMLButtonElement>(null)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [dialog, setDialog] = useState<Dialog>()
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<CommunicationErrorCode>()
+  const [testing, setTesting] = useState<ReadonlySet<string>>(() => new Set())
+  const addButton = useRef<HTMLButtonElement>(null)
+  const returnFocusRef = useRef<HTMLElement>(null)
+  const loadVersion = useRef(0)
+
   const reload = useCallback(async (): Promise<void> => {
+    const version = ++loadVersion.current
     try {
       const result = await window.api.communication.snapshot()
-      if (!mounted.current) return
+      if (version !== loadVersion.current) return
       if (result.status === 'ok') {
         setSnapshot(result.snapshot)
-        setError(false)
-      } else setError(true)
+        setLoadFailed(false)
+      } else setLoadFailed(true)
     } catch {
-      if (mounted.current) setError(true)
+      if (version === loadVersion.current) setLoadFailed(true)
     }
   }, [])
+
   useEffect(() => {
-    mounted.current = true
+    const timer = setTimeout(() => void reload(), 0)
     return () => {
-      mounted.current = false
+      clearTimeout(timer)
     }
-  }, [])
-  useEffect(() => {
-    if (!active) return
-    const initial = setTimeout(() => {
-      void reload()
-    }, 0)
-    const timer = setInterval(() => {
-      void reload()
-    }, 3000)
-    return () => {
-      clearTimeout(initial)
-      clearInterval(timer)
-    }
-  }, [active, reload])
-  useEffect(() => {
-    if (!busy && focusAfterAction.current) {
-      focusAfterAction.current = false
-      refreshButton.current?.focus()
-    }
-  }, [busy])
-  const perform = async (operation: () => Promise<{ status: 'ok' | 'error' }>): Promise<void> => {
-    setBusy(true)
+  }, [reload])
+
+  const open = (next: Dialog, trigger: HTMLButtonElement): void => {
+    returnFocusRef.current = trigger
+    setDeleteError(undefined)
+    setDialog(next)
+  }
+  const close = (): void => setDialog(undefined)
+
+  const testConnection = async (
+    connection: Connection,
+    trigger: HTMLButtonElement
+  ): Promise<void> => {
+    const pending = { kind: 'test', connection } as const
+    setTesting((current) => new Set(current).add(connection.id))
+    open(pending, trigger)
+    let outcome: ActionResult
     try {
-      const result = await operation()
-      if (!mounted.current) return
-      if (result.status === 'error') setError(true)
-      else {
+      outcome = await window.api.communication.testConnection({ connectionId: connection.id })
+    } catch {
+      outcome = { status: 'error', error: { code: 'COMMUNICATION_FAILED' } }
+    }
+    setTesting((current) => {
+      const next = new Set(current)
+      next.delete(connection.id)
+      return next
+    })
+    setDialog((current) => (current === pending ? { ...pending, outcome } : current))
+  }
+
+  const saveToken = async (token: string): Promise<ActionResult> => {
+    const result =
+      dialog?.kind === 'edit'
+        ? await window.api.communication.setCredential({
+            connectionId: dialog.connection.id,
+            credential: token
+          })
+        : await window.api.communication.createTelegramConnection({ token })
+    if (result.status === 'ok') await reload()
+    return result
+  }
+
+  const deleteConnection = async (connection: Connection): Promise<void> => {
+    setDeleting(true)
+    setDeleteError(undefined)
+    try {
+      const result = await window.api.communication.deleteConnection({
+        connectionId: connection.id
+      })
+      if (result.status === 'ok') {
+        returnFocusRef.current = addButton.current
         await reload()
-        focusAfterAction.current = true
+        close()
+      } else {
+        setDeleteError(result.error.code)
+        await reload()
       }
     } catch {
-      if (mounted.current) setError(true)
+      setDeleteError('COMMUNICATION_FAILED')
+      await reload()
     } finally {
-      if (mounted.current) setBusy(false)
+      setDeleting(false)
     }
   }
+
+  const channelName = (connection: Connection): string => {
+    const adapter =
+      connection.adapterId === 'telegram' ? t('adapters.telegram') : connection.adapterId
+    return connection.username
+      ? t('channelName', { adapter, username: connection.username })
+      : adapter
+  }
+  const connections = snapshot?.connections
+    .slice()
+    .sort((a, b) => (b.createdAt ?? -1) - (a.createdAt ?? -1))
+  const dateFormat = new Intl.DateTimeFormat(i18n.resolvedLanguage, {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  })
+
   return (
     <div className="channels-settings">
-      <button ref={refreshButton} type="button" disabled={busy} onClick={() => void reload()}>
-        {t('refresh')}
+      <button
+        className="channel-add-button"
+        ref={addButton}
+        type="button"
+        onClick={(event) => open({ kind: 'add' }, event.currentTarget)}
+        disabled={!snapshot}
+      >
+        {t('addChannel')}
       </button>
-      {error && <p role="alert">{t('error')}</p>}
-      {snapshot?.connections.length === 0 && (
-        <p>{t(snapshot.installedAdapters?.length ? 'installedEmpty' : 'empty')}</p>
-      )}
-      {snapshot?.installedAdapters?.includes('telegram') && (
-        <>
-          <p>{t('telegramGuide')}</p>
-          <button type="button" disabled={busy} onClick={() => setTokenForm({})}>
-            {t('addTelegram')}
+      {loadFailed && (
+        <div className="channel-actions">
+          <p className="settings-error" role="alert">
+            {t('loadFailed')}
+          </p>
+          <button type="button" onClick={() => void reload()}>
+            {t('retryLoad')}
           </button>
-        </>
+        </div>
       )}
-      {active && tokenForm && (
-        <TelegramTokenForm
-          key={tokenForm.connectionId ?? 'new'}
-          replacing={!!tokenForm.connectionId}
-          onClose={() => {
-            setTokenForm(undefined)
-            refreshButton.current?.focus()
-          }}
-          onSubmit={async (token) => {
-            const result = tokenForm.connectionId
-              ? await window.api.communication.setCredential({
-                  connectionId: tokenForm.connectionId,
-                  credential: token
-                })
-              : await window.api.communication.createTelegramConnection({ token })
-            if (result.status === 'ok') await reload()
-            return result
-          }}
-        />
-      )}
-
-      {challenge && (
-        <p role="status">
-          {t('code', {
-            code: challenge.code,
-            expiresAt: new Date(challenge.expiresAt).toLocaleString(i18n.resolvedLanguage)
-          })}
-        </p>
-      )}
-      {Boolean(snapshot?.connections.length) && (
-        <label>
-          <input
-            type="checkbox"
-            checked={allowSentence}
-            onChange={(e) => setAllowSentence(e.target.checked)}
-          />
-          {t('grantSentence')}
-        </label>
-      )}
-      {snapshot?.connections.map((c) => (
-        <section key={c.id} aria-label={c.adapterId}>
-          <h3>{c.adapterId}</h3>
-          {c.username && <p>{t('botIdentity', { username: c.username, botId: c.botId })}</p>}
-          <p>{t(c.hasCredential ? 'credentialPresent' : 'credentialMissing')}</p>
-          {c.errorCode && <p role="status">{t(`errors.${c.errorCode}`)}</p>}
-          {c.adapterId === 'telegram' && (
-            <button
-              type="button"
-              disabled={busy || c.deleting}
-              onClick={() => setTokenForm({ connectionId: c.id })}
-            >
-              {t('replaceToken')}
-            </button>
-          )}
-          <button type="button" disabled={busy} onClick={() => setDeleteId(c.id)}>
-            {t('deleteConnection')}
-          </button>
-          {deleteId === c.id && (
-            <div>
-              <p>{t('deletePrompt')}</p>
+      {connections?.map((connection) => {
+        const headingId = `channel-${connection.id}`
+        const added =
+          connection.createdAt === undefined ? undefined : new Date(connection.createdAt)
+        return (
+          <article className="channel-card" key={connection.id} aria-labelledby={headingId}>
+            <h3 id={headingId}>{channelName(connection)}</h3>
+            <p className="channel-added-at">
+              {added ? (
+                <time dateTime={added.toISOString()}>
+                  {t('addedAt', { date: dateFormat.format(added) })}
+                </time>
+              ) : (
+                t('addedAtUnknown')
+              )}
+            </p>
+            <div className="channel-actions">
               <button
                 type="button"
-                disabled={busy}
-                onClick={() =>
-                  void perform(async () => {
-                    const result = await window.api.communication.deleteConnection({
-                      connectionId: c.id
-                    })
-                    if (result.status === 'ok') {
-                      setDeleteId(undefined)
-                      setChallenge(undefined)
-                      setTokenForm(undefined)
-                    }
-                    return result
-                  })
-                }
+                disabled={connection.deleting || connection.adapterId !== 'telegram'}
+                aria-disabled={testing.has(connection.id) || undefined}
+                onClick={(event) => {
+                  if (!testing.has(connection.id))
+                    void testConnection(connection, event.currentTarget)
+                }}
               >
-                {t('confirmDelete')}
+                {t('testConnection')}
               </button>
-              <button type="button" disabled={busy} onClick={() => setDeleteId(undefined)}>
-                {t('cancelForm')}
+              <button
+                type="button"
+                disabled={connection.deleting || connection.adapterId !== 'telegram'}
+                onClick={(event) => open({ kind: 'edit', connection }, event.currentTarget)}
+              >
+                {t('editToken')}
+              </button>
+              <button
+                type="button"
+                className="channel-delete-button"
+                onClick={(event) => open({ kind: 'delete', connection }, event.currentTarget)}
+              >
+                {t('deleteChannel')}
               </button>
             </div>
-          )}
-
-          <p>{t('state', { state: t(`states.${c.state}`) })}</p>
-          <button
-            type="button"
-            disabled={busy || c.deleting}
-            onClick={() =>
-              void perform(() => window.api.communication.start({ connectionId: c.id }))
-            }
-          >
-            {t('start')}
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              void perform(() => window.api.communication.stop({ connectionId: c.id }))
-            }
-          >
-            {t('stop')}
-          </button>
-          <button
-            type="button"
-            disabled={busy || c.deleting}
-            onClick={() =>
-              void perform(async () => {
-                const result = await window.api.communication.createChallenge({
-                  connectionId: c.id,
-                  capabilities: allowSentence ? ['chat', 'sentence'] : ['chat']
-                })
-                if (result.status === 'ok' && mounted.current) setChallenge(result)
-                return result
-              })
-            }
-          >
-            {t('bind')}
-          </button>
-        </section>
-      ))}
-      {snapshot?.challenges.map((c) => (
-        <div key={c.id}>
-          <p>{t('account', { actor: c.actor })}</p>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              void perform(() => window.api.communication.confirmBinding({ challengeId: c.id }))
-            }
-          >
-            {t('confirm')}
-          </button>
-        </div>
-      ))}
-      {snapshot?.bindings.map((b) => (
-        <div key={b.id}>
-          <p>{t('account', { actor: b.externalActorId })}</p>
-          <p>
-            {t('permissions', {
-              permissions: b.capabilities
-                .map((cap) => t(cap === 'chat' ? 'grantChat' : 'grantSentence'))
-                .join(', ')
-            })}
+          </article>
+        )
+      })}
+      {(dialog?.kind === 'add' || dialog?.kind === 'edit') && snapshot && (
+        <ChannelTokenDialog
+          editing={dialog.kind === 'edit'}
+          installedAdapters={snapshot.installedAdapters}
+          onClose={close}
+          onSave={saveToken}
+          returnFocusRef={returnFocusRef}
+        />
+      )}
+      {dialog?.kind === 'delete' && (
+        <ConfirmDialog
+          open
+          title={t('deleteChannel')}
+          description={t('deletePrompt')}
+          cancelLabel={t('cancelForm')}
+          confirmLabel={t('confirmDelete')}
+          tone="danger"
+          busy={deleting}
+          error={deleteError ? t(`errors.${deleteError}`) : undefined}
+          onCancel={close}
+          onConfirm={() => void deleteConnection(dialog.connection)}
+          returnFocusRef={returnFocusRef}
+        >
+          <p className="confirm-text">{channelName(dialog.connection)}</p>
+        </ConfirmDialog>
+      )}
+      {dialog?.kind === 'test' && (
+        <ConfirmDialog
+          open
+          title={t('testTitle')}
+          description={channelName(dialog.connection)}
+          confirmLabel={t('closeDialog')}
+          onCancel={close}
+          onConfirm={close}
+          returnFocusRef={returnFocusRef}
+        >
+          <p className="confirm-text" role="status">
+            {dialog.outcome === undefined
+              ? t('testRunning')
+              : dialog.outcome.status === 'ok'
+                ? t('testSuccess')
+                : t(`errors.${dialog.outcome.error.code}`)}
           </p>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              void perform(() => window.api.communication.revokeBinding({ bindingId: b.id }))
-            }
-          >
-            {t('revoke')}
-          </button>
-        </div>
-      ))}
-      {snapshot?.receipts?.map((r) => (
-        <p key={r.id}>
-          {t('receipt', { state: t(`executionStates.${r.state}`), code: r.code ?? '' })}
-        </p>
-      ))}
-      {snapshot?.requests.map((r) => (
-        <div key={r.requestId}>
-          <span>{t('request', { state: t(`executionStates.${r.state}`) })}</span>
-          {['queued', 'running', 'dispatching'].includes(r.state) && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                void perform(() =>
-                  window.api.communication.cancelRequest({
-                    bindingId: r.bindingId,
-                    requestId: r.requestId
-                  })
-                )
-              }
-            >
-              {t('cancel')}
-            </button>
-          )}
-        </div>
-      ))}
-      {snapshot?.deliveries.map((d) => (
-        <div key={d.id}>
-          <p>{t('delivery', { state: t(`deliveryStates.${d.state}`) })}</p>
-          {['failed', 'uncertain'].includes(d.state) && (
-            <>
-              {d.state === 'uncertain' && (
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={retryId === d.id}
-                    onChange={(e) => setRetryId(e.target.checked ? d.id : undefined)}
-                  />
-                  {t('uncertain')}
-                </label>
-              )}
-              <button
-                type="button"
-                disabled={busy || (d.state === 'uncertain' && retryId !== d.id)}
-                onClick={() =>
-                  void perform(() =>
-                    window.api.communication.resolveDelivery({
-                      deliveryId: d.id,
-                      action: 'retry',
-                      acknowledgeDuplicate: retryId === d.id
-                    })
-                  )
-                }
-              >
-                {t('retry')}
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  void perform(() =>
-                    window.api.communication.resolveDelivery({
-                      deliveryId: d.id,
-                      action: 'suppress'
-                    })
-                  )
-                }
-              >
-                {t('suppress')}
-              </button>
-            </>
-          )}
-        </div>
-      ))}
+        </ConfirmDialog>
+      )}
     </div>
   )
 }

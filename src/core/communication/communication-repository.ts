@@ -13,6 +13,7 @@ import type {
 export interface Connection {
   id: string
   adapterId: string
+  createdAt?: number
   enabled: boolean
   generation: number
   state: ConnectionState

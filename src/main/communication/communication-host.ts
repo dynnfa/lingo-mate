@@ -7,7 +7,6 @@ import type { CommunicationEnvironment } from '../../core/communication/environm
 import { SqliteCommunicationRepository } from '../../database/sqlite-communication-repository'
 import {
   communicationSnapshotSchema,
-  communicationErrorCodeSchema,
   telegramTokenSchema,
   type CommunicationSnapshot
 } from '../../shared/communication'
@@ -97,57 +96,20 @@ export class CommunicationHost {
   snapshot(): CommunicationSnapshot {
     return communicationSnapshotSchema.parse(
       this.repository.read((s) => ({
-        installedAdapters: this.registrations.map((r) => r.adapterId),
-        receipts: [...s.inbox.values()]
-          .slice(-50)
-          .reverse()
-          .map((i) => ({ id: i.id, connectionId: i.connectionId, state: i.state, code: i.error })),
+        installedAdapters: this.registrations.some(
+          (r) => r.adapterId === 'telegram' && r.verifyCredential
+        )
+          ? ['telegram']
+          : [],
         connections: [...s.connections.values()]
           .filter((c) => c.enabled || c.state !== 'stopped' || !!c.credentialRef)
           .map((c) => ({
             id: c.id,
             adapterId: c.adapterId,
-            state: c.state,
-            hasCredential: !!c.credentialRef,
-            deleting: !c.enabled || undefined,
-            botId: c.adapterId === 'telegram' ? c.config.botId : undefined,
             username: c.adapterId === 'telegram' ? c.config.username : undefined,
-            errorCode: communicationErrorCodeSchema.safeParse(c.error).success
-              ? c.error
-              : c.error
-                ? 'COMMUNICATION_FAILED'
-                : undefined
-          })),
-        challenges: [...s.challenges.values()]
-          .filter((c) => !c.consumed && c.actor && c.expiresAt > Date.now())
-          .map((c) => ({
-            id: c.id,
-            connectionId: c.connectionId,
-            actor: c.actor!,
-            expiresAt: c.expiresAt
-          })),
-        bindings: [...s.bindings.values()]
-          .filter((b) => !b.revoked)
-          .slice(-256)
-          .map((b) => ({
-            id: b.id,
-            connectionId: b.connectionId,
-            externalActorId: b.externalActorId,
-            capabilities: b.capabilities
-          })),
-        requests: [...s.inbox.values()]
-          .filter((i) => i.bindingId && i.receipt.requestId)
-          .slice(-50)
-          .reverse()
-          .map((i) => ({
-            requestId: i.receipt.requestId!,
-            bindingId: i.bindingId!,
-            state: i.state
-          })),
-        deliveries: [...s.outbox.values()]
-          .slice(-50)
-          .reverse()
-          .map((d) => ({ id: d.id, connectionId: d.connectionId, state: d.state }))
+            createdAt: c.createdAt,
+            deleting: !c.enabled || undefined
+          }))
       }))
     )
   }
@@ -199,6 +161,17 @@ export class CommunicationHost {
         this.credentials.remove(reference)
         throw error
       }
+    })
+  }
+  testConnection(connectionId: string): Promise<void> {
+    return this.coordinate(async () => {
+      const connection = this.repository.read((s) => s.connections.get(connectionId))
+      if (!connection?.enabled) throw new CommunicationError('NOT_FOUND')
+      if (connection.adapterId !== 'telegram') throw new CommunicationError('UNKNOWN_ADAPTER')
+      if (!connection.credentialRef) throw new CommunicationError('TELEGRAM_UNAUTHORIZED')
+      const identity = await this.verifyTelegram(this.credentials.read(connection.credentialRef))
+      if (identity.botId !== connection.config.botId)
+        throw new CommunicationError('TELEGRAM_BOT_MISMATCH')
     })
   }
   setCredential(connectionId: string, secret: string): Promise<void> {
