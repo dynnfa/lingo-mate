@@ -26,6 +26,7 @@
   "addedAtUnknown": "添加时间未知",
   "startChannel": "启动",
   "stopChannel": "停止",
+  "disableAutoStart": "关闭自动启动",
   "started": "已启动",
   "testConnection": "测试连接",
   "testTitle": "连接测试",

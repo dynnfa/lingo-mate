@@ -26,6 +26,7 @@
   "addedAtUnknown": "Date added unknown",
   "startChannel": "Start",
   "stopChannel": "Stop",
+  "disableAutoStart": "Disable auto-start",
   "started": "Started",
   "testConnection": "Test connection",
   "testTitle": "Connection test",

@@ -16,6 +16,7 @@ import {
   resetIpcMocks
 } from '../../__tests__/helpers/ipc-test-env'
 import { TestAdapter } from '../../../core/communication/__tests__/test-adapter'
+import { AdapterConnectionError } from '../../../core/communication/communication-adapter'
 vi.mock('electron', async () =>
   (await import('../../__tests__/helpers/ipc-test-env')).electronTestModule()
 )
@@ -30,6 +31,7 @@ function setup(): {
   invoke: (channel: string, value?: unknown) => unknown
   sender: FakeSender
   vault: CommunicationCredentialStore
+  adapter: TestAdapter
   connectionState: () => string | undefined
 } {
   const db = openDatabase(':memory:')
@@ -43,6 +45,7 @@ function setup(): {
     repository
   )
   const vault = { write: vi.fn(() => randomUUID()), read: vi.fn(() => 'SECRET'), remove: vi.fn() }
+  const adapter = new TestAdapter(false)
   const host = new CommunicationHost(
     db,
     module,
@@ -50,7 +53,7 @@ function setup(): {
     vault,
     () => ({ uiLanguage: 'en', outputLanguage: 'en', targetLanguage: 'en' }),
     vi.fn(),
-    [{ adapterId: 'test', create: () => new TestAdapter(false) }]
+    [{ adapterId: 'test', create: () => adapter }]
   )
   const connectionId = host.service.addConnection('test')
   const dispose = registerCommunicationIpc(
@@ -69,7 +72,7 @@ function setup(): {
   const connections = new SqliteCommunicationRepository(db)
   const connectionState = (): string | undefined =>
     connections.read((state) => state.connections.get(connectionId)?.state)
-  return { host, connectionId, invoke, sender, vault, connectionState }
+  return { host, connectionId, invoke, sender, vault, adapter, connectionState }
 }
 it('uses source and schema guards before changing any channel state', async () => {
   const f = setup()
@@ -95,6 +98,35 @@ it('uses source and schema guards before changing any channel state', async () =
   f.sender.destroy()
   expect(f.connectionState()).toBe('online')
 })
+it.each([
+  ['TELEGRAM_WEBHOOK_CONFLICT', false, 'error'],
+  ['TELEGRAM_NETWORK', true, 'reconnecting']
+] as const)('returns a startup failure through IPC for %s', async (code, retryable, state) => {
+  const f = setup()
+  vi.spyOn(f.adapter, 'start').mockRejectedValueOnce(new AdapterConnectionError(retryable, code))
+  expect(await f.invoke(C.start, { connectionId: f.connectionId })).toEqual({
+    status: 'error',
+    error: { code }
+  })
+  expect(f.connectionState()).toBe(state)
+})
+
+it('lets the desktop clear restart intent after a failed connection', async () => {
+  const f = setup()
+  vi.spyOn(f.adapter, 'start').mockRejectedValueOnce(
+    new AdapterConnectionError(false, 'TELEGRAM_WEBHOOK_CONFLICT')
+  )
+  await f.invoke(C.start, { connectionId: f.connectionId })
+  expect(await f.invoke(C.snapshot)).toMatchObject({
+    snapshot: { connections: [{ started: false, autoStart: true }] }
+  })
+  expect(await f.invoke(C.stop, { connectionId: f.connectionId })).toEqual({ status: 'ok' })
+  expect(f.connectionState()).toBe('stopped')
+  await f.host.initialize()
+  expect(f.adapter.start).toHaveBeenCalledTimes(1)
+  expect(f.host.snapshot().connections[0].autoStart).toBeFalsy()
+})
+
 it('exposes no credentials, routing bodies, digests, internal sessions or cursors', async () => {
   const f = setup()
   await f.invoke(C.setCredential, { connectionId: f.connectionId, credential: 'SECRET' })
