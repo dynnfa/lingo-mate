@@ -131,6 +131,7 @@ export class CommunicationHost {
               username: c.adapterId === 'telegram' ? c.config.username : undefined,
               createdAt: c.createdAt,
               started: c.state !== 'stopped' && c.state !== 'error',
+              autoStart: c.autoStart || undefined,
               deleting: !c.enabled || undefined,
               bindingCount: [...s.bindings.values()].filter(
                 (binding) => binding.connectionId === c.id && !binding.revoked
@@ -160,7 +161,10 @@ export class CommunicationHost {
     return result
   }
   start(id: string): Promise<void> {
-    return this.coordinate(() => this.service.start(id))
+    return this.coordinate(async () => {
+      const code = await this.service.start(id)
+      if (code !== undefined) throw new CommunicationError(code)
+    })
   }
   stop(id: string): Promise<void> {
     return this.coordinate(() => this.service.stop(id))

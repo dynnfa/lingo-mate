@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type {
   CommunicationApi,
@@ -38,7 +38,7 @@ function ActiveChannelsSettings(): React.JSX.Element {
   const [actionErrors, setActionErrors] = useState<Partial<Record<string, CommunicationErrorCode>>>(
     {}
   )
-  const pendingFocus = useRef<{ id: string; action: ConnectionAction } | undefined>(undefined)
+  const pendingFocus = useRef<{ id: string; button: ConnectionAction } | undefined>(undefined)
   const [settledActions, setSettledActions] = useState(0)
   const addButton = useRef<HTMLButtonElement>(null)
   const returnFocusRef = useRef<HTMLElement>(null)
@@ -65,22 +65,23 @@ function ActiveChannelsSettings(): React.JSX.Element {
     }
   }, [reload])
 
-  const awaitingBinding = snapshot?.connections.some((connection) => !!connection.bindingChallenge)
+  const hasConnections = !!snapshot?.connections.length
   useEffect(() => {
-    if (!awaitingBinding) return
+    if (!hasConnections) return
     const timer = setInterval(() => void reload(), 2000)
     return () => clearInterval(timer)
-  }, [awaitingBinding, reload])
+  }, [hasConnections, reload])
 
-  // A successful switch replaces the pressed button; move focus to its replacement.
-  useEffect(() => {
+  // The refreshed state can replace the pressed button, including after a failure.
+  useLayoutEffect(() => {
     const target = pendingFocus.current
     if (!target) return
     pendingFocus.current = undefined
-    const selector = target.action === 'start' ? '.channel-stop-button' : '.channel-start-button'
-    document
-      .querySelector<HTMLButtonElement>(`article[data-connection-id="${target.id}"] ${selector}`)
-      ?.focus()
+    const card = document.querySelector(`article[data-connection-id="${target.id}"]`)
+    const button =
+      card?.querySelector<HTMLButtonElement>(`.channel-${target.button}-button`) ??
+      card?.querySelector<HTMLButtonElement>('.channel-start-button, .channel-stop-button')
+    button?.focus()
   }, [snapshot, settledActions])
 
   const open = (next: Dialog, trigger: HTMLButtonElement): void => {
@@ -113,8 +114,7 @@ function ActiveChannelsSettings(): React.JSX.Element {
 
   const runConnectionAction = async (
     connection: Connection,
-    action: ConnectionAction,
-    trigger: HTMLButtonElement
+    action: ConnectionAction
   ): Promise<void> => {
     setActionErrors((current) => {
       if (!(connection.id in current)) return current
@@ -132,18 +132,20 @@ function ActiveChannelsSettings(): React.JSX.Element {
     } catch {
       outcome = { status: 'error', error: { code: 'COMMUNICATION_FAILED' as const } }
     }
+    const replacement = action === 'start' ? 'stop' : 'start'
+    pendingFocus.current = {
+      id: connection.id,
+      button: outcome.status === 'ok' ? replacement : action
+    }
+    await reload()
     setSwitching((current) => {
       const next = new Set(current)
       next.delete(connection.id)
       return next
     })
-    if (outcome.status === 'ok') {
-      pendingFocus.current = { id: connection.id, action }
-      await reload()
-      setSettledActions((count) => count + 1)
-    } else {
+    setSettledActions((count) => count + 1)
+    if (outcome.status === 'error') {
       setActionErrors((current) => ({ ...current, [connection.id]: outcome.error.code }))
-      trigger.focus()
     }
   }
 
@@ -268,31 +270,28 @@ function ActiveChannelsSettings(): React.JSX.Element {
               />
             )}
             <div className="channel-actions">
-              {connection.started ? (
-                <>
-                  <span className="channel-started">{t('started')}</span>
-                  <button
-                    type="button"
-                    className="channel-stop-button"
-                    disabled={connection.deleting || connection.adapterId !== 'telegram'}
-                    aria-disabled={switching.has(connection.id) || undefined}
-                    onClick={(event) => {
-                      if (!switching.has(connection.id))
-                        void runConnectionAction(connection, 'stop', event.currentTarget)
-                    }}
-                  >
-                    {t('stopChannel')}
-                  </button>
-                </>
-              ) : (
+              {connection.started && <span className="channel-started">{t('started')}</span>}
+              {(connection.started || connection.autoStart) && (
+                <button
+                  type="button"
+                  className="channel-stop-button"
+                  disabled={connection.deleting || connection.adapterId !== 'telegram'}
+                  aria-disabled={switching.has(connection.id) || undefined}
+                  onClick={() => {
+                    if (!switching.has(connection.id)) void runConnectionAction(connection, 'stop')
+                  }}
+                >
+                  {t(connection.started ? 'stopChannel' : 'disableAutoStart')}
+                </button>
+              )}
+              {!connection.started && (
                 <button
                   type="button"
                   className="channel-start-button"
                   disabled={connection.deleting || connection.adapterId !== 'telegram'}
                   aria-disabled={switching.has(connection.id) || undefined}
-                  onClick={(event) => {
-                    if (!switching.has(connection.id))
-                      void runConnectionAction(connection, 'start', event.currentTarget)
+                  onClick={() => {
+                    if (!switching.has(connection.id)) void runConnectionAction(connection, 'start')
                   }}
                 >
                   {t('startChannel')}

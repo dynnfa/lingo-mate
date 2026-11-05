@@ -20,7 +20,7 @@ interface Fixture {
   event(text?: string, actorId?: string, eventId?: string): TextEvent
   receive(text?: string, actor?: string, eventId?: string): Promise<Receipt>
   bind(actor?: string): Promise<Binding>
-  start(): Promise<void>
+  start(): ReturnType<CommunicationService['start']>
   advance(ms: number): void
   db: ReturnType<typeof openDatabase>
 }
@@ -59,7 +59,7 @@ function fixture(interactive = false): Fixture {
     occurredAt: now,
     text
   })
-  const start = (): Promise<void> => service.start(connectionId)
+  const start = (): ReturnType<CommunicationService['start']> => service.start(connectionId)
   const receive = (text = 'hello', actor = 'alice', eventId?: string): Promise<Receipt> =>
     adapter.receive(event(text, actor, eventId))
   const bind = async (actor = 'alice'): Promise<Binding> => {

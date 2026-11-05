@@ -98,6 +98,7 @@ export const communicationSnapshotSchema = z.strictObject({
           .optional(),
         createdAt: z.number().int().nonnegative().max(8.64e15).optional(),
         started: z.boolean(),
+        autoStart: z.literal(true).optional(),
         deleting: z.boolean().optional(),
         bindingCount: z.number().int().nonnegative().optional(),
         bindingChallenge: z

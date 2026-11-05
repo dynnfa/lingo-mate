@@ -337,6 +337,44 @@ it('shows a translated start failure on the card and keeps the start action', as
   expect(retry).toHaveFocus()
 })
 
+it('refreshes channel state without a binding challenge and stops polling when hidden', async () => {
+  vi.useFakeTimers()
+  const { api, snapshot, setActive } = setup('en', [
+    { id, adapterId: 'telegram', started: true, bindingCount: 1 }
+  ])
+  await act(async () => vi.advanceTimersByTimeAsync(1))
+  expect(screen.getByRole('button', { name: 'Stop' })).toBeVisible()
+  snapshot.connections[0].started = false
+  await act(async () => vi.advanceTimersByTimeAsync(2000))
+  expect(screen.getByRole('button', { name: 'Start' })).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
+  setActive(false)
+  const calls = vi.mocked(api.snapshot).mock.calls.length
+  await act(async () => vi.advanceTimersByTimeAsync(2000))
+  expect(api.snapshot).toHaveBeenCalledTimes(calls)
+})
+
+it('allows retry or disabling auto-start after a failed start', async () => {
+  const { api, snapshot } = setup('en', [{ id, adapterId: 'telegram', started: false }])
+  api.start = vi.fn<typeof api.start>(async () => {
+    snapshot.connections[0].autoStart = true
+    return { status: 'error', error: { code: 'TELEGRAM_WEBHOOK_CONFLICT' } }
+  })
+  api.stop = vi.fn<typeof api.stop>(async () => {
+    snapshot.connections = [{ id, adapterId: 'telegram', started: false }]
+    return { status: 'ok' }
+  })
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }))
+  const disable = await screen.findByRole('button', { name: 'Disable auto-start' })
+  expect(screen.getByRole('button', { name: 'Start' })).toBeVisible()
+  expect(screen.getByRole('alert')).toHaveTextContent(/webhook/i)
+  fireEvent.click(disable)
+  expect(api.stop).toHaveBeenCalledWith({ connectionId: id })
+  await waitFor(() => expect(disable).not.toBeInTheDocument())
+  expect(screen.getByRole('button', { name: 'Start' })).toHaveFocus()
+})
+
 it('can retry loading the cards after a failure', async () => {
   const { api, snapshot } = setup()
   api.snapshot = vi
