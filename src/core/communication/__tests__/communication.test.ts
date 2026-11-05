@@ -991,3 +991,105 @@ it('never shortens a platform reconnect delay to the local backoff cap', async (
   await f.service.flush()
   expect(start).toHaveBeenCalledTimes(1)
 })
+
+it('freezes a passive reply and its sequence through SQLite recovery and expires it before manual retry', async () => {
+  const f = fixture()
+  await f.start()
+  await f.bind()
+  vi.mocked(f.business.execute).mockResolvedValue({ status: 'succeeded', text: 'a'.repeat(70) })
+  const send = vi.spyOn(f.adapter, 'send')
+  f.adapter.outcomes = [
+    { status: 'sent', externalMessageId: 'first' },
+    { status: 'retry', retryAfterMs: 2000 }
+  ]
+  const event = f.event()
+  const deadline = event.occurredAt + 5000
+  expect((await f.adapter.receive({ ...event, replyExpiresAt: deadline })).status).toBe('persisted')
+  await f.service.flush()
+  const saved = new SqliteCommunicationRepository(f.db).read((s) => [...s.outbox.values()][0])
+  expect(saved).toMatchObject({
+    reply: { externalMessageId: event.externalMessageId, expiresAt: deadline },
+    expiresAt: deadline,
+    parts: [{ sequence: 1 }, { sequence: 2 }, { sequence: 3 }]
+  })
+  expect(send.mock.calls[1]).toEqual([
+    saved.target,
+    saved.parts[1].encoded,
+    { deliveryId: saved.id, partId: saved.parts[1].id, reply: saved.reply, sequence: 2 },
+    expect.any(AbortSignal)
+  ])
+  await f.service.recover()
+  await f.start()
+  f.advance(2000)
+  f.adapter.outcomes = [{ status: 'uncertain' }]
+  await f.service.flush()
+  expect(send.mock.calls[2].slice(0, 3)).toEqual(send.mock.calls[1].slice(0, 3))
+  f.advance(3000)
+  expect(() => f.service.resolveDelivery(saved.id, 'retry', true)).toThrow('DELIVERY_NOT_RETRYABLE')
+  expect(f.business.execute).toHaveBeenCalledTimes(1)
+})
+
+it('reconnects a gateway during active business and reuses only its process-local cursor', async () => {
+  const f = fixture()
+  const gateway = new TestAdapter(false)
+  const start = vi.spyOn(gateway, 'start')
+  f.service.registerAdapter('session-gateway', () => gateway, { sessionCursor: true })
+  const id = f.service.addConnection('session-gateway')
+  await f.service.start(id)
+  const challenge = f.service.createChallenge(id, ['chat'])
+  await gateway.receive(f.event(`/bind ${challenge.code}`), 'bind-cursor')
+  f.service.confirmBinding(challenge.challengeId)
+  let complete!: (value: { status: 'succeeded'; text: string }) => void
+  vi.mocked(f.business.execute).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        complete = resolve
+      })
+  )
+  await gateway.receive(f.event(), 'latest-durable')
+  const flushing = f.service.flush()
+  await vi.waitFor(() => expect(complete).toBeDefined())
+  const first = gateway.context!
+  try {
+    first.disconnected(true)
+    f.advance(1000)
+    const tick = f.service.flush()
+    await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(2))
+    expect(gateway.context?.cursor).toBe('latest-durable')
+    expect((await first.receive(f.event(), 'stale')).code).toBe('STOPPED')
+    complete({ status: 'succeeded', text: 'answer' })
+    await tick
+    await f.service.stop(id)
+    await f.service.start(id)
+    expect(gateway.context?.cursor).toBeUndefined()
+    expect(f.business.execute).toHaveBeenCalledTimes(1)
+  } finally {
+    complete({ status: 'succeeded', text: 'answer' })
+    await flushing
+    await f.service.shutdown()
+  }
+})
+
+it('retains a verified passive reply sent before the deadline even if its receipt arrives later', async () => {
+  const f = fixture()
+  await f.start()
+  await f.bind()
+  let complete!: (value: { status: 'sent'; externalMessageId: string }) => void
+  vi.spyOn(f.adapter, 'send').mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        complete = resolve
+      })
+  )
+  const event = f.event()
+  await f.adapter.receive({ ...event, replyExpiresAt: event.occurredAt + 1000 })
+  const flushing = f.service.flush()
+  await vi.waitFor(() => expect(complete).toBeDefined())
+  f.advance(1000)
+  complete({ status: 'sent', externalMessageId: 'verified-before-expiry' })
+  await flushing
+  expect(f.repository.read((s) => [...s.outbox.values()][0])).toMatchObject({
+    state: 'sent',
+    parts: [{ state: 'sent', externalMessageId: 'verified-before-expiry' }]
+  })
+})

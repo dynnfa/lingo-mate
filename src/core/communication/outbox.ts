@@ -3,6 +3,7 @@ import { z } from 'zod'
 import {
   CommunicationError,
   encodedPartSchema,
+  replyContextSchema,
   sendResultSchema,
   LIMITS,
   type SendResult
@@ -30,6 +31,14 @@ export class Outbox {
     if ([...s.outbox.values()].some((d) => d.requestId === requestId)) return
     const { externalActorId, externalConversationId, externalThreadId } = inbox.event
     const id = this.env.id()
+    const expiresAt = Math.min(
+      inbox.receivedAt + LIMITS.deliveryMs,
+      inbox.event.replyExpiresAt ?? Infinity
+    )
+    const reply =
+      inbox.event.replyExpiresAt === undefined
+        ? undefined
+        : { externalMessageId: inbox.event.externalMessageId, expiresAt }
     s.outbox.set(id, {
       id,
       requestId,
@@ -39,27 +48,45 @@ export class Outbox {
       target: { externalActorId, externalConversationId, externalThreadId },
       text: text.slice(0, LIMITS.reply),
       createdAt: this.env.now(),
-      expiresAt: inbox.receivedAt + LIMITS.deliveryMs,
+      expiresAt,
+      reply,
+      uiLanguage: reply
+        ? (inbox.languages?.uiLanguage ?? this.env.languages().uiLanguage)
+        : undefined,
       state: 'pending',
       parts: []
     })
   }
   suppress(s: CommunicationState, delivery: Delivery): boolean {
     if (delivery.state === 'sent') return false
+    if (delivery.state === 'suppressed') return true
     const binding = activeBinding(s, delivery.bindingId, delivery.bindingVersion)
-    if (
-      !binding ||
-      !s.connections.get(delivery.connectionId)?.enabled ||
+    const authorized =
+      binding &&
+      s.connections.get(delivery.connectionId)?.enabled &&
+      binding.connectionId === delivery.connectionId &&
+      binding.externalActorId === delivery.target.externalActorId
+    const expired =
       delivery.expiresAt <= this.env.now() ||
-      binding.connectionId !== delivery.connectionId ||
-      binding.externalActorId !== delivery.target.externalActorId
-    ) {
-      delivery.state = 'suppressed'
-      for (const part of delivery.parts) if (part.state !== 'sent') part.state = 'suppressed'
-      this.sends.get(delivery.id)?.abort()
-      return true
+      (delivery.reply && delivery.reply.expiresAt <= this.env.now())
+    if (authorized && !expired) return false
+    // A passive send that started in time can still receive a verifiable receipt.
+    if (!(authorized && delivery.reply && delivery.state === 'sending'))
+      this.suppressRemaining(delivery)
+    return true
+  }
+
+  private suppressRemaining(delivery: Delivery): void {
+    if (delivery.state === 'sent') return
+    for (const part of delivery.parts) {
+      if (part.state === 'sent') continue
+      part.state =
+        delivery.reply && ['sending', 'uncertain'].includes(part.state) ? 'uncertain' : 'suppressed'
     }
-    return false
+    delivery.state = delivery.parts.some((part) => part.state === 'uncertain')
+      ? 'uncertain'
+      : 'suppressed'
+    this.sends.get(delivery.id)?.abort()
   }
   async flush(adapterFor: (id: string) => CommunicationAdapter | undefined): Promise<void> {
     const ids = this.repository.read((s) => [...s.outbox.keys()])
@@ -73,22 +100,31 @@ export class Outbox {
       if (!['pending', 'retry_wait'].includes(delivery.state)) continue
       const adapter = adapterFor(delivery.connectionId)
       if (!adapter) continue
+      if (
+        adapter.capabilities.requiresReplyContext &&
+        (!replyContextSchema.safeParse(delivery.reply).success ||
+          delivery.reply?.expiresAt !== delivery.expiresAt)
+      ) {
+        this.resolve(id, 'suppress', false)
+        continue
+      }
       if (!delivery.encodingVersion) {
         try {
           const encoded = z
             .array(encodedPartSchema)
             .min(1)
             .max(LIMITS.maxParts)
-            .parse(adapter.encode(delivery.text))
+            .parse(adapter.encode(delivery.text, delivery.uiLanguage))
           if (encoded.some((p) => p.text.length > adapter.capabilities.maxTextLength))
             throw new Error('Encoding exceeds capability')
           delivery = this.repository.transaction((s) => {
             const d = s.outbox.get(id)!
             if (this.suppress(s, d)) return d
             d.encodingVersion = adapter.capabilities.encodingVersion
-            d.parts = encoded.map((part) => ({
+            d.parts = encoded.map((part, index) => ({
               id: this.env.id(),
               encoded: part,
+              sequence: d.reply ? index + 1 : undefined,
               state: 'pending',
               attempts: 0,
               nextAt: 0
@@ -137,7 +173,11 @@ export class Outbox {
             adapter.send(
               delivery.target,
               part.encoded,
-              { deliveryId: id, partId: part.id },
+              {
+                deliveryId: id,
+                partId: part.id,
+                ...(delivery.reply ? { reply: delivery.reply, sequence: part.sequence } : {})
+              },
               controller.signal
             ),
             LIMITS.sendMs,
@@ -155,7 +195,7 @@ export class Outbox {
         this.repository.transaction((s) => {
           const d = s.outbox.get(id)!,
             p = d.parts.find((p) => p.id === part.id)!
-          if (this.suppress(s, d) || p.state !== 'sending') return
+          if (p.state !== 'sending' || (!d.reply && this.suppress(s, d))) return
           if (result.status === 'sent') {
             p.state = 'sent'
             p.externalMessageId = result.externalMessageId
@@ -167,12 +207,16 @@ export class Outbox {
                 result.retryAfterMs ?? 0,
                 Math.min(LIMITS.retryMaxMs, LIMITS.retryBaseMs * 2 ** (p.attempts - 1))
               )
-          } else p.state = result.status === 'uncertain' ? 'uncertain' : 'failed'
+          } else {
+            p.state = result.status === 'uncertain' ? 'uncertain' : 'failed'
+            if (result.status === 'failed' && result.terminal) p.terminal = true
+          }
           d.state = d.parts.every((p) => p.state === 'sent')
             ? 'sent'
             : p.state === 'sent'
               ? 'pending'
               : p.state
+          if (d.reply) this.suppress(s, d)
         })
         if (result.status !== 'sent') break
       }
@@ -189,17 +233,20 @@ export class Outbox {
     })
   }
   resolve(id: string, action: 'retry' | 'suppress', acknowledgeDuplicate: boolean): void {
-    this.repository.transaction((s) => {
+    const error = this.repository.transaction((s) => {
       const d = s.outbox.get(id)
       if (!d) throw new CommunicationError('NOT_FOUND')
       if (action === 'suppress') {
-        d.state = 'suppressed'
-        for (const p of d.parts) if (p.state !== 'sent') p.state = 'suppressed'
-        this.sends.get(id)?.abort()
+        this.suppressRemaining(d)
+        if (d.state !== 'sent') d.state = 'suppressed'
         return
       }
-      if (!['failed', 'uncertain'].includes(d.state) || this.suppress(s, d))
-        throw new CommunicationError('DELIVERY_NOT_RETRYABLE')
+      if (
+        this.suppress(s, d) ||
+        !['failed', 'uncertain'].includes(d.state) ||
+        d.parts.some((p) => p.terminal)
+      )
+        return 'DELIVERY_NOT_RETRYABLE'
       if (d.state === 'uncertain' && !acknowledgeDuplicate)
         throw new CommunicationError('DUPLICATE_ACK_REQUIRED')
       d.state = 'pending'
@@ -209,7 +256,9 @@ export class Outbox {
           p.attempts = 0
           p.nextAt = 0
         }
+      return undefined
     })
+    if (error) throw new CommunicationError(error)
   }
   recover(s: CommunicationState): void {
     for (const d of s.outbox.values()) {

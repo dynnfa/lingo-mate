@@ -3,6 +3,16 @@ import * as p from '../shared/communication'
 export function createCommunicationApi(): p.CommunicationApi {
   const c = p.COMMUNICATION_CHANNELS
   return {
+    async createQqConnection(input) {
+      return p.createConnectionResultSchema.parse(
+        await ipcRenderer.invoke(c.createQqConnection, p.createQqInputSchema.parse(input))
+      )
+    },
+    async replaceQqSecret(input) {
+      return p.communicationActionResultSchema.parse(
+        await ipcRenderer.invoke(c.replaceQqSecret, p.replaceQqSecretInputSchema.parse(input))
+      )
+    },
     async createTelegramConnection(input) {
       return p.createConnectionResultSchema.parse(
         await ipcRenderer.invoke(
