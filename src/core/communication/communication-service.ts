@@ -82,7 +82,8 @@ export class CommunicationService {
       return id
     })
   }
-  async start(id: string): Promise<void> {
+  // Return the error code for this attempt. Retryable failures remain scheduled by the service.
+  async start(id: string): Promise<string | undefined> {
     if (this.closed) throw new CommunicationError('STOPPED')
     const connection = this.repository.transaction((s) => {
       const c = s.connections.get(id)
@@ -93,6 +94,7 @@ export class CommunicationService {
       c.state = 'starting'
       c.error = undefined
       c.reconnectAt = undefined
+      c.autoStart = true
       return c
     })
     if (!connection) return
@@ -113,12 +115,14 @@ export class CommunicationService {
         if (!stopped) throw new CommunicationError('CONNECTION_STOP_FAILED')
       } catch {
         if (!this.closed)
-          this.repository.transaction((s) => {
+          return this.repository.transaction((s) => {
             const c = s.connections.get(id)!
             if (c.generation === generation && c.state === 'starting') {
               c.state = 'error'
               c.error = 'CONNECTION_STOP_FAILED'
+              return c.error
             }
+            return undefined
           })
         return
       }
@@ -165,25 +169,27 @@ export class CommunicationService {
         }
       )
       if (this.closed) return
-      if (!connected) {
-        this.disconnected(id, generation, true)
-        return
-      }
+      if (!connected) return this.disconnected(id, generation, true)
       if (controller.signal.aborted) return
-      this.repository.transaction((s) => {
+      return this.repository.transaction((s) => {
         const c = s.connections.get(id)!
-        if (c.generation === generation && c.state === 'starting') {
+        if (c.generation !== generation) return
+        if (c.state === 'error' || c.state === 'reconnecting') return c.error
+        if (c.state === 'starting') {
           c.state = 'online'
           c.attempts = 0
         }
+        return undefined
       })
     } catch (error) {
       if (!this.closed && !controller.signal.aborted) {
-        this.disconnected(
+        const code = this.disconnected(
           id,
           generation,
           error instanceof AdapterConnectionError && error.retryable,
-          error instanceof AdapterConnectionError ? error.code : undefined,
+          error instanceof AdapterConnectionError || error instanceof CommunicationError
+            ? error.code
+            : undefined,
           error instanceof AdapterConnectionError ? error.retryAfterMs : undefined
         )
         controller.abort()
@@ -198,7 +204,9 @@ export class CommunicationService {
             () => {}
           )
         }
+        return code
       }
+      return undefined
     }
   }
   private disconnected(
@@ -207,9 +215,9 @@ export class CommunicationService {
     retryable: boolean,
     code?: string,
     retryAfterMs?: number
-  ): void {
+  ): string | undefined {
     if (this.closed) return
-    this.repository.transaction((s) => {
+    return this.repository.transaction((s) => {
       const c = s.connections.get(id)
       if (!c || c.generation !== generation || !['online', 'starting'].includes(c.state)) return
       c.attempts++
@@ -223,6 +231,7 @@ export class CommunicationService {
               Math.min(LIMITS.retryMaxMs, LIMITS.retryBaseMs * 2 ** (c.attempts - 1))
             )
           : undefined
+      return c.error
     })
   }
   private async receive(
@@ -273,6 +282,7 @@ export class CommunicationService {
     const connection = this.repository.transaction((s) => {
       const c = s.connections.get(id)
       if (!c) throw new CommunicationError('NOT_FOUND')
+      c.autoStart = false
       if (c.state === 'stopped') return undefined
       c.generation++
       c.state = 'stopping'

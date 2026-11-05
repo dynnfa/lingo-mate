@@ -1,7 +1,11 @@
 import { randomBytes, randomUUID, createHash } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import { CommunicationService } from '../../core/communication/communication-service'
-import { CommunicationError, type Languages } from '../../core/communication/communication-contract'
+import {
+  CommunicationError,
+  LIMITS,
+  type Languages
+} from '../../core/communication/communication-contract'
 import type { CommunicationAdapter } from '../../core/communication/communication-adapter'
 import type { CommunicationEnvironment } from '../../core/communication/environment'
 import { SqliteCommunicationRepository } from '../../database/sqlite-communication-repository'
@@ -79,7 +83,14 @@ export class CommunicationHost {
         [...s.connections.values()].flatMap((c) => (c.credentialRef ? [c.credentialRef] : []))
       )
     )
-    // Explicit start is required after restart; saved inbox/outbox resume on start.
+    // Connections the user explicitly started are resumed after restart without
+    // blocking app startup; saved inbox/outbox resume on start.
+    for (const id of this.repository.read((s) =>
+      [...s.connections.values()].filter((c) => c.enabled && c.autoStart).map((c) => c.id)
+    ))
+      void this.start(id).catch(() =>
+        this.diagnostics({ code: 'COMMUNICATION_AUTOSTART_FAILED', connectionId: id })
+      )
     let ticks = 0
     this.timer = setInterval(() => {
       void this.service.flush().catch(() => this.diagnostics({ code: 'COMMUNICATION_TICK_FAILED' }))
@@ -103,13 +114,38 @@ export class CommunicationHost {
           : [],
         connections: [...s.connections.values()]
           .filter((c) => c.enabled || c.state !== 'stopped' || !!c.credentialRef)
-          .map((c) => ({
-            id: c.id,
-            adapterId: c.adapterId,
-            username: c.adapterId === 'telegram' ? c.config.username : undefined,
-            createdAt: c.createdAt,
-            deleting: !c.enabled || undefined
-          }))
+          .map((c) => {
+            const challenge = c.enabled
+              ? [...s.challenges.values()].find(
+                  (item) =>
+                    item.connectionId === c.id &&
+                    !item.consumed &&
+                    item.expiresAt > Date.now() &&
+                    (item.attempts < LIMITS.challengeAttempts ||
+                      (!!item.actor && item.attempts === LIMITS.challengeAttempts))
+                )
+              : undefined
+            return {
+              id: c.id,
+              adapterId: c.adapterId,
+              username: c.adapterId === 'telegram' ? c.config.username : undefined,
+              createdAt: c.createdAt,
+              started: c.state !== 'stopped' && c.state !== 'error',
+              autoStart: c.autoStart || undefined,
+              deleting: !c.enabled || undefined,
+              bindingCount: [...s.bindings.values()].filter(
+                (binding) => binding.connectionId === c.id && !binding.revoked
+              ).length,
+              bindingChallenge: challenge
+                ? {
+                    challengeId: challenge.id,
+                    expiresAt: challenge.expiresAt,
+                    externalActorId: challenge.actor,
+                    displayName: challenge.displayName
+                  }
+                : undefined
+            }
+          })
       }))
     )
   }
@@ -125,7 +161,10 @@ export class CommunicationHost {
     return result
   }
   start(id: string): Promise<void> {
-    return this.coordinate(() => this.service.start(id))
+    return this.coordinate(async () => {
+      const code = await this.service.start(id)
+      if (code !== undefined) throw new CommunicationError(code)
+    })
   }
   stop(id: string): Promise<void> {
     return this.coordinate(() => this.service.stop(id))
