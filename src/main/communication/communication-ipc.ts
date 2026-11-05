@@ -37,6 +37,18 @@ export function registerCommunicationIpc(
   removers.push(
     register({
       ...errors,
+      channel: protocol.COMMUNICATION_CHANNELS.testConnection,
+      inputSchema: protocol.connectionInputSchema,
+      resultSchema: protocol.communicationActionResultSchema,
+      handler: async (i) => {
+        await host.testConnection(i.connectionId)
+        return { status: 'ok' as const }
+      }
+    })
+  )
+  removers.push(
+    register({
+      ...errors,
       channel: protocol.COMMUNICATION_CHANNELS.start,
       inputSchema: protocol.connectionInputSchema,
       resultSchema: protocol.communicationActionResultSchema,

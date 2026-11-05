@@ -1,4 +1,4 @@
-import { useId, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
+import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { useFocusTrap } from './useFocusTrap'
 import './ConfirmDialog.css'
 
@@ -16,9 +16,12 @@ export interface ConfirmDialogProps {
   // 操作失败文案，按钮上方以 role="alert" 渲染。
   error?: string | null
   initialFocus?: 'confirm' | 'cancel'
+  initialFocusRef?: RefObject<HTMLElement | null>
+  formId?: string
+  confirmDisabled?: boolean
   // 关闭后焦点归还目标。
   returnFocusRef?: RefObject<HTMLElement | null>
-  onConfirm: () => void
+  onConfirm?: () => void
   onCancel: () => void
   // 附加内容插槽，渲染在描述与错误之间（如模型行测试结果）。
   children?: ReactNode
@@ -36,6 +39,9 @@ export function ConfirmDialog({
   busy = false,
   error = null,
   initialFocus = 'cancel',
+  initialFocusRef,
+  formId,
+  confirmDisabled = false,
   returnFocusRef,
   onConfirm,
   onCancel,
@@ -44,12 +50,24 @@ export function ConfirmDialog({
   const titleId = useId()
   const descriptionId = useId()
   const backdropRef = useRef<HTMLDivElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
   const confirmRef = useRef<HTMLButtonElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
   const hasCancelButton = cancelLabel !== undefined
-  const initialFocusRef = initialFocus === 'confirm' || !hasCancelButton ? confirmRef : cancelRef
+  const buttonFocusRef = initialFocus === 'confirm' || !hasCancelButton ? confirmRef : cancelRef
+  const focusRef = initialFocusRef ?? buttonFocusRef
+  useFocusTrap({
+    active: open,
+    containerRef: backdropRef,
+    initialFocusRef: focusRef,
+    returnFocusRef
+  })
 
-  useFocusTrap({ active: open, containerRef: backdropRef, initialFocusRef, returnFocusRef })
+  useEffect(() => {
+    if (!open) return
+    if (busy) dialogRef.current?.focus()
+    else if (document.activeElement === dialogRef.current) focusRef.current?.focus()
+  }, [busy, focusRef, open])
 
   if (!open) return null
 
@@ -69,7 +87,9 @@ export function ConfirmDialog({
         aria-labelledby={titleId}
         aria-modal="true"
         className="confirm-card"
+        ref={dialogRef}
         role="dialog"
+        tabIndex={-1}
       >
         <h3 id={titleId}>{title}</h3>
         {description !== undefined ? (
@@ -97,10 +117,11 @@ export function ConfirmDialog({
           ) : null}
           <button
             className={tone === 'danger' ? 'confirm-button-danger' : 'confirm-button'}
-            disabled={busy}
+            disabled={busy || confirmDisabled}
+            form={formId}
             onClick={onConfirm}
             ref={confirmRef}
-            type="button"
+            type={formId ? 'submit' : 'button'}
           >
             {confirmLabel}
           </button>

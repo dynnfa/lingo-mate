@@ -19,6 +19,11 @@ export function createCommunicationApi(): p.CommunicationApi {
     async snapshot() {
       return p.communicationSnapshotResultSchema.parse(await ipcRenderer.invoke(c.snapshot))
     },
+    async testConnection(input) {
+      return p.communicationActionResultSchema.parse(
+        await ipcRenderer.invoke(c.testConnection, p.connectionInputSchema.parse(input))
+      )
+    },
     async start(input) {
       return p.communicationActionResultSchema.parse(
         await ipcRenderer.invoke(c.start, p.connectionInputSchema.parse(input))

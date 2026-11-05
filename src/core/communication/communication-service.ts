@@ -70,6 +70,7 @@ export class CommunicationService {
       s.connections.set(id, {
         id,
         adapterId,
+        createdAt: this.env.now(),
         enabled: true,
         generation: 0,
         state: 'stopped',

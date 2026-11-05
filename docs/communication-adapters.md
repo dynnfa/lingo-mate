@@ -1,6 +1,6 @@
 # 公共通信模块与 Adapter 接入
 
-公共模块已提供通信基础设施，并静态注册 Telegram HTTPS 长轮询 Adapter。桌面支持创建 Bot 连接、加密保存／替换 Token、两步绑定与逻辑删除。当前已通过可控 Bot API 传输、临时 SQLite、真实 Python JSONL 和可控模型验证；尚未执行真实 Telegram 平台、Electron E2E 或跨 OS 验收，不代表已验证微信、飞书或 Discord。
+公共模块已提供通信基础设施，并静态注册 Telegram HTTPS 长轮询 Adapter。桌面「通信渠道」设置支持添加 Bot、测试连接、替换加密保存的 Token 与逻辑删除。启动、停止与账号绑定目前没有设置入口。当前已通过可控 Bot API 传输、临时 SQLite、真实 Python JSONL 和可控模型验证；尚未执行真实 Telegram 平台、Electron E2E 或跨 OS 验收，不代表已验证微信、飞书或 Discord。
 
 ## 代码边界
 
@@ -69,10 +69,10 @@
 - 仅普通人类私聊文本，身份和时间严格校验安全整数。非文本、编辑、非私聊或无可靠身份的更新走持久化拒绝。正文只取顶层 text，给本 Bot 的命令仅规范化 `@username` 后缀，其他 Bot 的命令拒绝。Telegram `language_code` 不改变桌面语言。
 - `telegram` 注册显式启用无参数 `/start` → `/help` 的公共控制别名；仍须绑定。带参数 `/start` 不消费绑定码或票据，也不进入普通对话。其他 Adapter 不受别名影响。
 - 出站 `telegram-plain-v1`：纯文本、不设置 parse mode、不预览链接，每片最多 4,000 UTF-16 单元，确定性分片可还原原文，不拆代理对；同 chat 至少间隔 1 秒，连接级至少间隔 40 ms，取消及等待计入单次发送预算。
-- 每片只调用一次 `sendMessage`，核验返回消息 ID 与冻结私聊 target。明确 429 尊重完整 `retry_after`；发起后的网络故障、5xx 或无法核验的回执为 uncertain，不自动重发。桌面勾选可能重复后仅重试保存片段，不重跑 Agent。
+- 每片只调用一次 `sendMessage`，核验返回消息 ID 与冻结私聊 target。明确 429 尊重完整 `retry_after`；发起后的网络故障、5xx 或无法核验的回执为 uncertain，不自动重发。人工重试须确认可能重复发送，仅重试保存片段，不重跑 Agent。
 - 删除先关闭准入、撤销绑定、取消活动任务并抑制待发，再有界停止和清理凭据。停止或清理失败仍在桌面显示并允许重试，不宣告完成或启动替代消费者。保留已提交学习结果与账本。JSON 记录新增字段兼容现有 v15，无需新迁移；验证未打开真实用户数据库。
 
-凭据库使用系统 safeStorage 和权限受限的独立文件，仅提供 write / Main read / remove。加密不可用（含 Linux basic_text）时失败，不降级明文。替换凭据先停止旧代次；桌面协议只有提交接口和 hasCredential，不提供秘密回读。Telegram 已提供专属 Token 表单和连接创建接口，其他平台仍需单独适配。
+凭据库使用系统 safeStorage 和权限受限的独立文件，仅提供 write / Main read / remove。加密不可用（含 Linux basic_text）时失败，不降级明文。替换凭据先停止旧代次。设置页的测试由 Main 读取已保存的凭据，并通过 `getMe` 核验 Bot 身份，凭据不会返回桌面。测试不启动轮询。新建连接保存添加时间，旧记录缺少时间时显示「添加时间未知」。
 
 ## 契约测试和验证
 

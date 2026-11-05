@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { afterEach, expect, it, vi, type Mock } from 'vitest'
 import { openDatabase } from '../../../database/database'
+import { SqliteCommunicationRepository } from '../../../database/sqlite-communication-repository'
 import { SqliteConversationRepository } from '../../../database/sqlite-conversation-repository'
 import { createTestConversationModule } from '../../../../tests/fixtures/conversation'
 import { CommunicationHost } from '../communication-host'
@@ -16,6 +17,7 @@ function fixture(): {
   verify: Mock<() => Promise<{ botId: string; username: string }>>
   adapter: TestAdapter
   db: ReturnType<typeof openDatabase>
+  connectionState: (id: string) => string | undefined
 } {
   const db = openDatabase(':memory:')
   const repository = new SqliteConversationRepository(db)
@@ -48,7 +50,10 @@ function fixture(): {
     await module.shutdown()
     db.close()
   })
-  return { host, credentials, verify, adapter, db }
+  const connections = new SqliteCommunicationRepository(db)
+  const connectionState = (id: string): string | undefined =>
+    connections.read((state) => state.connections.get(id)?.state)
+  return { host, credentials, verify, adapter, db, connectionState }
 }
 it('creates stopped verified connections without exposing secrets and serializes duplicate Bot creation', async () => {
   const f = fixture()
@@ -58,9 +63,11 @@ it('creates stopped verified connections without exposing secrets and serializes
   ])
   expect(results.map((r) => r.status)).toEqual(['fulfilled', 'rejected'])
   expect(f.credentials.write).toHaveBeenCalledTimes(1)
-  expect(f.host.snapshot().connections).toMatchObject([
-    { state: 'stopped', botId: '123456', username: 'lingo_bot', hasCredential: true }
-  ])
+  expect(results[0]).toMatchObject({ status: 'fulfilled' })
+  if (results[0].status !== 'fulfilled') throw results[0].reason
+  const id = results[0].value
+  expect(f.connectionState(id)).toBe('stopped')
+  expect(f.host.snapshot().connections).toMatchObject([{ id, username: 'lingo_bot' }])
   expect(JSON.stringify(f.host.snapshot())).not.toContain(token)
 })
 it('stops before rotation, refuses a different bot, retains the old reference and requires explicit restart', async () => {
@@ -69,7 +76,7 @@ it('stops before rotation, refuses a different bot, retains the old reference an
   await f.host.start(id)
   f.verify.mockResolvedValueOnce({ botId: '999', username: 'other_bot' })
   await expect(f.host.setCredential(id, token)).rejects.toThrow('TELEGRAM_BOT_MISMATCH')
-  expect(f.host.snapshot().connections[0].state).toBe('stopped')
+  expect(f.connectionState(id)).toBe('stopped')
   expect(f.credentials.write).toHaveBeenCalledTimes(1)
   await f.host.setCredential(id, token)
   expect(f.credentials.write).toHaveBeenCalledTimes(2)
@@ -92,7 +99,8 @@ it('keeps failed deletion visible and retryable without admitting a replacement 
   await f.host.start(id)
   vi.spyOn(f.adapter, 'stop').mockRejectedValueOnce(new Error('cannot stop'))
   await expect(f.host.deleteConnection(id)).rejects.toThrow('CONNECTION_STOP_FAILED')
-  expect(f.host.snapshot().connections).toMatchObject([{ id, state: 'error', deleting: true }])
+  expect(f.connectionState(id)).toBe('error')
+  expect(f.host.snapshot().connections).toMatchObject([{ id, deleting: true }])
   await expect(f.host.createTelegramConnection(token)).rejects.toThrow('TELEGRAM_DUPLICATE_BOT')
   await f.host.deleteConnection(id)
   expect(f.host.snapshot().connections).toEqual([])
@@ -119,3 +127,58 @@ it('shuts down without waiting for a credential verifier that ignores cancellati
   expect(stopped).toBe(true)
   expect(f.credentials.write).not.toHaveBeenCalled()
 })
+
+it('persists the time of creation and preserves it through credential rotation', async () => {
+  const f = fixture()
+  const id = await f.host.createTelegramConnection(token)
+  const snapshot = f.host.snapshot()
+  const createdAt = snapshot.connections[0].createdAt
+  expect(createdAt).toEqual(expect.any(Number))
+  expect(
+    f.db
+      .prepare(
+        "SELECT json_extract(data, '$.createdAt') AS createdAt FROM communication_connections WHERE id = ?"
+      )
+      .get(id)
+  ).toEqual({ createdAt })
+  await f.host.setCredential(id, token)
+  expect(f.host.snapshot().connections[0].createdAt).toBe(createdAt)
+  f.db
+    .prepare(
+      "UPDATE communication_connections SET data = json_remove(data, '$.createdAt') WHERE id = ?"
+    )
+    .run(id)
+  expect(f.host.snapshot().connections[0].createdAt).toBeUndefined()
+})
+
+it('tests the selected stored credential without starting a connection or writing data', async () => {
+  const f = fixture()
+  await f.host.createTelegramConnection(token)
+  const otherToken = '654321:abcdefghijklmnopqrstuvwxyz123456789'
+  f.verify.mockResolvedValueOnce({ botId: '654321', username: 'other_bot' })
+  const other = await f.host.createTelegramConnection(otherToken)
+  const reference = f.credentials.write.mock.results[1].value
+  f.credentials.read.mockReturnValueOnce(otherToken)
+  f.verify.mockResolvedValueOnce({ botId: '654321', username: 'other_bot' })
+  const start = vi.spyOn(f.adapter, 'start')
+  const before = f.db.prepare('SELECT * FROM communication_connections').all()
+  await expect(f.host.testConnection(other)).resolves.toBeUndefined()
+  expect(f.credentials.read).toHaveBeenCalledWith(reference)
+  expect(f.verify).toHaveBeenLastCalledWith(otherToken, expect.any(AbortSignal))
+  expect(start).not.toHaveBeenCalled()
+  expect(f.db.prepare('SELECT * FROM communication_connections').all()).toEqual(before)
+  expect(f.credentials.write).toHaveBeenCalledTimes(2)
+  expect(f.credentials.remove).not.toHaveBeenCalled()
+})
+
+it.each(['TELEGRAM_NETWORK', 'TELEGRAM_UNAUTHORIZED', 'TELEGRAM_BOT_MISMATCH'])(
+  'rejects an unsuccessful connectivity test with %s',
+  async (code) => {
+    const f = fixture()
+    const id = await f.host.createTelegramConnection(token)
+    if (code === 'TELEGRAM_BOT_MISMATCH')
+      f.verify.mockResolvedValueOnce({ botId: '999', username: 'other_bot' })
+    else f.verify.mockRejectedValueOnce(new Error(code))
+    await expect(f.host.testConnection(id)).rejects.toThrow(code)
+  }
+)
