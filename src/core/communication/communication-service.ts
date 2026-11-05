@@ -93,6 +93,7 @@ export class CommunicationService {
       c.state = 'starting'
       c.error = undefined
       c.reconnectAt = undefined
+      c.autoStart = true
       return c
     })
     if (!connection) return
@@ -277,6 +278,7 @@ export class CommunicationService {
       c.generation++
       c.state = 'stopping'
       c.reconnectAt = undefined
+      c.autoStart = false
       return c
     })
     if (!connection) return
