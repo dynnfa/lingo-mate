@@ -110,7 +110,7 @@ export class CommunicationService {
       return c
     })
     if (!connection) return
-    const generation = connection.generation
+    const { generation, cursorVersion } = connection
     const old = this.adapters.get(id)
     if (old) {
       old.controller.abort()
@@ -161,6 +161,29 @@ export class CommunicationService {
           .start({
             signal: controller.signal,
             cursor: connection.cursor,
+            saveInitialCursor: (cursor) => {
+              if (
+                this.closed ||
+                controller.signal.aborted ||
+                !this.sessionCursors.has(connection.adapterId) ||
+                !cursor.length ||
+                cursor.length > LIMITS.cursor
+              )
+                return false
+              return this.repository.transaction((s) => {
+                const c = s.connections.get(id)
+                if (
+                  !c?.enabled ||
+                  c.generation !== generation ||
+                  c.state !== 'starting' ||
+                  c.cursorVersion !== cursorVersion
+                )
+                  return false
+                c.cursor = cursor
+                c.cursorVersion++
+                return true
+              })
+            },
             discardCursor: () => {
               if (this.closed || controller.signal.aborted) return false
               return this.repository.transaction((s) => {

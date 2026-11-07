@@ -12,6 +12,7 @@ function fixture(): {
     receive: Mock<AdapterContext['receive']>
     receiveRejected: Mock<AdapterContext['receiveRejected']>
     disconnected: Mock
+    saveInitialCursor: Mock
     discardCursor: Mock
   }
   controller: AbortController
@@ -38,6 +39,7 @@ function fixture(): {
       .fn<AdapterContext['receiveRejected']>()
       .mockResolvedValue({ status: 'rejected' }),
     disconnected: vi.fn(),
+    saveInitialCursor: vi.fn(() => true),
     discardCursor: vi.fn(() => true)
   }
   const adapter = new QqAdapter('123456', 'fixture-secret', { fetch: http, open })
@@ -93,6 +95,21 @@ it('identifies with only the group/C2C intent and admits C2C text without forwar
       JSON.stringify({ version: 1, appId: '123456', sessionId: 'session-a', seq: 2 })
     )
     expect(JSON.stringify(f.context.receive.mock.calls)).not.toContain('PRIVATE')
+  } finally {
+    await f.adapter.stop()
+  }
+})
+
+it('stops before admitting dispatches if the initial READY cursor cannot be saved', async () => {
+  const f = fixture()
+  try {
+    f.context.saveInitialCursor.mockReturnValueOnce(false)
+    const { ready } = await f.connect()
+    f.frame(readyFrame)
+    f.frame(message(2))
+    await expect(ready).rejects.toMatchObject({ retryable: true, code: 'QQ_ADMISSION_FAILED' })
+    expect(f.context.receive).not.toHaveBeenCalled()
+    expect(f.close).toHaveBeenCalledOnce()
   } finally {
     await f.adapter.stop()
   }

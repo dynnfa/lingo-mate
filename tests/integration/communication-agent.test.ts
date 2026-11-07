@@ -18,6 +18,48 @@ import { SentenceConversationSkill } from '../../src/core/learning/sentence/sent
 import { createSentenceFeedbackFormatter } from '../../src/main/sentence-feedback'
 import { openDatabase } from '../../src/database/database'
 
+it.each([1006, 4004])(
+  'resumes from READY with fresh QQ authorization after close code %i',
+  async (code) => {
+    const db = openDatabase(':memory:')
+    const repository = new SqliteCommunicationRepository(db)
+    const qq = qqHarness()
+    let now = Date.now()
+    const service = new CommunicationService(
+      repository,
+      { createSession: vi.fn(), execute: vi.fn(), recover: vi.fn(), cancel: vi.fn() },
+      {
+        now: () => now,
+        id: randomUUID,
+        secret: () => randomBytes(16).toString('hex'),
+        digest: (value) => createHash('sha256').update(value).digest('hex'),
+        languages: () => ({ uiLanguage: 'en', outputLanguage: 'en', targetLanguage: 'en' }),
+        diagnostics: vi.fn()
+      }
+    )
+    service.registerAdapter('qq', () => qq.adapter, { sessionCursor: true })
+    const id = service.addConnection('qq')
+    try {
+      await expect(service.start(id)).resolves.toBeUndefined()
+      expect(repository.read((s) => s.inbox.size)).toBe(0)
+      qq.disconnect(code)
+      now += 1000
+      await service.flush()
+      expect(qq.loginFrames).toMatchObject([
+        { op: 2, d: { token: 'QQBot PRIVATE_QQ_ACCESS_TOKEN_1' } },
+        {
+          op: 6,
+          d: { token: 'QQBot PRIVATE_QQ_ACCESS_TOKEN_2', session_id: 'session-1', seq: 1 }
+        }
+      ])
+      expect(repository.read((s) => s.connections.get(id)?.state)).toBe('online')
+    } finally {
+      await service.shutdown()
+      db.close()
+    }
+  }
+)
+
 it.each([false, true, 'telegram', 'qq'] as const)(
   'uses the same durable conversation port and real Python for adapter interactive=%s',
   async (interactive) => {

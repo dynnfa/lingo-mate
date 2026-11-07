@@ -11,6 +11,8 @@ import type {
 export interface AdapterContext {
   signal: AbortSignal
   cursor?: string
+  // Commit a new session's starting position before admitting any events.
+  saveInitialCursor?(cursor: string): boolean
   discardCursor?(): boolean
   receive(event: unknown, cursor?: string): Promise<Receipt>
   receiveRejected(envelope: RejectedEnvelope | undefined, cursor?: string): Promise<Receipt>
