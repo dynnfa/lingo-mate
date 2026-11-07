@@ -15,7 +15,8 @@ export interface AdapterContractHarness {
 }
 export function runCommunicationAdapterContract(
   name: string,
-  makeHarness: () => AdapterContractHarness
+  makeHarness: () => AdapterContractHarness,
+  options?: { sessionCursor?: boolean }
 ): void {
   describe(`communication adapter: ${name}`, () => {
     const cleanups: Array<() => Promise<void>> = []
@@ -55,9 +56,9 @@ export function runCommunicationAdapterContract(
         await service.shutdown()
         db.close()
       })
-      service.registerAdapter('contract', () => harness.adapter)
+      service.registerAdapter('contract', () => harness.adapter, options)
       const connectionId = service.addConnection('contract')
-      await service.start(connectionId)
+      await expect(service.start(connectionId)).resolves.toBeUndefined()
       const event = (text: string): InboundEvent => ({
         type: 'text',
         text,

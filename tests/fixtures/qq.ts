@@ -4,18 +4,23 @@ import { QqAdapter } from '../../src/main/channels/qq/qq-adapter'
 import type { QqSocketFactory, QqSocketHandlers } from '../../src/main/channels/qq/qq-gateway'
 
 type PassiveReply = { content: string; msg_id: string; msg_seq: number }
+type LoginFrame = { op: 2 | 6; d: { token: string; session_id?: string; seq?: number } }
 
 export function qqHarness(): {
   adapter: QqAdapter
   sentTexts(): string[]
   sent: PassiveReply[]
+  loginFrames: LoginFrame[]
+  disconnect(code: number): void
   inject(event: InboundEvent, index?: string): Promise<Receipt>
 } {
   const sent: PassiveReply[] = []
+  const loginFrames: LoginFrame[] = []
   const pending: Array<(receipt: Receipt) => void> = []
   let handlers: QqSocketHandlers | undefined
   let sequence = 0
   let gatewaySession = 0
+  let tokenRequests = 0
   const open: QqSocketFactory = (_url, callbacks) => {
     handlers = callbacks
     queueMicrotask(() =>
@@ -23,7 +28,9 @@ export function qqHarness(): {
     )
     return {
       send: (raw) => {
-        const { op } = JSON.parse(raw) as { op: number }
+        const frame = JSON.parse(raw) as LoginFrame | { op: 1 }
+        const { op } = frame
+        if (op === 2 || op === 6) loginFrames.push(frame)
         if (op === 1) callbacks.message(JSON.stringify({ op: 11 }))
         if (op === 2) {
           gatewaySession++
@@ -46,7 +53,10 @@ export function qqHarness(): {
   const fetcher: typeof fetch = async (input, init) => {
     const url = new URL(String(input))
     if (url.pathname === '/app/getAppAccessToken')
-      return Response.json({ access_token: 'PRIVATE_QQ_ACCESS_TOKEN', expires_in: '7200' })
+      return Response.json({
+        access_token: 'PRIVATE_QQ_ACCESS_TOKEN_' + ++tokenRequests,
+        expires_in: '7200'
+      })
     if (url.pathname === '/gateway/bot')
       return Response.json({ url: 'wss://api.bot.qq.com/websocket' })
     if (!/^\/v2\/users\/(PRIVATE_EXTERNAL_ACTOR|actor)\/messages$/u.test(url.pathname))
@@ -71,6 +81,8 @@ export function qqHarness(): {
     adapter,
     sentTexts: () => sent.map((part) => part.content),
     sent,
+    loginFrames,
+    disconnect: (code) => handlers!.ended(code),
     inject(event: InboundEvent, index = 'REFIDX_fixture=='): Promise<Receipt> {
       if (!handlers || event.type !== 'text')
         return Promise.resolve({ status: 'failed', code: 'STOPPED' })

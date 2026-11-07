@@ -205,12 +205,7 @@ export class QqGateway {
         }
         const seq = frame.s!
         if (this.durable !== undefined && seq <= this.durable) continue
-        const cursor = JSON.stringify({
-          version: 1,
-          appId: this.appId,
-          sessionId: this.sessionId,
-          seq
-        })
+        const cursor = this.serializeCursor(this.sessionId, seq)
         const admission = mapDispatch(frame)
         const receipt =
           'event' in admission
@@ -239,14 +234,24 @@ export class QqGateway {
         this.finish(gatewayError())
         return
       }
-      this.sessionId = parsed.data.session_id
-      this.durable = frame.s
+      const sessionId = parsed.data.session_id
+      const seq = frame.s!
+      if (!this.context.saveInitialCursor?.(this.serializeCursor(sessionId, seq))) {
+        this.finish(admissionFailed())
+        return
+      }
+      this.sessionId = sessionId
+      this.durable = seq
     } else if (frame.t !== 'RESUMED' || this.phase !== 'resume') {
       this.finish(gatewayError())
       return
     }
     this.phase = 'online'
     this.resolveLogin()
+  }
+
+  private serializeCursor(sessionId: string, seq: number): string {
+    return JSON.stringify({ version: 1, appId: this.appId, sessionId, seq } satisfies QqCursor)
   }
 
   private invalidateSession(): void {
@@ -261,8 +266,10 @@ export class QqGateway {
   private socketEnded(code?: number): void {
     if (this.closed) return
     if (code === 4008) this.finish(new AdapterConnectionError(true, 'QQ_RATE_LIMITED', 60_000))
-    else if (code === 4004) this.finish(new AdapterConnectionError(false, 'QQ_UNAUTHORIZED'))
-    else if ([1008, 4013, 4014, 4914, 4915].includes(code ?? 0)) this.finish(gatewayError())
+    else if (code === 4004) {
+      // The next connection attempt creates its own token cache.
+      this.finish(new AdapterConnectionError(true, 'QQ_UNAUTHORIZED'))
+    } else if ([1008, 4013, 4014, 4914, 4915].includes(code ?? 0)) this.finish(gatewayError())
     else if (
       code === 4006 ||
       code === 4007 ||
