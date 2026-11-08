@@ -206,7 +206,7 @@ export class QqGateway {
         const seq = frame.s!
         if (this.durable !== undefined && seq <= this.durable) continue
         const cursor = this.serializeCursor(this.sessionId, seq)
-        const admission = mapDispatch(frame)
+        const admission = mapDispatch(frame, cursor)
         const receipt =
           'event' in admission
             ? await this.context.receive(admission.event, cursor)

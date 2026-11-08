@@ -53,7 +53,11 @@ function fixture(): {
   return { adapter, send, close, http, context, controller, frame, connect }
 }
 const readyFrame = { op: 0, s: 1, t: 'READY', d: { session_id: 'session-a' } }
-const message = (s: number, id = 'ROBOT1.0_fixture', t = 'C2C_MESSAGE_CREATE'): unknown => ({
+const message = (
+  s: number,
+  id = 'ROBOT1.0_fixture',
+  t = 'C2C_MESSAGE_CREATE'
+): { op: number; s: number; t: string; id: string; d: Record<string, unknown> } => ({
   op: 0,
   s,
   t,
@@ -234,12 +238,39 @@ it('uses the latest received sequence for heartbeats and stops when an ACK is mi
   }
 })
 
-it('stops at a dispatch without a safe identity and ignores queued callbacks after stop', async () => {
+it.each([
+  { t: 'FRIEND_ADD', d: { openid: 'USER_1' } },
+  { t: 'GROUP_ADD_ROBOT', id: null, d: { group_openid: 'GROUP_1' } },
+  { t: 'C2C_MESSAGE_CREATE', id: '', d: { ...message(2).d, id: undefined } }
+])('keeps receiving after a known $t event has no ID', async (event) => {
+  const f = fixture()
+  try {
+    const { ready } = await f.connect()
+    f.frame(readyFrame)
+    await ready
+    f.frame({ op: 0, s: 2, ...event })
+    f.frame({ ...message(3), id: undefined })
+    await vi.waitFor(() => expect(f.context.receive).toHaveBeenCalledOnce())
+    expect(f.context.receiveRejected).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ externalEventId: expect.any(String), kind: 'unsupported' }),
+      JSON.stringify({ version: 1, appId: '123456', sessionId: 'session-a', seq: 2 })
+    )
+    expect(f.context.receive).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'text', externalMessageId: 'ROBOT1.0_fixture' }),
+      JSON.stringify({ version: 1, appId: '123456', sessionId: 'session-a', seq: 3 })
+    )
+    expect(f.context.disconnected).not.toHaveBeenCalled()
+  } finally {
+    await f.adapter.stop()
+  }
+})
+
+it('stops at an unknown dispatch without a safe identity and ignores queued callbacks after stop', async () => {
   const f = fixture()
   const { ready } = await f.connect()
   f.frame(readyFrame)
   await ready
-  f.frame({ op: 0, s: 2, t: 'FRIEND_ADD', d: { openid: 'USER_1' } })
+  f.frame({ op: 0, s: 2, t: 'UNKNOWN_EVENT' })
   f.frame(message(3))
   await vi.waitFor(() =>
     expect(f.context.disconnected).toHaveBeenCalledWith(true, 'QQ_ADMISSION_FAILED', undefined)

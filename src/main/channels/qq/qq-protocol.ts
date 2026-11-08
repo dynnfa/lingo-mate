@@ -13,6 +13,19 @@ export const QQ_MAX_FRAME_BYTES = 64 * 1024
 export const QQ_MAX_PARTS = 4
 export const QQ_PART_UNITS = 1000
 export const QQ_C2C_INTENT = 1 << 25
+// Dispatches listed for GROUP_AND_C2C_EVENT in the QQ gateway contract.
+const qqC2cDispatchTypes = new Set([
+  'C2C_MESSAGE_CREATE',
+  'FRIEND_ADD',
+  'FRIEND_DEL',
+  'C2C_MSG_REJECT',
+  'C2C_MSG_RECEIVE',
+  'GROUP_AT_MESSAGE_CREATE',
+  'GROUP_ADD_ROBOT',
+  'GROUP_DEL_ROBOT',
+  'GROUP_MSG_REJECT',
+  'GROUP_MSG_RECEIVE'
+])
 
 export const qqOpenId = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/u)
 export const qqMessageId = z.string().regex(/^[A-Za-z0-9_.+/=-]{1,256}$/u)
@@ -29,7 +42,7 @@ export const gatewayFrame = z.object({
   op: z.number().int().nonnegative(),
   s: sequence.optional(),
   t: z.string().max(64).optional(),
-  id: z.unknown().optional().optional(),
+  id: z.unknown().optional(),
   d: z.unknown().optional()
 })
 export type GatewayFrame = z.infer<typeof gatewayFrame>
@@ -67,20 +80,25 @@ const textMessage = messageIdentity.extend({
 
 type Admission = { event: InboundEvent } | { rejected: RejectedEnvelope | undefined }
 
-export function mapDispatch(frame: GatewayFrame): Admission {
+export function mapDispatch(frame: GatewayFrame, cursor: string): Admission {
   const message = frame.t === 'C2C_MESSAGE_CREATE'
   const parsedId = messageIdentity.safeParse(frame.d)
   const messageKey =
     message && parsedId.success ? 'qq-message:' + hash(parsedId.data.id) : undefined
   const reject = (kind: RejectedEnvelope['kind']): Admission => {
     const outerId = qqMessageId.safeParse(frame.id)
+    const missingOuterId = frame.id === undefined || frame.id === null || frame.id === ''
     const externalEventId =
       messageKey ??
       (outerId.success
         ? 'qq-dispatch:' + hash(outerId.data)
         : parsedId.success && frame.t === 'GROUP_AT_MESSAGE_CREATE'
           ? 'qq-group:' + hash(parsedId.data.id)
-          : undefined)
+          : undefined) ??
+      // The cursor binds the sequence to this gateway session. Use it only for rejection receipts.
+      (missingOuterId && frame.t && qqC2cDispatchTypes.has(frame.t)
+        ? 'qq-sequence:' + hash(cursor)
+        : undefined)
     return {
       rejected: externalEventId
         ? { externalEventId, kind, digest: hash(externalEventId + ':' + kind) }
