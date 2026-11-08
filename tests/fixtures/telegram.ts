@@ -58,8 +58,10 @@ export function telegramHarness(): {
         ...context,
         receive: async (event, cursor) =>
           observe((event as InboundEvent).externalEventId, await context.receive(event, cursor)),
-        receiveRejected: async (envelope, cursor) =>
-          observe(envelope.externalEventId, await context.receiveRejected(envelope, cursor))
+        receiveRejected: async (envelope, cursor) => {
+          const receipt = await context.receiveRejected(envelope, cursor)
+          return envelope ? observe(envelope.externalEventId, receipt) : receipt
+        }
       })
     }
     override async stop(): Promise<void> {

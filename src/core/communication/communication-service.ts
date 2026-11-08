@@ -23,6 +23,7 @@ export class CommunicationService {
   private readonly receiver: InboxReceiver
   private readonly outbox: Outbox
   private readonly dispatcher: Dispatcher
+  private readonly sessionCursors = new Set<string>()
   private readonly startAliases = new Set<string>()
   private readonly factories = new Map<string, AdapterFactory>()
   private readonly adapters = new Map<
@@ -31,6 +32,7 @@ export class CommunicationService {
   >()
   private closed = false
   private flushing?: Promise<void>
+  private readonly reconnecting = new Map<string, Promise<string | undefined>>()
   private delivering?: Promise<void>
   private deliveryRequested = false
   constructor(
@@ -43,10 +45,15 @@ export class CommunicationService {
     this.receiver = new InboxReceiver(repository, env, this.identity, this.outbox)
     this.dispatcher = new Dispatcher(repository, env, business, this.outbox)
   }
-  registerAdapter(id: string, factory: AdapterFactory, options?: { startAsHelp?: boolean }): void {
+  registerAdapter(
+    id: string,
+    factory: AdapterFactory,
+    options?: { startAsHelp?: boolean; sessionCursor?: boolean }
+  ): void {
     if (!/^[a-z][a-z0-9-]{0,63}$/u.test(id) || this.factories.has(id))
       throw new CommunicationError('INVALID_ADAPTER')
     this.factories.set(id, factory)
+    if (options?.sessionCursor) this.sessionCursors.add(id)
     if (options?.startAsHelp) this.startAliases.add(id)
   }
   addConnection(
@@ -83,7 +90,7 @@ export class CommunicationService {
     })
   }
   // Return the error code for this attempt. Retryable failures remain scheduled by the service.
-  async start(id: string): Promise<string | undefined> {
+  async start(id: string, reconnect = false): Promise<string | undefined> {
     if (this.closed) throw new CommunicationError('STOPPED')
     const connection = this.repository.transaction((s) => {
       const c = s.connections.get(id)
@@ -94,11 +101,16 @@ export class CommunicationService {
       c.state = 'starting'
       c.error = undefined
       c.reconnectAt = undefined
-      c.autoStart = true
+      if (!reconnect) c.autoStart = true
+      const sessionCursor = this.sessionCursors.has(c.adapterId)
+      if (sessionCursor && !reconnect) {
+        c.cursor = undefined
+        c.attempts = 0
+      }
       return c
     })
     if (!connection) return
-    const generation = connection.generation
+    const { generation, cursorVersion } = connection
     const old = this.adapters.get(id)
     if (old) {
       old.controller.abort()
@@ -149,6 +161,39 @@ export class CommunicationService {
           .start({
             signal: controller.signal,
             cursor: connection.cursor,
+            saveInitialCursor: (cursor) => {
+              if (
+                this.closed ||
+                controller.signal.aborted ||
+                !this.sessionCursors.has(connection.adapterId) ||
+                !cursor.length ||
+                cursor.length > LIMITS.cursor
+              )
+                return false
+              return this.repository.transaction((s) => {
+                const c = s.connections.get(id)
+                if (
+                  !c?.enabled ||
+                  c.generation !== generation ||
+                  c.state !== 'starting' ||
+                  c.cursorVersion !== cursorVersion
+                )
+                  return false
+                c.cursor = cursor
+                c.cursorVersion++
+                return true
+              })
+            },
+            discardCursor: () => {
+              if (this.closed || controller.signal.aborted) return false
+              return this.repository.transaction((s) => {
+                const c = s.connections.get(id)
+                if (!c || c.generation !== generation || !['online', 'starting'].includes(c.state))
+                  return false
+                c.cursor = undefined
+                return true
+              })
+            },
             receive: (event, cursor) => this.receive(id, generation, event, cursor),
             receiveRejected: async (envelope, cursor) => {
               if (this.closed) return { status: 'failed', code: 'STOPPED' }
@@ -339,6 +384,13 @@ export class CommunicationService {
     id: string,
     capabilities: Capability[]
   ): ReturnType<IdentityBinding['createChallenge']> {
+    const connection = this.repository.read((s) => s.connections.get(id))
+    if (
+      connection &&
+      this.sessionCursors.has(connection.adapterId) &&
+      connection.state !== 'online'
+    )
+      throw new CommunicationError('CONNECTION_FAILED')
     return this.identity.createChallenge(id, capabilities)
   }
   confirmBinding(id: string): ReturnType<IdentityBinding['confirm']> {
@@ -414,14 +466,23 @@ export class CommunicationService {
         )
     }
   }
-  flush(): Promise<void> {
+  async flush(): Promise<void> {
+    if (this.closed) return
+    this.reconnectDue()
+    // Process online channels now and give newly connected channels a turn as well.
+    const resumed = this.reconnecting.size
+      ? Promise.all(this.reconnecting.values()).then(() => this.flushBusiness())
+      : undefined
+    await Promise.all([this.flushBusiness(), this.flushDeliveries(), resumed])
+  }
+  private flushBusiness(): Promise<void> {
     if (this.closed) return Promise.resolve()
-    if (!this.flushing)
-      this.flushing = this.runFlush().finally(() => {
+    return (this.flushing ??= Promise.resolve()
+      .then(() => this.dispatcher.flush())
+      .then(() => this.flushDeliveries())
+      .finally(() => {
         this.flushing = undefined
-      })
-    // Delivery ticks must keep progressing while the dispatcher awaits business.
-    return Promise.all([this.flushing, this.flushDeliveries()]).then(() => {})
+      }))
   }
   private flushDeliveries(): Promise<void> {
     if (this.closed) return Promise.resolve()
@@ -444,22 +505,19 @@ export class CommunicationService {
       this.delivering = undefined
     }
   }
-  private async runFlush(): Promise<void> {
+  private reconnectDue(): void {
     const due = this.repository.read((s) =>
       [...s.connections.values()]
-        .filter((c) => c.state === 'reconnecting' && c.reconnectAt! <= this.env.now())
-        .map((c) => ({ id: c.id, generation: c.generation }))
+        .filter((c) => c.enabled && c.state === 'reconnecting' && c.reconnectAt! <= this.env.now())
+        .map((c) => c.id)
     )
-    for (const { id, generation } of due) {
-      if (this.closed) return
-      const stillDue = this.repository.read((s) => {
-        const c = s.connections.get(id)
-        return c?.generation === generation && c.state === 'reconnecting'
+    for (const id of due) {
+      if (this.reconnecting.has(id)) continue
+      const attempt = this.start(id, true).finally(() => {
+        this.reconnecting.delete(id)
       })
-      if (stillDue) await this.start(id)
+      this.reconnecting.set(id, attempt)
     }
-    await this.dispatcher.flush()
-    await this.flushDeliveries()
   }
   cleanup(): void {
     const now = this.env.now()

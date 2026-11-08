@@ -2,36 +2,45 @@ import { useEffect, useId, useRef, useState, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   telegramTokenSchema,
+  qqAppIdSchema,
+  qqAppSecretSchema,
   type CommunicationApi,
   type CommunicationErrorCode,
   type CommunicationSnapshot
 } from '../../../../shared/communication'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 
+export type ChannelCredentialDraft =
+  { adapter: 'telegram'; token: string } | { adapter: 'qq'; appId?: string; appSecret: string }
+
 type SaveResult = Awaited<ReturnType<CommunicationApi['setCredential']>>
 
 export function ChannelTokenDialog({
-  editing,
+  editingAdapter,
   installedAdapters,
   onSave,
   onClose,
   returnFocusRef
 }: {
-  editing: boolean
+  editingAdapter?: string
   installedAdapters: CommunicationSnapshot['installedAdapters']
-  onSave(token: string): Promise<SaveResult>
+  onSave(draft: ChannelCredentialDraft): Promise<SaveResult>
   onClose(): void
   returnFocusRef: RefObject<HTMLElement | null>
 }): React.JSX.Element {
   const { t } = useTranslation('communication')
-  const [adapter, setAdapter] = useState('')
+  const [selectedAdapter, setAdapter] = useState('')
+  const [appId, setAppId] = useState('')
+  const editing = editingAdapter !== undefined
+  const adapter = editingAdapter ?? selectedAdapter
+  const qq = adapter === 'qq'
   const [token, setToken] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<CommunicationErrorCode>()
   const select = useRef<HTMLSelectElement>(null)
   const input = useRef<HTMLInputElement>(null)
   const id = useId()
-  const showToken = editing || adapter === 'telegram'
+  const showToken = qq || adapter === 'telegram'
 
   useEffect(() => {
     if (!busy && error) input.current?.focus()
@@ -39,9 +48,10 @@ export function ChannelTokenDialog({
 
   const submit = async (): Promise<void> => {
     if (busy || !showToken) return
-    const parsed = telegramTokenSchema.safeParse(token)
+    const parsed = (qq ? qqAppSecretSchema : telegramTokenSchema).safeParse(token)
+    const appIdValid = !qq || editing || qqAppIdSchema.safeParse(appId).success
     setToken('')
-    if (!parsed.success) {
+    if (!parsed.success || !appIdValid) {
       setError('INVALID_INPUT')
       input.current?.focus()
       return
@@ -49,7 +59,11 @@ export function ChannelTokenDialog({
     setBusy(true)
     setError(undefined)
     try {
-      const result = await onSave(parsed.data)
+      const result = await onSave(
+        qq
+          ? { adapter: 'qq', appId: editing ? undefined : appId, appSecret: parsed.data }
+          : { adapter: 'telegram', token: parsed.data }
+      )
       if (result.status === 'ok') onClose()
       else setError(result.error.code)
     } catch {
@@ -62,8 +76,8 @@ export function ChannelTokenDialog({
   return (
     <ConfirmDialog
       open
-      title={t(editing ? 'editToken' : 'addChannel')}
-      confirmLabel={t(editing ? 'saveToken' : 'saveTelegram')}
+      title={t(editing ? (qq ? 'editQqSecret' : 'editToken') : 'addChannel')}
+      confirmLabel={t(editing ? (qq ? 'saveQqSecret' : 'saveToken') : 'saveTelegram')}
       cancelLabel={t('cancelForm')}
       formId={id}
       busy={busy}
@@ -89,6 +103,7 @@ export function ChannelTokenDialog({
               onChange={(event) => {
                 setAdapter(event.target.value)
                 setToken('')
+                setAppId('')
                 setError(undefined)
               }}
               disabled={busy}
@@ -105,9 +120,25 @@ export function ChannelTokenDialog({
         {!editing && installedAdapters.length === 0 && (
           <p className="confirm-text">{t('noChannelTypes')}</p>
         )}
+        {qq && !editing && (
+          <>
+            <p className="confirm-text">{t('qqSetup')}</p>
+            <label>
+              {t('qqAppId')}
+              <input
+                value={appId}
+                onChange={(event) => setAppId(event.target.value)}
+                inputMode="numeric"
+                autoComplete="off"
+                maxLength={20}
+                disabled={busy}
+              />
+            </label>
+          </>
+        )}
         {showToken && (
           <label>
-            {t('token')}
+            {t(qq ? 'qqAppSecret' : 'token')}
             <input
               ref={input}
               type="password"
@@ -124,7 +155,7 @@ export function ChannelTokenDialog({
         )}
         {error && (
           <p id={`${id}-error`} role="alert" className="settings-error">
-            {t(`errors.${error}`)}
+            {t(qq && error === 'INVALID_INPUT' ? 'qqInvalidInput' : `errors.${error}`)}
           </p>
         )}
       </form>

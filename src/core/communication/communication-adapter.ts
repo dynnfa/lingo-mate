@@ -2,6 +2,8 @@ import type {
   AdapterCapabilities,
   EncodedPart,
   Receipt,
+  Languages,
+  SendIdentity,
   RejectedEnvelope,
   SendResult,
   Target
@@ -9,8 +11,11 @@ import type {
 export interface AdapterContext {
   signal: AbortSignal
   cursor?: string
+  // Commit a new session's starting position before admitting any events.
+  saveInitialCursor?(cursor: string): boolean
+  discardCursor?(): boolean
   receive(event: unknown, cursor?: string): Promise<Receipt>
-  receiveRejected(envelope: RejectedEnvelope, cursor?: string): Promise<Receipt>
+  receiveRejected(envelope: RejectedEnvelope | undefined, cursor?: string): Promise<Receipt>
   disconnected(retryable: boolean, code?: string, retryAfterMs?: number): void
 }
 // start is ONE connection attempt. No hidden send retries. encode is pure.
@@ -18,7 +23,7 @@ export interface CommunicationAdapter {
   readonly capabilities: AdapterCapabilities
   start(context: AdapterContext): Promise<void>
   stop(): Promise<void>
-  encode(text: string): EncodedPart[]
+  encode(text: string, language?: Languages['uiLanguage']): EncodedPart[]
   edit?(
     target: Target,
     externalMessageId: string,
@@ -28,7 +33,7 @@ export interface CommunicationAdapter {
   send(
     target: Target,
     part: EncodedPart,
-    identity: { deliveryId: string; partId: string },
+    identity: SendIdentity,
     signal: AbortSignal
   ): Promise<SendResult>
 }
