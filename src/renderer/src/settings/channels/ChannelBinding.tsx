@@ -28,7 +28,7 @@ export function ChannelBinding({
   const [now, setNow] = useState(Date.now)
   const qq = connection.adapterId === 'qq'
   const canGenerate = !qq || connection.state === 'online'
-  const [sentenceAllowed, setSentenceAllowed] = useState(false)
+  const [sentenceAllowed, setSentenceAllowed] = useState(true)
   const [revoke, setRevoke] = useState<NonNullable<typeof connection.bindings>[number]>()
   const revokeFocus = useRef<HTMLElement | null>(null)
   const status = useRef<HTMLParagraphElement>(null)

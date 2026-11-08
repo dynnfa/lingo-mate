@@ -531,7 +531,7 @@ it('shows the automatically generated code even if polling discovers the new car
   ).toHaveValue('late-code')
 })
 
-it('shows QQ setup in Chinese, clears AppSecret and creates a chat-only binding by default', async () => {
+it('shows QQ setup in Chinese, clears AppSecret and includes sentence permission by default', async () => {
   const { api, snapshot, setActive } = setup('zh-CN')
   snapshot.installedAdapters.push('qq')
   api.createQqConnection = vi.fn<typeof api.createQqConnection>(async () => ({
@@ -571,12 +571,12 @@ it('shows QQ setup in Chinese, clears AppSecret and creates a chat-only binding 
   setActive(true)
   const card = await screen.findByRole('article', { name: 'QQ 机器人 · AppID 123456' })
   const sentence = within(card).getByRole('checkbox', { name: '允许 /sentence 收录句子' })
-  expect(sentence).not.toBeChecked()
+  expect(sentence).toBeChecked()
   fireEvent.click(within(card).getByRole('button', { name: '生成绑定码' }))
   await waitFor(() =>
     expect(api.createChallenge).toHaveBeenCalledWith({
       connectionId: id,
-      capabilities: ['chat']
+      capabilities: ['chat', 'sentence']
     })
   )
   await waitFor(() => expect(sentence).toBeEnabled())
@@ -585,7 +585,7 @@ it('shows QQ setup in Chinese, clears AppSecret and creates a chat-only binding 
   await waitFor(() =>
     expect(api.createChallenge).toHaveBeenLastCalledWith({
       connectionId: id,
-      capabilities: ['chat', 'sentence']
+      capabilities: ['chat']
     })
   )
 })
