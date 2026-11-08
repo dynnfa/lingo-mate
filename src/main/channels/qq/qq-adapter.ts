@@ -12,7 +12,12 @@ import {
   type Target
 } from '../../../core/communication/communication-contract'
 import { encodeQqText } from './qq-encoding'
-import { openQqSocket, QqGateway, type QqSocketFactory } from './qq-gateway'
+import {
+  openQqSocket,
+  QqGateway,
+  type QqGatewayDiagnostic,
+  type QqSocketFactory
+} from './qq-gateway'
 import { QqHttp } from './qq-http'
 import {
   QQ_MAX_PARTS,
@@ -23,7 +28,11 @@ import {
   qqOpenId
 } from './qq-protocol'
 
-type Transport = { fetch?: typeof fetch; open?: QqSocketFactory }
+type QqAdapterOptions = {
+  fetch?: typeof fetch
+  open?: QqSocketFactory
+  onDiagnostic?: (entry: QqGatewayDiagnostic) => void
+}
 
 export class QqAdapter implements CommunicationAdapter {
   readonly capabilities = {
@@ -41,14 +50,14 @@ export class QqAdapter implements CommunicationAdapter {
   constructor(
     private readonly appId: string,
     private readonly secret: string,
-    private readonly transport: Transport = {}
+    private readonly options: QqAdapterOptions = {}
   ) {}
 
   async start(context: AdapterContext): Promise<void> {
     const controller = new AbortController()
     this.controller = controller
     const lifetime = AbortSignal.any([context.signal, controller.signal])
-    const http = new QqHttp(this.appId, this.secret, lifetime, this.transport.fetch)
+    const http = new QqHttp(this.appId, this.secret, lifetime, this.options.fetch)
     this.http = http
     const abort = (): void => controller.abort()
     context.signal.addEventListener('abort', abort, { once: true, signal: controller.signal })
@@ -63,8 +72,9 @@ export class QqAdapter implements CommunicationAdapter {
         controller,
         this.appId,
         authorization,
-        this.transport.open ?? openQqSocket,
-        resume
+        this.options.open ?? openQqSocket,
+        resume,
+        this.options.onDiagnostic
       )
       await this.gateway.start(url)
     } catch (error) {

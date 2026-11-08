@@ -66,3 +66,4 @@ Python 的 stdout 仅承载私有 JSONL 协议。Main 接收 stderr 时仅保留
 3. 关联一次操作：词汇导入条目带批次上下文；会话后台任务按 requestId 关联。
 4. 出现 `[REDACTED]` 表示原值被脱敏；`truncated: true` 表示该条被收缩，可对照上游缩短采集面。
 5. Python Agent 问题先筛选 `source: main`、`module: agent`，区分 `operation: process` 与 `shutdown`，再结合 `AGENT_UNAVAILABLE`、`AGENT_PROTOCOL_ERROR` 等诊断及本地 stderr 原因排查；不要求 Renderer 回传内部图状态或工具载荷。
+6. QQ 入站与重连问题按 `module: communication`、`operation: qq-gateway` 筛选，再按本地 `context.connectionId` 关联记录。查看 `QQ_ADMISSION_FAILED` 的失败分支、事件序号及回执状态，用 `QQ_GATEWAY_RESUME` 对照恢复起点、完成时的首条补发序号和最后保存的序号。断连记录中 `context.errorCode` 是连接错误分类（含可重试语义），`context.reason` 与 `context.closeCode` 是具体原因。单聊回执按状态、错误码与校验字段限频记录，可区分绑定码校验失败、等待桌面确认和消息结构被拒。事件类型与回执码使用白名单。单聊消息 ID 校验失败时，`context.eventIdValue` 和 `context.messageIdValue` 分别记录外层事件 ID 和内层消息 ID，经公共日志服务脱敏并按长度截断。对象和数组仅记录类型，其他诊断只保留 ID 校验状态。绑定码、消息正文、OpenID、网关会话 ID 和凭据均不写入日志。

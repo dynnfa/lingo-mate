@@ -33,7 +33,8 @@ export interface AdapterRegistration {
   // Secrets are read only inside Main and passed directly to the transport factory.
   create(
     config: Readonly<Record<string, string>>,
-    credential: string | undefined
+    credential: string | undefined,
+    connectionId: string
   ): CommunicationAdapter
 }
 export class CommunicationHost {
@@ -41,7 +42,7 @@ export class CommunicationHost {
   private readonly repository: SqliteCommunicationRepository
   private timer?: ReturnType<typeof setInterval>
   private closed = false
-  private management: Promise<void> = Promise.resolve()
+  private readonly management = new Map<string | undefined, Promise<void>>()
   private readonly controller = new AbortController()
   constructor(
     database: Database.Database,
@@ -72,7 +73,8 @@ export class CommunicationHost {
           const connection = this.repository.read((s) => s.connections.get(id)!)
           return registration.create(
             connection.config,
-            connection.credentialRef ? credentials.read(connection.credentialRef) : undefined
+            connection.credentialRef ? credentials.read(connection.credentialRef) : undefined,
+            id
           )
         },
         { startAsHelp: registration.startAsHelp, sessionCursor: registration.sessionCursor }
@@ -170,25 +172,28 @@ export class CommunicationHost {
       }))
     )
   }
-  private coordinate<T>(operation: () => Promise<T>): Promise<T> {
-    const result = this.management.then(() => {
+  private coordinate<T>(connectionId: string | undefined, operation: () => Promise<T>): Promise<T> {
+    // New connections share a queue for duplicate identity checks.
+    const previous = this.management.get(connectionId) ?? Promise.resolve()
+    const result = previous.then(() => {
       if (this.closed) throw new CommunicationError('STOPPED')
       return operation()
     })
-    this.management = result.then(
-      () => {},
-      () => {}
-    )
+    const release = (): void => {
+      if (this.management.get(connectionId) === settled) this.management.delete(connectionId)
+    }
+    const settled = result.then(release, release)
+    this.management.set(connectionId, settled)
     return result
   }
   start(id: string): Promise<void> {
-    return this.coordinate(async () => {
+    return this.coordinate(id, async () => {
       const code = await this.service.start(id)
       if (code !== undefined) throw new CommunicationError(code)
     })
   }
   stop(id: string): Promise<void> {
-    return this.coordinate(() => this.service.stop(id))
+    return this.coordinate(id, () => this.service.stop(id))
   }
   private async verifyTelegram(token: string): Promise<{ botId: string; username: string }> {
     if (!telegramTokenSchema.safeParse(token).success) throw new CommunicationError('INVALID_INPUT')
@@ -201,7 +206,7 @@ export class CommunicationHost {
     return identity
   }
   createTelegramConnection(token: string): Promise<string> {
-    return this.coordinate(async () => {
+    return this.coordinate(undefined, async () => {
       const identity = await this.verifyTelegram(token)
       if (
         this.repository.read((s) =>
@@ -232,7 +237,7 @@ export class CommunicationHost {
     this.controller.signal.throwIfAborted()
   }
   createQqConnection(appId: string, appSecret: string): Promise<string> {
-    return this.coordinate(async () => {
+    return this.coordinate(undefined, async () => {
       if (
         this.repository.read((s) =>
           [...s.connections.values()].some(
@@ -255,7 +260,7 @@ export class CommunicationHost {
     })
   }
   replaceQqSecret(connectionId: string, appSecret: string): Promise<void> {
-    return this.coordinate(async () => {
+    return this.coordinate(connectionId, async () => {
       const connection = this.repository.read((s) => s.connections.get(connectionId))
       if (!connection?.enabled || connection.adapterId !== 'qq')
         throw new CommunicationError('NOT_FOUND')
@@ -266,7 +271,7 @@ export class CommunicationHost {
     })
   }
   testConnection(connectionId: string): Promise<void> {
-    return this.coordinate(async () => {
+    return this.coordinate(connectionId, async () => {
       const connection = this.repository.read((s) => s.connections.get(connectionId))
       if (!connection?.enabled) throw new CommunicationError('NOT_FOUND')
       if (connection.adapterId === 'qq') {
@@ -285,7 +290,7 @@ export class CommunicationHost {
     })
   }
   setCredential(connectionId: string, secret: string): Promise<void> {
-    return this.coordinate(async () => {
+    return this.coordinate(connectionId, async () => {
       const connection = this.repository.read((s) => s.connections.get(connectionId))
       if (!connection?.enabled || connection.adapterId === 'qq')
         throw new CommunicationError('NOT_FOUND')
@@ -318,7 +323,7 @@ export class CommunicationHost {
     if (previous) this.credentials.remove(previous)
   }
   deleteConnection(connectionId: string): Promise<void> {
-    return this.coordinate(async () => {
+    return this.coordinate(connectionId, async () => {
       const connection = this.repository.read((s) => s.connections.get(connectionId))
       if (!connection) throw new CommunicationError('NOT_FOUND')
       await this.service.deleteConnection(connectionId)
