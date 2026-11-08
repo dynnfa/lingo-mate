@@ -6,7 +6,7 @@ import type {
   CommunicationSnapshot
 } from '../../../../shared/communication'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
-import { ChannelTokenDialog } from './ChannelTokenDialog'
+import { ChannelTokenDialog, type ChannelCredentialDraft } from './ChannelTokenDialog'
 import { ChannelBinding, type BindingCodeResult } from './ChannelBinding'
 import './ChannelsSettings.css'
 
@@ -149,16 +149,29 @@ function ActiveChannelsSettings(): React.JSX.Element {
     }
   }
 
-  const saveToken = async (token: string): Promise<ActionResult> => {
+  const saveToken = async (draft: ChannelCredentialDraft): Promise<ActionResult> => {
     if (dialog?.kind === 'edit') {
-      const result = await window.api.communication.setCredential({
-        connectionId: dialog.connection.id,
-        credential: token
+      const connectionId = dialog.connection.id
+      const result =
+        draft.adapter === 'qq'
+          ? await window.api.communication.replaceQqSecret({
+              connectionId,
+              appSecret: draft.appSecret
+            })
+          : await window.api.communication.setCredential({ connectionId, credential: draft.token })
+      if (result.status === 'ok') await reload()
+      return result
+    }
+    if (draft.adapter === 'qq') {
+      if (!draft.appId) return { status: 'error', error: { code: 'INVALID_INPUT' } }
+      const result = await window.api.communication.createQqConnection({
+        appId: draft.appId,
+        appSecret: draft.appSecret
       })
       if (result.status === 'ok') await reload()
       return result
     }
-    const result = await window.api.communication.createTelegramConnection({ token })
+    const result = await window.api.communication.createTelegramConnection({ token: draft.token })
     if (result.status === 'ok') {
       let binding: BindingCodeResult
       try {
@@ -205,6 +218,7 @@ function ActiveChannelsSettings(): React.JSX.Element {
   }
 
   const channelName = (connection: Connection): string => {
+    if (connection.adapterId === 'qq') return t('qqChannelName', { appId: connection.appId })
     const adapter =
       connection.adapterId === 'telegram' ? t('adapters.telegram') : connection.adapterId
     return connection.username
@@ -242,7 +256,9 @@ function ActiveChannelsSettings(): React.JSX.Element {
       )}
       {connections?.map((connection) => {
         const headingId = `channel-${connection.id}`
-        const actionError = actionErrors[connection.id]
+        const qq = connection.adapterId === 'qq'
+        const supported = qq || connection.adapterId === 'telegram'
+        const actionError = actionErrors[connection.id] ?? connection.errorCode
         const added =
           connection.createdAt === undefined ? undefined : new Date(connection.createdAt)
         return (
@@ -262,7 +278,15 @@ function ActiveChannelsSettings(): React.JSX.Element {
                 t('addedAtUnknown')
               )}
             </p>
-            {connection.adapterId === 'telegram' && (
+            {qq && (
+              <>
+                <p className="channel-binding-hint">{t('qqSetup')}</p>
+                <p className="channel-binding-hint">
+                  {t(connection.credentialSaved ? 'qqCredentialSaved' : 'qqCredentialMissing')}
+                </p>
+              </>
+            )}
+            {supported && (
               <ChannelBinding
                 connection={connection}
                 initialResult={initialBindingResults[connection.id]}
@@ -270,12 +294,18 @@ function ActiveChannelsSettings(): React.JSX.Element {
               />
             )}
             <div className="channel-actions">
-              {connection.started && <span className="channel-started">{t('started')}</span>}
+              {qq && connection.state ? (
+                <span role="status" className="channel-started">
+                  {t(`qqState.${connection.state}`)}
+                </span>
+              ) : (
+                connection.started && <span className="channel-started">{t('started')}</span>
+              )}
               {(connection.started || connection.autoStart) && (
                 <button
                   type="button"
                   className="channel-stop-button"
-                  disabled={connection.deleting || connection.adapterId !== 'telegram'}
+                  disabled={connection.deleting || !supported}
                   aria-disabled={switching.has(connection.id) || undefined}
                   onClick={() => {
                     if (!switching.has(connection.id)) void runConnectionAction(connection, 'stop')
@@ -288,7 +318,7 @@ function ActiveChannelsSettings(): React.JSX.Element {
                 <button
                   type="button"
                   className="channel-start-button"
-                  disabled={connection.deleting || connection.adapterId !== 'telegram'}
+                  disabled={connection.deleting || !supported}
                   aria-disabled={switching.has(connection.id) || undefined}
                   onClick={() => {
                     if (!switching.has(connection.id)) void runConnectionAction(connection, 'start')
@@ -299,7 +329,7 @@ function ActiveChannelsSettings(): React.JSX.Element {
               )}
               <button
                 type="button"
-                disabled={connection.deleting || connection.adapterId !== 'telegram'}
+                disabled={connection.deleting || !supported}
                 aria-disabled={testing.has(connection.id) || undefined}
                 onClick={(event) => {
                   if (!testing.has(connection.id))
@@ -310,10 +340,10 @@ function ActiveChannelsSettings(): React.JSX.Element {
               </button>
               <button
                 type="button"
-                disabled={connection.deleting || connection.adapterId !== 'telegram'}
+                disabled={connection.deleting || !supported}
                 onClick={(event) => open({ kind: 'edit', connection }, event.currentTarget)}
               >
-                {t('editToken')}
+                {t(qq ? 'editQqSecret' : 'editToken')}
               </button>
               <button
                 type="button"
@@ -333,7 +363,7 @@ function ActiveChannelsSettings(): React.JSX.Element {
       })}
       {(dialog?.kind === 'add' || dialog?.kind === 'edit') && snapshot && (
         <ChannelTokenDialog
-          editing={dialog.kind === 'edit'}
+          editingAdapter={dialog.kind === 'edit' ? dialog.connection.adapterId : undefined}
           installedAdapters={snapshot.installedAdapters}
           onClose={close}
           onSave={saveToken}
@@ -382,7 +412,7 @@ function ActiveChannelsSettings(): React.JSX.Element {
             {dialog.outcome === undefined
               ? t('testRunning')
               : dialog.outcome.status === 'ok'
-                ? t('testSuccess')
+                ? t(dialog.connection.adapterId === 'qq' ? 'qqTestSuccess' : 'testSuccess')
                 : t(`errors.${dialog.outcome.error.code}`)}
           </p>
         </ConfirmDialog>

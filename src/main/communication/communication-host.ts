@@ -11,6 +11,8 @@ import type { CommunicationEnvironment } from '../../core/communication/environm
 import { SqliteCommunicationRepository } from '../../database/sqlite-communication-repository'
 import {
   communicationSnapshotSchema,
+  communicationErrorCodeSchema,
+  createQqInputSchema,
   telegramTokenSchema,
   type CommunicationSnapshot
 } from '../../shared/communication'
@@ -22,6 +24,8 @@ import type { CommunicationCredentialStore } from './credential-store'
 export interface AdapterRegistration {
   adapterId: string
   startAsHelp?: boolean
+  sessionCursor?: boolean
+  verifyQqCredential?(appId: string, secret: string, signal: AbortSignal): Promise<void>
   verifyCredential?(
     credential: string,
     signal: AbortSignal
@@ -29,7 +33,8 @@ export interface AdapterRegistration {
   // Secrets are read only inside Main and passed directly to the transport factory.
   create(
     config: Readonly<Record<string, string>>,
-    credential: string | undefined
+    credential: string | undefined,
+    connectionId: string
   ): CommunicationAdapter
 }
 export class CommunicationHost {
@@ -37,7 +42,7 @@ export class CommunicationHost {
   private readonly repository: SqliteCommunicationRepository
   private timer?: ReturnType<typeof setInterval>
   private closed = false
-  private management: Promise<void> = Promise.resolve()
+  private readonly management = new Map<string | undefined, Promise<void>>()
   private readonly controller = new AbortController()
   constructor(
     database: Database.Database,
@@ -68,10 +73,11 @@ export class CommunicationHost {
           const connection = this.repository.read((s) => s.connections.get(id)!)
           return registration.create(
             connection.config,
-            connection.credentialRef ? credentials.read(connection.credentialRef) : undefined
+            connection.credentialRef ? credentials.read(connection.credentialRef) : undefined,
+            id
           )
         },
-        { startAsHelp: registration.startAsHelp }
+        { startAsHelp: registration.startAsHelp, sessionCursor: registration.sessionCursor }
       )
   }
   async initialize(): Promise<void> {
@@ -107,11 +113,11 @@ export class CommunicationHost {
   snapshot(): CommunicationSnapshot {
     return communicationSnapshotSchema.parse(
       this.repository.read((s) => ({
-        installedAdapters: this.registrations.some(
-          (r) => r.adapterId === 'telegram' && r.verifyCredential
-        )
-          ? ['telegram']
-          : [],
+        installedAdapters: this.registrations.flatMap((r): ('telegram' | 'qq')[] => {
+          if (r.adapterId === 'telegram' && r.verifyCredential) return ['telegram']
+          if (r.adapterId === 'qq' && r.verifyQqCredential) return ['qq']
+          return []
+        }),
         connections: [...s.connections.values()]
           .filter((c) => c.enabled || c.state !== 'stopped' || !!c.credentialRef)
           .map((c) => {
@@ -125,6 +131,9 @@ export class CommunicationHost {
                       (!!item.actor && item.attempts === LIMITS.challengeAttempts))
                 )
               : undefined
+            const bindings = [...s.bindings.values()].filter(
+              (binding) => binding.connectionId === c.id && !binding.revoked
+            )
             return {
               id: c.id,
               adapterId: c.adapterId,
@@ -133,9 +142,23 @@ export class CommunicationHost {
               started: c.state !== 'stopped' && c.state !== 'error',
               autoStart: c.autoStart || undefined,
               deleting: !c.enabled || undefined,
-              bindingCount: [...s.bindings.values()].filter(
-                (binding) => binding.connectionId === c.id && !binding.revoked
-              ).length,
+              bindingCount: bindings.length,
+              ...(c.adapterId === 'qq'
+                ? {
+                    appId: c.config.appId,
+                    state: c.state,
+                    credentialSaved: !!c.credentialRef,
+                    errorCode:
+                      c.state === 'error' || c.state === 'reconnecting'
+                        ? (communicationErrorCodeSchema.safeParse(c.error).data ??
+                          'CONNECTION_FAILED')
+                        : undefined,
+                    bindings: bindings.map((binding) => ({
+                      bindingId: binding.id,
+                      openId: binding.externalActorId
+                    }))
+                  }
+                : {}),
               bindingChallenge: challenge
                 ? {
                     challengeId: challenge.id,
@@ -149,25 +172,28 @@ export class CommunicationHost {
       }))
     )
   }
-  private coordinate<T>(operation: () => Promise<T>): Promise<T> {
-    const result = this.management.then(() => {
+  private coordinate<T>(connectionId: string | undefined, operation: () => Promise<T>): Promise<T> {
+    // New connections share a queue for duplicate identity checks.
+    const previous = this.management.get(connectionId) ?? Promise.resolve()
+    const result = previous.then(() => {
       if (this.closed) throw new CommunicationError('STOPPED')
       return operation()
     })
-    this.management = result.then(
-      () => {},
-      () => {}
-    )
+    const release = (): void => {
+      if (this.management.get(connectionId) === settled) this.management.delete(connectionId)
+    }
+    const settled = result.then(release, release)
+    this.management.set(connectionId, settled)
     return result
   }
   start(id: string): Promise<void> {
-    return this.coordinate(async () => {
+    return this.coordinate(id, async () => {
       const code = await this.service.start(id)
       if (code !== undefined) throw new CommunicationError(code)
     })
   }
   stop(id: string): Promise<void> {
-    return this.coordinate(() => this.service.stop(id))
+    return this.coordinate(id, () => this.service.stop(id))
   }
   private async verifyTelegram(token: string): Promise<{ botId: string; username: string }> {
     if (!telegramTokenSchema.safeParse(token).success) throw new CommunicationError('INVALID_INPUT')
@@ -180,7 +206,7 @@ export class CommunicationHost {
     return identity
   }
   createTelegramConnection(token: string): Promise<string> {
-    return this.coordinate(async () => {
+    return this.coordinate(undefined, async () => {
       const identity = await this.verifyTelegram(token)
       if (
         this.repository.read((s) =>
@@ -202,10 +228,60 @@ export class CommunicationHost {
       }
     })
   }
+  private async verifyQq(appId: string, appSecret: string): Promise<void> {
+    if (!createQqInputSchema.safeParse({ appId, appSecret }).success)
+      throw new CommunicationError('INVALID_INPUT')
+    const registration = this.registrations.find((r) => r.adapterId === 'qq')
+    if (!registration?.verifyQqCredential) throw new CommunicationError('UNKNOWN_ADAPTER')
+    await registration.verifyQqCredential(appId, appSecret, this.controller.signal)
+    this.controller.signal.throwIfAborted()
+  }
+  createQqConnection(appId: string, appSecret: string): Promise<string> {
+    return this.coordinate(undefined, async () => {
+      if (
+        this.repository.read((s) =>
+          [...s.connections.values()].some(
+            (c) =>
+              c.adapterId === 'qq' &&
+              c.config.appId === appId &&
+              (c.enabled || c.state !== 'stopped')
+          )
+        )
+      )
+        throw new CommunicationError('QQ_DUPLICATE_APP')
+      await this.verifyQq(appId, appSecret)
+      const reference = this.credentials.write(appSecret)
+      try {
+        return this.service.addConnection('qq', { appId }, reference)
+      } catch (error) {
+        this.credentials.remove(reference)
+        throw error
+      }
+    })
+  }
+  replaceQqSecret(connectionId: string, appSecret: string): Promise<void> {
+    return this.coordinate(connectionId, async () => {
+      const connection = this.repository.read((s) => s.connections.get(connectionId))
+      if (!connection?.enabled || connection.adapterId !== 'qq')
+        throw new CommunicationError('NOT_FOUND')
+      await this.service.stop(connectionId)
+      this.controller.signal.throwIfAborted()
+      await this.verifyQq(connection.config.appId, appSecret)
+      this.saveCredential(connectionId, appSecret, connection.credentialRef)
+    })
+  }
   testConnection(connectionId: string): Promise<void> {
-    return this.coordinate(async () => {
+    return this.coordinate(connectionId, async () => {
       const connection = this.repository.read((s) => s.connections.get(connectionId))
       if (!connection?.enabled) throw new CommunicationError('NOT_FOUND')
+      if (connection.adapterId === 'qq') {
+        if (!connection.credentialRef) throw new CommunicationError('QQ_UNAUTHORIZED')
+        await this.verifyQq(
+          connection.config.appId,
+          this.credentials.read(connection.credentialRef)
+        )
+        return
+      }
       if (connection.adapterId !== 'telegram') throw new CommunicationError('UNKNOWN_ADAPTER')
       if (!connection.credentialRef) throw new CommunicationError('TELEGRAM_UNAUTHORIZED')
       const identity = await this.verifyTelegram(this.credentials.read(connection.credentialRef))
@@ -214,31 +290,40 @@ export class CommunicationHost {
     })
   }
   setCredential(connectionId: string, secret: string): Promise<void> {
-    return this.coordinate(async () => {
+    return this.coordinate(connectionId, async () => {
       const connection = this.repository.read((s) => s.connections.get(connectionId))
-      if (!connection?.enabled) throw new CommunicationError('NOT_FOUND')
+      if (!connection?.enabled || connection.adapterId === 'qq')
+        throw new CommunicationError('NOT_FOUND')
       await this.service.stop(connectionId)
       this.controller.signal.throwIfAborted()
       const identity =
         connection.adapterId === 'telegram' ? await this.verifyTelegram(secret) : undefined
       if (identity && identity.botId !== connection.config.botId)
         throw new CommunicationError('TELEGRAM_BOT_MISMATCH')
-      const reference = this.credentials.write(secret)
-      try {
-        this.repository.transaction((s) => {
-          const c = s.connections.get(connectionId)!
-          c.credentialRef = reference
-          if (identity) c.config.username = identity.username
-        })
-      } catch (error) {
-        this.credentials.remove(reference)
-        throw error
-      }
-      if (connection.credentialRef) this.credentials.remove(connection.credentialRef)
+      this.saveCredential(connectionId, secret, connection.credentialRef, identity?.username)
     })
   }
+  private saveCredential(
+    connectionId: string,
+    secret: string,
+    previous?: string,
+    username?: string
+  ): void {
+    const reference = this.credentials.write(secret)
+    try {
+      this.repository.transaction((s) => {
+        const c = s.connections.get(connectionId)!
+        c.credentialRef = reference
+        if (username) c.config.username = username
+      })
+    } catch (error) {
+      this.credentials.remove(reference)
+      throw error
+    }
+    if (previous) this.credentials.remove(previous)
+  }
   deleteConnection(connectionId: string): Promise<void> {
-    return this.coordinate(async () => {
+    return this.coordinate(connectionId, async () => {
       const connection = this.repository.read((s) => s.connections.get(connectionId))
       if (!connection) throw new CommunicationError('NOT_FOUND')
       await this.service.deleteConnection(connectionId)

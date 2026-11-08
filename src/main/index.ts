@@ -1,3 +1,4 @@
+import { createQqRegistration } from './channels/qq/qq-registration'
 import { telegramRegistration } from './channels/telegram/telegram-registration'
 import { CommunicationHost } from './communication/communication-host'
 import { createCommunicationCredentialStore } from './communication/credential-store'
@@ -597,7 +598,7 @@ app.whenReady().then(async () => {
         message: entry.code,
         context: entry
       }),
-    [telegramRegistration]
+    [telegramRegistration, createQqRegistration(errorLogger)]
   )
   await communicationHost.initialize()
   registerCommunicationIpc(communicationHost, registerTrustedHandler)
