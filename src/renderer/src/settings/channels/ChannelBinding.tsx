@@ -28,7 +28,6 @@ export function ChannelBinding({
   const [now, setNow] = useState(Date.now)
   const qq = connection.adapterId === 'qq'
   const canGenerate = !qq || connection.state === 'online'
-  const [sentenceAllowed, setSentenceAllowed] = useState(true)
   const [revoke, setRevoke] = useState<NonNullable<typeof connection.bindings>[number]>()
   const revokeFocus = useRef<HTMLElement | null>(null)
   const status = useRef<HTMLParagraphElement>(null)
@@ -59,7 +58,7 @@ export function ChannelBinding({
     try {
       const result = await window.api.communication.createChallenge({
         connectionId: connection.id,
-        capabilities: !qq || sentenceAllowed ? ['chat', 'sentence'] : ['chat']
+        capabilities: ['chat', 'sentence']
       })
       setLocalResult(result)
       setNow(Date.now())
@@ -153,17 +152,6 @@ export function ChannelBinding({
         <p role="status" className="channel-binding-hint">
           {t('bindingCodeExpired')}
         </p>
-      )}
-      {qq && (
-        <label className="channel-binding-hint">
-          <input
-            type="checkbox"
-            checked={sentenceAllowed}
-            disabled={busy || connection.deleting}
-            onChange={(event) => setSentenceAllowed(event.target.checked)}
-          />
-          {t('qqSentencePermission')}
-        </label>
       )}
       <div className="channel-binding-actions">
         <button

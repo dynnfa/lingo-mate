@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import {
+  externalIdSchema,
   LIMITS,
   type InboundEvent,
   type RejectedEnvelope
@@ -28,7 +29,10 @@ const qqC2cDispatchTypes = new Set([
 ])
 
 export const qqOpenId = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/u)
-export const qqMessageId = z.string().regex(/^[A-Za-z0-9_.+/=-]{1,256}$/u)
+// QQ dispatch IDs can contain a colon, and message IDs can contain an exclamation mark.
+const qqEventId = externalIdSchema.regex(/^[A-Za-z0-9_.+/=:-]+$/u)
+export const qqMessageId = externalIdSchema.regex(/^[A-Za-z0-9_.+/=!-]+$/u)
+const qqMessageIndex = externalIdSchema.regex(/^[A-Za-z0-9_.+/=-]+$/u)
 const sequence = z.number().int().nonnegative()
 const sessionId = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/u)
 export const qqCursor = z.strictObject({
@@ -78,16 +82,68 @@ const textMessage = messageIdentity.extend({
   channel_id: z.never().optional()
 })
 
-type Admission = { event: InboundEvent } | { rejected: RejectedEnvelope | undefined }
+type Admission =
+  { event: InboundEvent } | { rejected: RejectedEnvelope | undefined; validationField?: string }
+
+const missingId = (value: unknown): boolean => value === undefined || value === null || value === ''
+
+function idStatus(value: unknown, schema: z.ZodString): 'missing' | 'invalid' | 'valid' {
+  if (missingId(value)) return 'missing'
+  return schema.safeParse(value).success ? 'valid' : 'invalid'
+}
+
+function diagnosticIdValue(
+  value: unknown
+): string | number | boolean | null | { type: 'array' | 'object' } | undefined {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value
+  if (typeof value === 'number') return Number.isFinite(value) ? value : String(value)
+  if (typeof value === 'object') return { type: Array.isArray(value) ? 'array' : 'object' }
+  return undefined
+}
+
+export function dispatchMetadata(
+  frame: GatewayFrame,
+  validationField?: string
+): {
+  eventType: string
+  sequence?: number
+  eventIdStatus: ReturnType<typeof idStatus>
+  messageIdStatus: ReturnType<typeof idStatus>
+  eventIdValue?: ReturnType<typeof diagnosticIdValue>
+  messageIdValue?: ReturnType<typeof diagnosticIdValue>
+} {
+  const { t, s, d } = frame
+  const messageId = d && typeof d === 'object' && 'id' in d ? d.id : undefined
+  return {
+    eventType:
+      t && (qqC2cDispatchTypes.has(t) || t === 'READY' || t === 'RESUMED')
+        ? t
+        : t
+          ? 'unknown'
+          : 'missing',
+    sequence: s,
+    eventIdStatus: idStatus(frame.id, qqEventId),
+    messageIdStatus: idStatus(messageId, qqMessageId),
+    ...(t === 'C2C_MESSAGE_CREATE' &&
+      validationField === 'id' && {
+        eventIdValue: diagnosticIdValue(frame.id),
+        messageIdValue: diagnosticIdValue(messageId)
+      })
+  }
+}
+
+export function firstInvalidField(error: z.ZodError, schema: z.ZodObject): string | undefined {
+  const field = error.issues[0]?.path[0]
+  return typeof field === 'string' && Object.hasOwn(schema.shape, field) ? field : undefined
+}
 
 export function mapDispatch(frame: GatewayFrame, cursor: string): Admission {
   const message = frame.t === 'C2C_MESSAGE_CREATE'
   const parsedId = messageIdentity.safeParse(frame.d)
   const messageKey =
     message && parsedId.success ? 'qq-message:' + hash(parsedId.data.id) : undefined
-  const reject = (kind: RejectedEnvelope['kind']): Admission => {
-    const outerId = qqMessageId.safeParse(frame.id)
-    const missingOuterId = frame.id === undefined || frame.id === null || frame.id === ''
+  const reject = (kind: RejectedEnvelope['kind'], validationField?: string): Admission => {
+    const outerId = qqEventId.safeParse(frame.id)
     const externalEventId =
       messageKey ??
       (outerId.success
@@ -96,18 +152,20 @@ export function mapDispatch(frame: GatewayFrame, cursor: string): Admission {
           ? 'qq-group:' + hash(parsedId.data.id)
           : undefined) ??
       // The cursor binds the sequence to this gateway session. Use it only for rejection receipts.
-      (missingOuterId && frame.t && qqC2cDispatchTypes.has(frame.t)
+      (missingId(frame.id) && frame.t && qqC2cDispatchTypes.has(frame.t)
         ? 'qq-sequence:' + hash(cursor)
         : undefined)
     return {
       rejected: externalEventId
         ? { externalEventId, kind, digest: hash(externalEventId + ':' + kind) }
-        : undefined
+        : undefined,
+      validationField
     }
   }
   if (!message) return reject('unsupported')
   const parsed = textMessage.safeParse(frame.d)
-  if (!parsed.success || !messageKey) return reject('unsupported')
+  if (!parsed.success) return reject('unsupported', firstInvalidField(parsed.error, textMessage))
+  if (!messageKey) return reject('unsupported')
   const data = parsed.data
   if (data.author.bot) return reject('other-bot')
   if (data.content.length > LIMITS.text) return reject('oversized')
@@ -116,7 +174,9 @@ export function mapDispatch(frame: GatewayFrame, cursor: string): Admission {
     return reject('invalid')
   const indexes = data.message_scene?.ext?.filter((entry) => entry.startsWith('msg_idx='))
   const index =
-    indexes?.length === 1 ? qqMessageId.safeParse(indexes[0].slice('msg_idx='.length)) : undefined
+    indexes?.length === 1
+      ? qqMessageIndex.safeParse(indexes[0].slice('msg_idx='.length))
+      : undefined
   return {
     event: {
       type: 'text',

@@ -3,7 +3,10 @@ import {
   AdapterConnectionError,
   type AdapterContext
 } from '../../../core/communication/communication-adapter'
+import type { Receipt } from '../../../core/communication/communication-contract'
 import {
+  dispatchMetadata,
+  firstInvalidField,
   gatewayFrame,
   hello,
   mapDispatch,
@@ -54,14 +57,64 @@ const lost = (): AdapterConnectionError => new AdapterConnectionError(true, 'CON
 const admissionFailed = (): AdapterConnectionError =>
   new AdapterConnectionError(true, 'QQ_ADMISSION_FAILED')
 
+const RECEIPT_DIAGNOSTIC_INTERVAL_MS = 5_000
+const knownReceiptCodes = new Set([
+  'AWAITING_CONFIRMATION',
+  'CHALLENGE_INVALID',
+  'BACKPRESSURE',
+  'STORAGE_FAILED',
+  'INVALID_INPUT',
+  'STOPPED',
+  'UNSUPPORTED_INPUT',
+  'UNSUPPORTED_SCOPE',
+  'EXPIRED',
+  'RATE_LIMITED',
+  'UNBOUND',
+  'EVENT_CONFLICT',
+  'CAPABILITY_DENIED',
+  'CONFIRMATION_INVALID',
+  'BUSY',
+  'QUEUE_FULL'
+])
+
+function receiptMetadata(receipt: Receipt): {
+  receiptStatus: Receipt['status']
+  receiptCode?: string
+} {
+  const { status, code } = receipt
+  return {
+    receiptStatus: status,
+    receiptCode: code === undefined || knownReceiptCodes.has(code) ? code : 'unknown'
+  }
+}
+
+type GatewayPhase = 'hello' | 'identify' | 'resume' | 'online'
+type DiagnosticDetails = Partial<ReturnType<typeof dispatchMetadata>> & {
+  reason?: string
+  validationField?: string
+  receiptStatus?: Receipt['status']
+  receiptCode?: string
+  firstReplaySequence?: number
+  closeCode?: number
+  errorCode?: AdapterConnectionError['code']
+}
+export type QqGatewayDiagnostic = DiagnosticDetails & {
+  code:
+    'QQ_ADMISSION_FAILED' | 'QQ_GATEWAY_RECEIPT' | 'QQ_GATEWAY_RESUME' | 'QQ_GATEWAY_DISCONNECTED'
+  phase: GatewayPhase
+  durableSequence?: number
+}
+
 export class QqGateway {
   private socket?: ReturnType<QqSocketFactory>
   private heartbeat?: ReturnType<typeof setInterval>
   private awaitingAck = false
   private closed = false
-  private phase: 'hello' | 'identify' | 'resume' | 'online' = 'hello'
+  private phase: GatewayPhase = 'hello'
   private latest: number | null = null
   private durable?: number
+  private firstReplaySequence?: number
+  private readonly lastReceiptDiagnostic = new Map<string, number>()
   private sessionId?: string
   private processing = false
   private readonly queue: GatewayFrame[] = []
@@ -76,7 +129,8 @@ export class QqGateway {
     private readonly appId: string,
     private readonly authorization: string,
     private readonly open: QqSocketFactory,
-    private readonly resume?: QqCursor
+    private readonly resume?: QqCursor,
+    private readonly onDiagnostic?: (entry: QqGatewayDiagnostic) => void
   ) {
     this.login = new Promise((resolve, reject) => {
       this.resolveLogin = resolve
@@ -110,7 +164,10 @@ export class QqGateway {
       text && Buffer.byteLength(text) <= QQ_MAX_FRAME_BYTES ? parseJson(text) : undefined
     )
     if (!parsed.success) {
-      this.finish(lost())
+      this.finish(lost(), {
+        reason: 'invalid-frame',
+        validationField: firstInvalidField(parsed.error, gatewayFrame)
+      })
       return
     }
     const frame = parsed.data
@@ -125,24 +182,22 @@ export class QqGateway {
         this.awaitingAck = false
         break
       case 7:
-        this.finish(lost())
+        this.finish(lost(), { reason: 'reconnect-requested' })
         break
       case 9:
         if (this.phase !== 'resume') this.finish(gatewayError())
         else if (frame.d === true)
-          this.finish(new AdapterConnectionError(true, 'CONNECTION_LOST', 3000))
+          this.finish(new AdapterConnectionError(true, 'CONNECTION_LOST', 3000), {
+            reason: 'resume-retry'
+          })
         else this.invalidateSession()
         break
       case 0:
-        if (
-          frame.s === undefined ||
-          !frame.t ||
-          this.phase === 'hello' ||
-          this.queue.length >= MAX_QUEUED_FRAMES
-        ) {
-          this.finish(admissionFailed())
-          return
-        }
+        if (frame.s === undefined) return this.failAdmission('missing-sequence', frame)
+        if (!frame.t) return this.failAdmission('missing-event-type', frame)
+        if (this.phase === 'hello') return this.failAdmission('dispatch-before-hello', frame)
+        if (this.queue.length >= MAX_QUEUED_FRAMES)
+          return this.failAdmission('gateway-queue-full', frame)
         this.latest = Math.max(this.latest ?? 0, frame.s)
         this.queue.push(frame)
         if (!this.processing) void this.drain()
@@ -160,6 +215,7 @@ export class QqGateway {
       this.phase = 'resume'
       this.latest = this.durable = this.resume.seq
       this.sessionId = this.resume.sessionId
+      this.report('QQ_GATEWAY_RESUME', { reason: 'requested' })
       this.write({
         op: 6,
         d: { token: this.authorization, session_id: this.sessionId, seq: this.durable }
@@ -170,7 +226,7 @@ export class QqGateway {
     }
     if (!this.closed) {
       this.heartbeat = setInterval(() => {
-        if (this.awaitingAck) this.finish(lost())
+        if (this.awaitingAck) this.finish(lost(), { reason: 'heartbeat-timeout' })
         else this.beat()
       }, parsed.data.heartbeat_interval)
       this.heartbeat.unref()
@@ -192,9 +248,10 @@ export class QqGateway {
 
   private async drain(): Promise<void> {
     this.processing = true
+    let frame: GatewayFrame | undefined
     try {
       while (!this.closed && this.queue.length) {
-        const frame = this.queue.shift()!
+        frame = this.queue.shift()!
         if (frame.t === 'READY' || frame.t === 'RESUMED') {
           this.ready(frame)
           continue
@@ -211,17 +268,21 @@ export class QqGateway {
           'event' in admission
             ? await this.context.receive(admission.event, cursor)
             : await this.context.receiveRejected(admission.rejected, cursor)
-        if (
-          !admissionHasIdentity(admission) ||
-          (receipt.status !== 'persisted' && receipt.status !== 'rejected')
-        ) {
-          this.finish(admissionFailed())
+        const validationField = 'rejected' in admission ? admission.validationField : undefined
+        if (!admissionHasIdentity(admission)) {
+          this.failAdmission('missing-event-identity', frame, receipt, validationField)
+          break
+        }
+        if (receipt.status !== 'persisted' && receipt.status !== 'rejected') {
+          this.failAdmission('receipt-failed', frame, receipt, validationField)
           break
         }
         this.durable = seq
+        if (this.phase === 'resume') this.firstReplaySequence ??= seq
+        this.reportReceipt(frame, receipt, validationField)
       }
     } catch {
-      this.finish(admissionFailed())
+      this.failAdmission('dispatch-exception', frame)
     } finally {
       this.processing = false
     }
@@ -237,7 +298,7 @@ export class QqGateway {
       const sessionId = parsed.data.session_id
       const seq = frame.s!
       if (!this.context.saveInitialCursor?.(this.serializeCursor(sessionId, seq))) {
-        this.finish(admissionFailed())
+        this.failAdmission('initial-cursor-not-saved', frame)
         return
       }
       this.sessionId = sessionId
@@ -245,6 +306,12 @@ export class QqGateway {
     } else if (frame.t !== 'RESUMED' || this.phase !== 'resume') {
       this.finish(gatewayError())
       return
+    } else {
+      this.report('QQ_GATEWAY_RESUME', {
+        reason: 'completed',
+        sequence: frame.s,
+        firstReplaySequence: this.firstReplaySequence
+      })
     }
     this.phase = 'online'
     this.resolveLogin()
@@ -254,36 +321,86 @@ export class QqGateway {
     return JSON.stringify({ version: 1, appId: this.appId, sessionId, seq } satisfies QqCursor)
   }
 
-  private invalidateSession(): void {
+  private invalidateSession(closeCode?: number): void {
     try {
       if (!this.context.discardCursor?.()) throw admissionFailed()
-      this.finish(new AdapterConnectionError(true, 'CONNECTION_LOST', 3000))
+      this.finish(new AdapterConnectionError(true, 'CONNECTION_LOST', 3000), {
+        reason: 'session-invalidated',
+        closeCode
+      })
     } catch {
-      this.finish(admissionFailed())
+      this.failAdmission('cursor-not-discarded')
     }
   }
 
   private socketEnded(code?: number): void {
     if (this.closed) return
-    if (code === 4008) this.finish(new AdapterConnectionError(true, 'QQ_RATE_LIMITED', 60_000))
+    const details = { reason: 'socket-closed', closeCode: code }
+    if (code === 4008)
+      this.finish(new AdapterConnectionError(true, 'QQ_RATE_LIMITED', 60_000), details)
     else if (code === 4004) {
       // The next connection attempt creates its own token cache.
-      this.finish(new AdapterConnectionError(true, 'QQ_UNAUTHORIZED'))
-    } else if ([1008, 4013, 4014, 4914, 4915].includes(code ?? 0)) this.finish(gatewayError())
+      this.finish(new AdapterConnectionError(true, 'QQ_UNAUTHORIZED'), details)
+    } else if ([1008, 4013, 4014, 4914, 4915].includes(code ?? 0))
+      this.finish(gatewayError(), details)
     else if (
       code === 4006 ||
       code === 4007 ||
       code === 4009 ||
       (code !== undefined && code >= 4900 && code <= 4913)
     )
-      this.invalidateSession()
-    else this.finish(lost())
+      this.invalidateSession(code)
+    else this.finish(lost(), details)
   }
 
-  private finish(error?: AdapterConnectionError): void {
+  private failAdmission(
+    reason: string,
+    frame?: GatewayFrame,
+    receipt?: Receipt,
+    validationField?: string
+  ): void {
+    if (this.closed) return
+    this.report('QQ_ADMISSION_FAILED', {
+      reason,
+      ...(frame && dispatchMetadata(frame, validationField)),
+      ...(receipt && receiptMetadata(receipt)),
+      validationField
+    })
+    this.finish(admissionFailed())
+  }
+
+  private reportReceipt(frame: GatewayFrame, receipt: Receipt, validationField?: string): void {
+    if (this.closed || !this.onDiagnostic || frame.t !== 'C2C_MESSAGE_CREATE') return
+    const details = receiptMetadata(receipt)
+    // Bound routine traffic independently of binding results and validation failures.
+    const key = JSON.stringify([details.receiptStatus, details.receiptCode, validationField])
+    const now = performance.now()
+    const last = this.lastReceiptDiagnostic.get(key)
+    if (last !== undefined && now - last < RECEIPT_DIAGNOSTIC_INTERVAL_MS) return
+    this.lastReceiptDiagnostic.set(key, now)
+    this.report('QQ_GATEWAY_RECEIPT', {
+      ...dispatchMetadata(frame, validationField),
+      ...details,
+      validationField
+    })
+  }
+
+  private report(code: QqGatewayDiagnostic['code'], details: DiagnosticDetails): void {
+    try {
+      this.onDiagnostic?.({ code, phase: this.phase, durableSequence: this.durable, ...details })
+    } catch {
+      // Diagnostics cannot alter gateway processing.
+    }
+  }
+
+  private finish(error?: AdapterConnectionError, details?: DiagnosticDetails): void {
     if (this.closed) return
     const wasOnline = this.online
     this.closed = true
+    if (error && error.code !== 'QQ_ADMISSION_FAILED') {
+      // errorCode keeps the connection classification; details.reason names the specific cause.
+      this.report('QQ_GATEWAY_DISCONNECTED', { errorCode: error.code, ...details })
+    }
     this.queue.length = 0
     clearInterval(this.heartbeat)
     this.controller.signal.removeEventListener('abort', this.abort)

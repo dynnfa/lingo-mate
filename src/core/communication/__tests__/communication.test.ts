@@ -592,6 +592,46 @@ it('backs off bounded transport reconnects and ignores disconnected stale genera
   old.disconnected(false)
   expect(f.repository.read((s) => s.connections.get(f.connectionId)!.state)).toBe('online')
 })
+
+it('keeps online channels responsive while another channel reconnects', async () => {
+  const f = fixture()
+  const gateway = new TestAdapter(false)
+  const otherGateway = new TestAdapter(false)
+  f.service.registerAdapter('gateway', () => gateway)
+  f.service.registerAdapter('other-gateway', () => otherGateway)
+  const gatewayId = f.service.addConnection('gateway')
+  const otherGatewayId = f.service.addConnection('other-gateway')
+  await f.start()
+  await f.bind()
+  await f.service.start(gatewayId)
+  await f.service.start(otherGatewayId)
+
+  let ready!: () => void
+  const handshake = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+  const start = vi.spyOn(gateway, 'start').mockReturnValueOnce(handshake)
+  gateway.context!.disconnected(true)
+  f.advance(1000)
+  await f.receive()
+  const firstTick = f.service.flush()
+  otherGateway.context!.disconnected(true)
+  f.advance(1000)
+  const nextTick = f.service.flush()
+  try {
+    await vi.waitFor(() => {
+      expect(f.adapter.sent.map((part) => part.text)).toContain('Safe answer')
+      expect(f.repository.read((s) => s.connections.get(otherGatewayId)?.state)).toBe('online')
+    })
+    expect(f.repository.read((s) => s.connections.get(gatewayId)?.state)).toBe('starting')
+    expect(start).toHaveBeenCalledTimes(1)
+  } finally {
+    ready()
+    await Promise.all([firstTick, nextTick])
+    await f.service.shutdown()
+  }
+})
+
 it('exhausts known-unsent retry budgets and preserves the domain success', async () => {
   const f = fixture()
   await f.start()

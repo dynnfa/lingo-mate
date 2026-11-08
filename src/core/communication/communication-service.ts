@@ -32,7 +32,7 @@ export class CommunicationService {
   >()
   private closed = false
   private flushing?: Promise<void>
-  private reconnecting?: Promise<void>
+  private readonly reconnecting = new Map<string, Promise<string | undefined>>()
   private delivering?: Promise<void>
   private deliveryRequested = false
   constructor(
@@ -101,8 +101,8 @@ export class CommunicationService {
       c.state = 'starting'
       c.error = undefined
       c.reconnectAt = undefined
+      if (!reconnect) c.autoStart = true
       const sessionCursor = this.sessionCursors.has(c.adapterId)
-      c.autoStart = !sessionCursor
       if (sessionCursor && !reconnect) {
         c.cursor = undefined
         c.attempts = 0
@@ -466,19 +466,23 @@ export class CommunicationService {
         )
     }
   }
-  flush(): Promise<void> {
+  async flush(): Promise<void> {
+    if (this.closed) return
+    this.reconnectDue()
+    // Process online channels now and give newly connected channels a turn as well.
+    const resumed = this.reconnecting.size
+      ? Promise.all(this.reconnecting.values()).then(() => this.flushBusiness())
+      : undefined
+    await Promise.all([this.flushBusiness(), this.flushDeliveries(), resumed])
+  }
+  private flushBusiness(): Promise<void> {
     if (this.closed) return Promise.resolve()
-    const connections = (this.reconnecting ??= this.reconnectDue().finally(() => {
-      this.reconnecting = undefined
-    }))
-    this.flushing ??= connections
+    return (this.flushing ??= Promise.resolve()
       .then(() => this.dispatcher.flush())
       .then(() => this.flushDeliveries())
       .finally(() => {
         this.flushing = undefined
-      })
-    // Reconnect and delivery ticks must progress while the dispatcher awaits business.
-    return Promise.all([connections, this.flushing, this.flushDeliveries()]).then(() => {})
+      }))
   }
   private flushDeliveries(): Promise<void> {
     if (this.closed) return Promise.resolve()
@@ -501,19 +505,18 @@ export class CommunicationService {
       this.delivering = undefined
     }
   }
-  private async reconnectDue(): Promise<void> {
+  private reconnectDue(): void {
     const due = this.repository.read((s) =>
       [...s.connections.values()]
-        .filter((c) => c.state === 'reconnecting' && c.reconnectAt! <= this.env.now())
-        .map((c) => ({ id: c.id, generation: c.generation }))
+        .filter((c) => c.enabled && c.state === 'reconnecting' && c.reconnectAt! <= this.env.now())
+        .map((c) => c.id)
     )
-    for (const { id, generation } of due) {
-      if (this.closed) return
-      const stillDue = this.repository.read((s) => {
-        const c = s.connections.get(id)
-        return c?.generation === generation && c.state === 'reconnecting'
+    for (const id of due) {
+      if (this.reconnecting.has(id)) continue
+      const attempt = this.start(id, true).finally(() => {
+        this.reconnecting.delete(id)
       })
-      if (stillDue) await this.start(id, true)
+      this.reconnecting.set(id, attempt)
     }
   }
   cleanup(): void {
