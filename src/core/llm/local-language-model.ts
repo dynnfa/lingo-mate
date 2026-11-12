@@ -28,6 +28,11 @@ export class LocalLanguageModel implements LanguageModel {
     purpose
   }: StreamReplyInput): AsyncIterable<ModelStreamEvent> {
     const latestMessage = messages.at(-1)?.content ?? ''
+    if (purpose === 'conversation-route') {
+      signal.throwIfAborted()
+      yield { type: 'text', delta: 'reply' }
+      return
+    }
     if (purpose === 'conversation-title') {
       signal.throwIfAborted()
       yield { type: 'text', delta: latestMessage.replace(/\s+/g, ' ').trim().slice(0, 40) }

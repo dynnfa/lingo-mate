@@ -132,6 +132,8 @@ export class PythonAgentProcess {
                     'sentence-practice-review',
                     'conversation',
                     'conversation-title',
+                    'concept',
+                    'conversation-route',
                     'tool-loop',
                     'vocabulary',
                     'phrase',

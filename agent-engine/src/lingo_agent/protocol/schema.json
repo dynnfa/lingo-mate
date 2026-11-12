@@ -6,7 +6,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -30,7 +30,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -42,7 +42,7 @@
           "const": "ready"
         },
         "capabilities": {
-          "maxItems": 13,
+          "maxItems": 15,
           "type": "array",
           "items": {
             "type": "string",
@@ -53,6 +53,8 @@
               "sentence-practice-hints",
               "sentence-practice-review",
               "conversation",
+              "concept",
+              "conversation-route",
               "conversation-title",
               "tool-loop",
               "vocabulary",
@@ -77,7 +79,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -95,6 +97,131 @@
         },
         "snapshot": {
           "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "task": {
+                  "type": "string",
+                  "const": "conversation-route"
+                },
+                "route": {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "desktop",
+                        "channel-chat",
+                        "channel-sentence",
+                        "retry"
+                      ]
+                    },
+                    "command": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 64
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "hasArguments": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "command",
+                    "hasArguments"
+                  ],
+                  "additionalProperties": false
+                },
+                "messages": {
+                  "type": "array",
+                  "prefixItems": [],
+                  "items": false,
+                  "maxItems": 0
+                },
+                "inputChars": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4020
+                },
+                "outputLanguage": {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 35
+                },
+                "targetLanguage": {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 35
+                },
+                "allowedOperations": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "string",
+                      "const": "model.classify-conversation"
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 1,
+                  "maxItems": 1
+                },
+                "budget": {
+                  "type": "object",
+                  "properties": {
+                    "timeoutMs": {
+                      "type": "number",
+                      "const": 15000
+                    },
+                    "maxModelCalls": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "maxToolCalls": {
+                      "type": "number",
+                      "const": 0
+                    },
+                    "maxSteps": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "maxInputChars": {
+                      "type": "number",
+                      "const": 8096
+                    },
+                    "maxOutputChars": {
+                      "type": "number",
+                      "const": 256
+                    }
+                  },
+                  "required": [
+                    "timeoutMs",
+                    "maxModelCalls",
+                    "maxToolCalls",
+                    "maxSteps",
+                    "maxInputChars",
+                    "maxOutputChars"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "task",
+                "route",
+                "messages",
+                "inputChars",
+                "outputLanguage",
+                "targetLanguage",
+                "allowedOperations",
+                "budget"
+              ],
+              "additionalProperties": false
+            },
             {
               "type": "object",
               "properties": {
@@ -256,6 +383,7 @@
                       "model.sentence-practice-hints",
                       "model.sentence-practice-review",
                       "model.reply",
+                      "model.classify-conversation",
                       "model.title",
                       "model.decide",
                       "learning.lookup",
@@ -492,6 +620,7 @@
                       "model.sentence-practice-hints",
                       "model.sentence-practice-review",
                       "model.reply",
+                      "model.classify-conversation",
                       "model.title",
                       "model.decide",
                       "learning.lookup",
@@ -724,6 +853,7 @@
                       "model.sentence-practice-hints",
                       "model.sentence-practice-review",
                       "model.reply",
+                      "model.classify-conversation",
                       "model.title",
                       "model.decide",
                       "learning.lookup",
@@ -746,6 +876,7 @@
                   "type": "string",
                   "enum": [
                     "conversation",
+                    "concept",
                     "tool-loop",
                     "vocabulary",
                     "phrase"
@@ -863,6 +994,7 @@
                       "model.sentence-practice-hints",
                       "model.sentence-practice-review",
                       "model.reply",
+                      "model.classify-conversation",
                       "model.title",
                       "model.decide",
                       "learning.lookup",
@@ -997,6 +1129,7 @@
                       "model.sentence-practice-hints",
                       "model.sentence-practice-review",
                       "model.reply",
+                      "model.classify-conversation",
                       "model.title",
                       "model.decide",
                       "learning.lookup",
@@ -1096,7 +1229,63 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
+            },
+            "instanceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "runId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "callId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "type": {
+              "type": "string",
+              "const": "host_call"
+            },
+            "operation": {
+              "type": "string",
+              "const": "model.classify-conversation"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "systemPrompt": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4096
+                }
+              },
+              "required": [
+                "systemPrompt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "v",
+            "instanceId",
+            "runId",
+            "callId",
+            "type",
+            "operation",
+            "args"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "number",
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -1143,7 +1332,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -1199,7 +1388,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -1246,7 +1435,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -1293,7 +1482,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -1355,7 +1544,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -1411,7 +1600,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -1473,7 +1662,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -1538,7 +1727,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -1585,7 +1774,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -1641,7 +1830,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -1697,7 +1886,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -1753,7 +1942,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -1800,7 +1989,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -1862,7 +2051,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -1909,7 +2098,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -1971,7 +2160,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -2018,7 +2207,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -2086,7 +2275,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -2156,7 +2345,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -2227,7 +2416,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -2274,7 +2463,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -2336,7 +2525,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -2383,7 +2572,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -2445,7 +2634,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -2501,7 +2690,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -2570,7 +2759,7 @@
           "properties": {
             "v": {
               "type": "number",
-              "const": 12
+              "const": 13
             },
             "instanceId": {
               "type": "string",
@@ -2628,7 +2817,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -2651,6 +2840,23 @@
         },
         "result": {
           "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "intent": {
+                  "type": "string",
+                  "enum": [
+                    "reply",
+                    "concept",
+                    "unclear"
+                  ]
+                }
+              },
+              "required": [
+                "intent"
+              ],
+              "additionalProperties": false
+            },
             {
               "type": "object",
               "properties": {
@@ -3384,7 +3590,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -3430,7 +3636,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -3494,7 +3700,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -3552,7 +3758,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -3582,7 +3788,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -3617,7 +3823,115 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
+        },
+        "instanceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "type": "string",
+          "const": "conversation_route_result"
+        },
+        "result": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "reply"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "workflow"
+                },
+                "workflow": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "concept"
+                    },
+                    {
+                      "type": "string",
+                      "enum": [
+                        "vocabulary",
+                        "phrase",
+                        "synonym",
+                        "explore-phrase",
+                        "explore-vocabulary",
+                        "sentence",
+                        "tts"
+                      ]
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "workflow"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "invalid"
+                },
+                "workflow": {
+                  "type": "string",
+                  "enum": [
+                    "vocabulary",
+                    "phrase",
+                    "synonym",
+                    "explore-phrase",
+                    "explore-vocabulary",
+                    "sentence",
+                    "tts"
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "workflow"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "v",
+        "instanceId",
+        "runId",
+        "type",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "number",
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -3666,7 +3980,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -3715,7 +4029,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -3755,7 +4069,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -3804,7 +4118,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -3855,7 +4169,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -3906,7 +4220,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -3950,7 +4264,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -4000,7 +4314,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -4044,7 +4358,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -4088,7 +4402,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -4118,7 +4432,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",
@@ -4142,7 +4456,7 @@
       "properties": {
         "v": {
           "type": "number",
-          "const": 12
+          "const": 13
         },
         "instanceId": {
           "type": "string",

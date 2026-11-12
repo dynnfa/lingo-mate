@@ -50,6 +50,7 @@ export class ConversationBusinessPort implements BusinessPort {
       }
       signal.addEventListener('abort', cancel, { once: true })
       const context = {
+        operation: input.operation,
         languages: input.languages,
         userMessageId: input.userMessageId,
         assistantMessageId: input.assistantMessageId

@@ -1,6 +1,6 @@
 # Lingo Mate Agent Engine
 
-本模块是唯一 Agent 运行时，负责任务识别、Prompt、工具决策与内存中的 LangGraph 编排。会话与消息持久化、语言学习规则、模型凭据、供应商请求和用量统计均由 TypeScript 宿主负责。生产接入普通对话、`/concept`、`/vocabulary`、`/phrase`、`/synonym`、`/explore-phrase`、`/explore-vocabulary` 与句子练习（提示和点评）；模型决策/只读工具循环通过测试扩展验证。无 checkpoint、业务数据库访问、云端 tracing 或模型 SDK 请求。
+本模块是唯一 Agent 运行时，负责任务识别、Prompt、工具决策与内存中的 LangGraph 编排。会话与消息持久化、语言学习规则、模型凭据、供应商请求和用量统计均由 TypeScript 宿主负责。生产接入统一对话入口、普通对话、八个斜杠命令、会话标题及已迁移的练习。测试扩展覆盖模型决策和只读工具循环。无 checkpoint、业务数据库访问、云端 tracing 或模型 SDK 请求。
 
 架构边界与任务权限约定见 [AGENTS.md](../AGENTS.md)。本文命令与文件路径均以仓库根目录为基准。协议源位于 `src/core/agent/agent-protocol.ts`；生成的 `agent-engine/src/lingo_agent/protocol/schema.json` 随包发布，不能手改。共享契约样例在 `tests/integration/fixtures/agent/protocol-cases.json`。
 
@@ -16,7 +16,7 @@ pnpm agent:check
 pnpm dev
 ```
 
-普通对话、`/concept`、`/vocabulary`、`/phrase`、`/synonym`、`/explore-phrase`、`/explore-vocabulary` 与句子练习（提示和点评） 默认且始终经过 Python（包括本地模拟模型），无需运行时参数。子进程在首次 Agent 请求时启动；启动/协议/执行故障不会回退或自动重放失败请求。`LINGO_MATE_AGENT_BUNDLE=1` 仅用于开发时选择冻结运行包。开发解释器只从 `agent-engine/.venv/bin/python`（Windows `agent-engine/.venv/Scripts/python.exe`）启动，不搜索 PATH。手动入口为 `agent-engine/.venv/bin/python -I -m lingo_agent`，Windows 使用对应解释器路径，只接受 JSONL 管道协议。
+会话入口、回复、标题、八个斜杠命令及已迁移的练习始终经过 Python，包括使用本地模拟模型时。子进程在首次 Agent 请求时启动；启动/协议/执行故障不会回退或自动重放失败请求。`LINGO_MATE_AGENT_BUNDLE=1` 仅用于开发时选择冻结运行包。开发解释器只从 `agent-engine/.venv/bin/python`（Windows `agent-engine/.venv/Scripts/python.exe`）启动，不搜索 PATH。手动入口为 `agent-engine/.venv/bin/python -I -m lingo_agent`，Windows 使用对应解释器路径，只接受 JSONL 管道协议。
 
 所有检查与测试均使用锁定环境。Python 测试在 `agent-engine/src/lingo_agent/__tests__/test_*.py`，pytest 发现规则由 `agent-engine/pyproject.toml` 配置。执行 TypeScript 全量测试前也要完成 `agent:sync`；新增进程集成测试确实启动 Python，不会在缺环境时悄悄跳过。测试仅使用可控替身/本地假模型服务。
 
@@ -34,11 +34,11 @@ lingo_agent/
 │   ├── common.py              # 共享宿主边界检查、UTF-16 预算与回复辅助
 │   ├── language.py            # Prompt 使用的语言名称
 │   ├── conversation/
-│   │   ├── routing.py         # 最新 user 消息的 /concept 识别及会话内选择
+│   │   ├── routing.py         # 会话入口：按当前请求的授权和描述选择单个工作流
 │   │   ├── graph.py           # 普通回复：START → reply → END
 │   │   ├── concept.py         # 概念讲解：START → explain → END
 │   │   ├── title.py           # 独立 conversation-title 任务
-│   │   └── prompts.py         # 对话、概念与标题指令
+│   │   └── prompts.py         # 意图分类、对话、概念与标题指令
 │   ├── vocabulary/            # graph.py + prompts.py
 │   ├── phrase/                # graph.py + prompts.py
 │   ├── synonym/               # graph.py + prompts.py
@@ -53,9 +53,9 @@ lingo_agent/
 └── __tests__/                # 行为测试与迁移前固定 Prompt 输出
 ```
 
-从 `runtime/dispatcher.py` 找到 task，再进入所属功能目录查看图、节点、局部状态和 Prompt。分发器使用静态导入，只选择入口；未知 task 在宿主调用前明确失败，由 Server 转为 `AGENT_PROTOCOL_ERROR`。`conversation` 经会话路由选择普通对话或概念图；`conversation-title` 独立分发。测试工具图仍需 TS 受控注入授权，目录归属不扩大生产权限。
+从 `runtime/dispatcher.py` 找到 task，再进入所属功能目录查看图、节点、局部状态和 Prompt。分发器使用静态导入，只选择入口；未知 task 在宿主调用前明确失败，由 Server 转为 `AGENT_PROTOCOL_ERROR`。`conversation-route` 只决定工作流，`conversation`、`concept` 和 `conversation-title` 分别执行已绑定的任务。测试工具图仍需 TS 受控注入授权，目录归属不扩大生产权限。
 
-Prompt 直接由所属图导入，各功能不互相注册或批量重导出。`__tests__/fixtures/prompt-baselines.json` 保存目录迁移前的 40 组固定输出，覆盖所有 Prompt、两种界面语言及独立学习语言；逐字比较包括空白、换行和补标指令。协议版本、任务预算与宿主提交边界保持不变。
+Prompt 直接由所属图导入，各功能不互相注册或批量重导出。`__tests__/fixtures/prompt-baselines.json` 保存现有工作流的参考输出，覆盖两种界面语言及独立学习语言，逐字比较空白、换行和补标指令。概念指令支持显式命令和自然语言两种输入。
 
 ## TypeScript 宿主任务边界
 
@@ -68,7 +68,7 @@ Prompt 直接由所属图导入，各功能不互相注册或批量重导出。`
 
 输出保持原有 UTF-16 计量口径：对话按流增量、测试决策按最终正文、领域操作按安全回执 JSON 累计；词汇／短语准备结果与 TTS 回执保留原有不累计方式，流正文不按最终 `text` 再扣一次。词汇／短语各自只允许两个模型分析并行，准备调用与其他任务仍串行。统一终态准入补齐了其他任务提前成功的拒绝行为。
 
-新增任务需显式扩展协议、可信策略、任务绑定、Adapter 和公开运行入口；通用调用与成功处理不增加领域分支。Python 图、Prompt、协议 v11 及原有领域提交、恢复和幂等边界均保持不变。
+新增任务需显式扩展协议、可信策略、任务绑定、Adapter 和公开运行入口；通用调用与成功处理不增加领域分支。领域模块负责提交、恢复和幂等校验。
 
 ## 应用与运行包检查
 
@@ -108,7 +108,7 @@ macOS 本地包使用 PyInstaller 的 ad-hoc 签名。正式发行还需原有 A
 
 ## 协议演进与排错
 
-当前协议为 v12。应用提交 `sentence`、`conversation-title`、`conversation`、`vocabulary`、`phrase`、`synonym`、`explore-phrase`、`explore-vocabulary`、`sentence-practice-hints`、`sentence-practice-review`、`vocabulary-practice-review` 或 `tts` 任务，`/concept` 在 Python 内部识别。`model.reply` 与标题专用 `model.title` 必须提供完整 `systemPrompt`，TS 模型适配器原样发送，不再选择 Agent Prompt。Prompt 上限为 4096 个 UTF-16 单元，两端校验实际 Prompt 加历史的总输入预算；旧运行包必须重建。其余显式技能及练习暂沿用 TS 实现，未来新增 Agent 策略和工作流统一在本模块实现。
+当前协议为 v13。应用可提交 `conversation-route`、`conversation`、`concept`、`conversation-title`、`vocabulary`、`phrase`、`synonym`、`explore-phrase`、`explore-vocabulary`、`sentence`、`tts`、`sentence-practice-hints`、`sentence-practice-review` 或 `vocabulary-practice-review`。握手必须包含路由和概念能力。 `model.reply` 和标题专用 `model.title` 接收 Python 提供的完整 `systemPrompt`。Prompt 上限为 4096 个 UTF-16 单元，两端校验 Prompt 与上下文的总输入预算。升级后须重建旧运行包。
 
 - 修改 Zod 协议后运行 `node --experimental-strip-types scripts/agent-protocol-schema.mjs`，更新共享用例；破坏性修改提升协议版本并重建全部运行包。
 - stdout 专用于协议，Python 不输出用户错误文案或 traceback。stderr 只由 Main 有界接收并进入已有本地错误日志。
@@ -139,15 +139,17 @@ macOS 本地包使用 PyInstaller 的 ad-hoc 签名。正式发行还需原有 A
 
 2026-10-21 的 v2 变更已通过 macOS arm64 的开发解释器、冻结包和安装布局端到端验证，以及空 PATH 运行包烟测。完整结果与尚未执行的平台见 [Python 唯一运行时计划](../docs/plans/2026-10-21-python-only-agent-runtime.md)。此前性能数字保留为历史观测，不代表本次构建的性能承诺。
 
+## 对话入口路由
+
+`workflows/conversation/routing.py` 持有命令注册表和单节点路由图。TS 提取首词、是否有参数和输入长度，绑定原文及已准入的调用范围。命令名按 ECMAScript 空白边界精确匹配。显式命令与渠道请求不调用分类模型。
+
+桌面自然语言可调用一次 `model.classify-conversation`。Python 提供明确讲解语言及目标学习语言的分类指令，宿主只把绑定的最新消息传给模型。分类模型只返回 `concept`、`reply` 或 `unclear`。其中 `reply` 和 `unclear` 进入普通对话。模型超时、失败或标签无效结束请求。
+
+入口的总截止时间含启动和排队为 15 秒，供应商请求为 10 秒。预算为最多 1 次模型调用、0 次工具调用、1 个步骤。分类输入最多 4000 个 UTF-16 单元，完整 Prompt 最多 4096 个，安全回执累计最多 256 个。入口只返回一个 `conversation_route_result`，表示普通回复、已选工作流或参数存在性错误。宿主核验终态与请求及分类回执的绑定关系，记录耗时和模型调用数，然后以独立运行身份启动对应任务。路由运行无流事件和业务写入。
+
 ## 概念讲解独立图
 
-`/concept` 的专用图位于 `workflows/conversation/concept.py`，采用 `START → explain → END`。入口仅在 `conversation` 任务的最新消息为 user 且符合既有命令边界时选择该图；空命令和 ECMAScript 空白规则保持原样，普通追问重新走普通对话图，不根据历史命令粘连任务。
-
-图使用既有概念讲解 Prompt，一次 `model.reply` 请求直接流式回复。解释及比较使用界面语言，例句使用学习语言；保留语境澄清、拼写确认、不编造词源与不执行外部操作的规则。原始命令和历史上下文由宿主原样绑定，不增加路由模型请求或查询词库。
-
-`workflows/common.py` 统一回复的权限、Prompt／历史输入、输出、模型调用和步数预算检查，以及运行初态和错误类型。字符预算按 UTF-16 单元计算，Prompt 上限仍为 4096。单节点图为结束检查保留必要的调度轮次，实际操作仍受步数预算约束。取消、超时及故障沿用原有服务和宿主边界，无自动重试或回退。
-
-本次只拆分 Python 内部流程，继续使用 `conversation` 任务、协议 v4 和现有 IPC／运行接口。运行包需重新构建以包含专用图。实施与验收见 [概念讲解计划](../docs/plans/2026-10-22-concept-langgraph-agent.md)。
+`workflows/conversation/concept.py` 执行已绑定的概念任务，通过一次 `model.reply` 流式返回解释。解释和比较使用讲解语言，例句使用目标学习语言。宿主把原始请求和会话历史传给该图，保留语境澄清和拼写确认行为。标题继续使用独立的 `conversation-title` 任务。
 
 ## 词汇 LangGraph 与协议 v3
 
@@ -247,4 +249,4 @@ TS 每轮只做一次模型传输，并保留同一批次的模型配置快照�
 
 同原文／目标语言的可取消串行锁覆盖查重、模型与同步事务提交。已存在记录零翻译调用；图完成核验后将 `sentence` 记录及执行报告一起提交。已提交报告的回复恢复不会再次翻译或重新收藏。最多 1 次准备、1 次模型调用和 2 个步骤；拿锁后总截止 120 秒包含启动，供应商请求 60 秒，输入／安全回执／Prompt 为 65,536／1,024／4,096 UTF-16 单元。
 
-新增任务、权限、能力握手与 `sentence_result` 完成帧要求应用和原生运行包一起升级到 v12。运行 `pnpm agent:build` 后的 manifest 从生成协议读取版本；旧 v11 包明确拒绝启动。冻结包烟测覆盖翻译及已有记录跳过模型。
+句子任务及其 `sentence_result` 完成帧于 v12 引入。 `pnpm agent:build` 从生成协议读取当前版本并写入运行包 manifest。冻结包烟测覆盖翻译及已有记录跳过模型。

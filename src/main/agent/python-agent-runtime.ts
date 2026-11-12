@@ -4,7 +4,8 @@ import {
   type BatchTaskBindingInput
 } from '../../core/agent/agent-task-binding'
 import type { AgentTaskBinding } from '../../core/agent/agent-task'
-import { isAgentSuccessFrame } from '../../core/agent/agent-task-policy'
+import { describeConversationRoute } from '../../core/agent/tasks/conversation-route-task'
+import { getAgentTaskPolicy, isAgentSuccessFrame } from '../../core/agent/agent-task-policy'
 import { randomUUID } from 'node:crypto'
 import type { LanguageModel, ModelStreamEvent } from '../../core/llm/language-model'
 import { AgentHost, type AgentTestOperations } from '../../core/agent/agent-host'
@@ -23,6 +24,7 @@ import {
   type ExplorePhraseAgentRunInput,
   type ExplorePhraseHostOperations,
   type AgentRunInput,
+  type ConversationRouteRunInput,
   type AgentRuntime,
   type VocabularyHostOperations,
   type PhraseAgentRunInput,
@@ -31,7 +33,12 @@ import {
   type SynonymAgentRunInput,
   type VocabularyAgentRunInput
 } from '../../core/agent/agent-runtime'
-import type { AgentFrame } from '../../core/agent/agent-protocol'
+import {
+  agentSnapshotSchema,
+  type AgentFrame,
+  type AgentSnapshot,
+  type ConversationRouteResult
+} from '../../core/agent/agent-protocol'
 import { PythonAgentProcess } from './python-agent-process'
 
 type BatchTask = BatchTaskBindingInput['task']
@@ -78,7 +85,8 @@ export class PythonAgentRuntime implements AgentRuntime {
   constructor(
     private readonly process: PythonAgentProcess,
     private readonly resolveModel: () => LanguageModel,
-    private readonly testOperations?: AgentTestOperations
+    private readonly testOperations?: AgentTestOperations,
+    private readonly onRouteMeasured?: (metrics: { durationMs: number; modelCalls: number }) => void
   ) {
     this.unsubscribe = process.subscribe(
       (frame) => this.receive(frame),
@@ -92,15 +100,58 @@ export class PythonAgentRuntime implements AgentRuntime {
   async *stream(input: AgentRunInput): AsyncIterable<ModelStreamEvent> {
     switch (input.task) {
       case 'conversation':
+      case 'concept':
       case 'conversation-title':
-        yield* this.run(input, { task: input.task, resolveModel: this.resolveModel })
+        yield* this.run(createAgentSnapshot(input), input.signal, {
+          task: input.task,
+          resolveModel: this.resolveModel
+        })
         return
       case 'tool-loop':
         if (!this.testOperations) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
-        yield* this.run(input, { task: input.task, operations: this.testOperations })
+        yield* this.run(createAgentSnapshot(input), input.signal, {
+          task: input.task,
+          operations: this.testOperations
+        })
         return
       default:
         throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+    }
+  }
+
+  async routeConversation(input: ConversationRouteRunInput): Promise<ConversationRouteResult> {
+    const started = performance.now()
+    let modelCalls = 0
+    let result: ConversationRouteResult | undefined
+    const task = 'conversation-route'
+    const policy = getAgentTaskPolicy(task)
+    const snapshot = agentSnapshotSchema.parse({
+      task,
+      messages: [],
+      route: describeConversationRoute(input.mode, input.text),
+      inputChars: input.text.length,
+      outputLanguage: input.outputLanguage,
+      targetLanguage: input.targetLanguage,
+      budget: policy.budget,
+      allowedOperations: policy.allowedOperations
+    })
+    try {
+      for await (const event of this.run(snapshot, input.signal, {
+        task,
+        text: input.text,
+        resolveModel: this.resolveModel,
+        complete: (selected) => {
+          result = selected
+        },
+        modelStarted: () => {
+          modelCalls++
+        }
+      }))
+        void event
+      if (!result) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+      return result
+    } finally {
+      this.onRouteMeasured?.({ durationMs: Math.round(performance.now() - started), modelCalls })
     }
   }
 
@@ -159,7 +210,12 @@ export class PythonAgentRuntime implements AgentRuntime {
   ): Promise<void> {
     const task = bindingInput.task
     for await (const event of this.run(
-      { ...input, sessionId: '', task, messages: [{ role: 'user', content: BATCH_MESSAGE[task] }] },
+      createAgentSnapshot({
+        ...input,
+        task,
+        messages: [{ role: 'user', content: BATCH_MESSAGE[task] }]
+      }),
+      input.signal,
       bindingInput
     ))
       void event
@@ -174,19 +230,12 @@ export class PythonAgentRuntime implements AgentRuntime {
   }
 
   private async *run(
-    input: AgentRunInput,
+    snapshot: AgentSnapshot,
+    signal: AbortSignal,
     bindingInput: AgentTaskBindingInput
   ): AsyncIterable<ModelStreamEvent> {
-    input.signal.throwIfAborted()
+    signal.throwIfAborted()
     if (this.closed || this.runs.size >= 8) throw new AgentRuntimeError('AGENT_UNAVAILABLE')
-    const { signal } = input
-    const task = {
-      task: input.task,
-      messages: input.messages,
-      outputLanguage: input.outputLanguage,
-      targetLanguage: input.targetLanguage
-    }
-    const snapshot = createAgentSnapshot(task)
     const binding = createAgentTaskBinding(snapshot, bindingInput)
     const controller = new AbortController()
     const runId = randomUUID()

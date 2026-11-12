@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const AGENT_PROTOCOL_VERSION = 12
+export const AGENT_PROTOCOL_VERSION = 13
 export const MAX_AGENT_SYSTEM_PROMPT_CHARS = 4096
 export const MAX_AGENT_FRAME_BYTES = 262_144
 export const AGENT_OPERATIONS = [
@@ -16,6 +16,7 @@ export const AGENT_OPERATIONS = [
   'model.sentence-practice-hints',
   'model.sentence-practice-review',
   'model.reply',
+  'model.classify-conversation',
   'model.title',
   'model.decide',
   'learning.lookup',
@@ -53,12 +54,56 @@ const snapshotFields = {
   targetLanguage: z.string().min(2).max(35),
   allowedOperations: z.array(agentOperationSchema).max(11)
 }
+export const conversationRouteInputSchema = z.strictObject({
+  mode: z.enum(['desktop', 'channel-chat', 'channel-sentence', 'retry']),
+  command: z.string().max(64).nullable(),
+  hasArguments: z.boolean()
+})
+export const conversationIntentSchema = z.enum(['reply', 'concept', 'unclear'])
+const conversationSkillWorkflow = z.enum([
+  'vocabulary',
+  'phrase',
+  'synonym',
+  'explore-phrase',
+  'explore-vocabulary',
+  'sentence',
+  'tts'
+])
+export const conversationRouteResultSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('reply') }),
+  z.strictObject({
+    kind: z.literal('workflow'),
+    workflow: z.union([z.literal('concept'), conversationSkillWorkflow])
+  }),
+  z.strictObject({ kind: z.literal('invalid'), workflow: conversationSkillWorkflow })
+])
+export type ConversationRouteInput = z.infer<typeof conversationRouteInputSchema>
+export type ConversationIntent = z.infer<typeof conversationIntentSchema>
+export type ConversationRouteResult = z.infer<typeof conversationRouteResultSchema>
+
 export const sentencePracticeTaskSchema = z.enum([
   'sentence-practice-hints',
   'sentence-practice-review'
 ])
 export type SentencePracticeTask = z.infer<typeof sentencePracticeTaskSchema>
 export const agentSnapshotSchema = z.discriminatedUnion('task', [
+  z.strictObject({
+    task: z.literal('conversation-route'),
+    route: conversationRouteInputSchema,
+    messages: z.tuple([]),
+    inputChars: z.number().int().min(1).max(4020),
+    outputLanguage: snapshotFields.outputLanguage,
+    targetLanguage: snapshotFields.targetLanguage,
+    allowedOperations: z.tuple([z.literal('model.classify-conversation')]),
+    budget: z.strictObject({
+      timeoutMs: z.literal(15_000),
+      maxModelCalls: z.literal(1),
+      maxToolCalls: z.literal(0),
+      maxSteps: z.literal(1),
+      maxInputChars: z.literal(8096),
+      maxOutputChars: z.literal(256)
+    })
+  }),
   z.strictObject({
     ...snapshotFields,
     task: z.literal('tts'),
@@ -125,7 +170,7 @@ export const agentSnapshotSchema = z.discriminatedUnion('task', [
   }),
   z.strictObject({
     ...snapshotFields,
-    task: z.enum(['conversation', 'tool-loop', 'vocabulary', 'phrase']),
+    task: z.enum(['conversation', 'concept', 'tool-loop', 'vocabulary', 'phrase']),
     budget: agentBudgetSchema.extend({
       maxModelCalls: z.number().int().min(1).max(20),
       maxToolCalls: z.number().int().min(0).max(8),
@@ -335,6 +380,7 @@ export const sentencePreparedSchema = z.strictObject({
 })
 export type SentencePrepared = z.infer<typeof sentencePreparedSchema>
 export const agentHostResultSchema = z.union([
+  z.strictObject({ intent: conversationIntentSchema }),
   sentencePreparedSchema,
   ttsCompletionSchema,
   vocabularyPracticeTurnSchema,
@@ -458,6 +504,8 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
           'sentence-practice-hints',
           'sentence-practice-review',
           'conversation',
+          'concept',
+          'conversation-route',
           'conversation-title',
           'tool-loop',
           'vocabulary',
@@ -467,10 +515,16 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
           'explore-vocabulary'
         ])
       )
-      .max(13)
+      .max(15)
   }),
   z.strictObject({ ...run, type: z.literal('run'), snapshot: agentSnapshotSchema }),
   z.discriminatedUnion('operation', [
+    z.strictObject({
+      ...call,
+      type: z.literal('host_call'),
+      operation: z.literal('model.classify-conversation'),
+      args: agentReplyArgsSchema
+    }),
     z.strictObject({
       ...call,
       type: z.literal('host_call'),
@@ -645,6 +699,11 @@ export const agentFrameSchema = z.discriminatedUnion('type', [
   z.strictObject({ ...run, type: z.literal('event'), seq: z.number().int().positive(), event }),
   z.strictObject({ ...run, type: z.literal('cancel') }),
   z.strictObject({ ...run, type: z.literal('result'), text }),
+  z.strictObject({
+    ...run,
+    type: z.literal('conversation_route_result'),
+    result: conversationRouteResultSchema
+  }),
   z.strictObject({
     ...run,
     type: z.literal('vocabulary_result'),

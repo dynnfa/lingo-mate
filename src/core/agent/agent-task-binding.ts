@@ -1,4 +1,4 @@
-import type { AgentSnapshot } from './agent-protocol'
+import type { AgentSnapshot, ConversationRouteResult } from './agent-protocol'
 import {
   AgentRuntimeError,
   type SentenceHostOperations,
@@ -22,6 +22,7 @@ import { PhraseTask } from './tasks/phrase-task'
 import { SynonymTask } from './tasks/synonym-task'
 import { ExplorePhraseTask } from './tasks/explore-phrase-task'
 import { ExploreVocabularyTask } from './tasks/explore-vocabulary-task'
+import { ConversationRouteTask } from './tasks/conversation-route-task'
 import { ConversationTask } from './tasks/conversation-task'
 import { ToolLoopTask } from './tasks/tool-loop-task'
 
@@ -38,12 +39,19 @@ export type AgentTaskBindingInput =
   | { task: 'synonym'; host: SynonymHostOperations }
   | { task: 'explore-phrase'; host: ExplorePhraseHostOperations }
   | { task: 'explore-vocabulary'; host: ExploreVocabularyHostOperations }
-  | { task: 'conversation' | 'conversation-title'; resolveModel: ResolveAgentModel }
+  | {
+      task: 'conversation-route'
+      text: string
+      resolveModel: ResolveAgentModel
+      complete: (result: ConversationRouteResult) => void
+      modelStarted: () => void
+    }
+  | { task: 'conversation' | 'concept' | 'conversation-title'; resolveModel: ResolveAgentModel }
   | { task: 'tool-loop'; operations: AgentTestOperations }
 
 export type BatchTaskBindingInput = Exclude<
   AgentTaskBindingInput,
-  { task: 'conversation' | 'conversation-title' | 'tool-loop' }
+  { task: 'conversation' | 'concept' | 'conversation-title' | 'conversation-route' | 'tool-loop' }
 >
 
 export function createAgentTaskBinding(
@@ -77,7 +85,11 @@ export function createAgentTaskBinding(
       return { task: input.task, policy, adapter: new ExplorePhraseTask(copied, input.host) }
     case 'explore-vocabulary':
       return { task: input.task, policy, adapter: new ExploreVocabularyTask(copied, input.host) }
+    case 'conversation-route':
+      if (copied.task !== input.task) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+      return { task: input.task, policy, adapter: new ConversationRouteTask(copied, input) }
     case 'conversation':
+    case 'concept':
     case 'conversation-title':
       return {
         task: input.task,

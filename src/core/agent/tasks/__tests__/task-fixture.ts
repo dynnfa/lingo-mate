@@ -4,7 +4,7 @@ import { createAgentSnapshot } from '../../agent-runtime'
 import type { AgentSnapshot } from '../../agent-protocol'
 
 export function boundHost(
-  input: AgentTaskBindingInput,
+  input: Exclude<AgentTaskBindingInput, { task: 'conversation-route' }>,
   adjust?: (snapshot: AgentSnapshot) => void
 ): { host: AgentHost; binding: ReturnType<typeof createAgentTaskBinding> } {
   const snapshot = createAgentSnapshot({

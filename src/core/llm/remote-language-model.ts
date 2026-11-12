@@ -45,7 +45,11 @@ export class RemoteLanguageModel implements LanguageModel {
           ...input.messages.map(({ role, content }) => ({ role, content }))
         ]
       },
-      { operation: 'conversation', timeoutMs: this.timeoutMs, signal: input.signal }
+      {
+        operation: 'conversation',
+        timeoutMs: Math.min(input.timeoutMs ?? this.timeoutMs, this.timeoutMs),
+        signal: input.signal
+      }
     )) {
       const parsed = chunkSchema.safeParse(rawChunk)
       if (!parsed.success) {

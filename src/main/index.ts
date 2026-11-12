@@ -328,10 +328,22 @@ app.whenReady().then(async () => {
         error
       })
   }))
-  const agentRuntime = new PythonAgentRuntime(agentProcess, () =>
-    conversationModel instanceof ConfiguredLanguageModel
-      ? conversationModel.snapshot()
-      : conversationModel
+  const agentRuntime = new PythonAgentRuntime(
+    agentProcess,
+    () =>
+      conversationModel instanceof ConfiguredLanguageModel
+        ? conversationModel.snapshot()
+        : conversationModel,
+    undefined,
+    (context) =>
+      errorLogger.log({
+        level: 'info',
+        source: 'main',
+        module: 'agent',
+        operation: 'conversation-route',
+        message: 'Conversation route finished',
+        context
+      })
   )
   pythonAgentRuntime = agentRuntime
   const vocabularyRepository = new SqliteVocabularyRepository(database)
