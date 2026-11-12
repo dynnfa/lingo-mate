@@ -1,3 +1,7 @@
+import { PhraseError } from '../core/learning/phrase/parse-phrase-input'
+import { VocabularyError } from '../core/learning/vocabulary/parse-vocabulary-input'
+import { ZodError } from 'zod'
+import { AgentRuntimeError } from '../core/agent/agent-runtime'
 import { SpeechError } from '../core/speech/speech-synthesizer'
 import { SynonymError } from '../core/learning/synonym/parse-synonym-input'
 import { ExplorePhraseError } from '../core/learning/explore-phrase/explore-phrase-error'
@@ -13,7 +17,10 @@ import {
   RequestNotFoundError,
   RetryNotAllowedError
 } from '../core/conversation/conversation-repository'
-import { SkillLanguageMismatchError } from '../core/conversation/conversation-module'
+import {
+  InvalidConversationCommandError,
+  SkillLanguageMismatchError
+} from '../core/conversation/conversation-module'
 import type { ConversationRequestError } from '../shared/conversation'
 
 // 在进程边界把 Core 错误转换为对用户安全的结构：只保留错误码与受约束的
@@ -29,7 +36,12 @@ export function toSafeRequestError(error: unknown): ConversationRequestError {
     return { code: 'NOT_FOUND', resource: 'message' }
   }
 
-  if (error instanceof SynonymError && error.code === 'INVALID_INPUT')
+  if (
+    (error instanceof SynonymError ||
+      error instanceof PhraseError ||
+      error instanceof VocabularyError) &&
+    error.code === 'INVALID_INPUT'
+  )
     return { code: 'INVALID_INPUT' }
 
   // 探索技能的历史文件类失败按持久化错误反馈；通信与配置类沿用各自
@@ -93,6 +105,9 @@ export function toSafeRequestError(error: unknown): ConversationRequestError {
   if (error instanceof ModelConfigValidationError && error.code === 'CREDENTIAL_DECRYPT_FAILED') {
     return { code: 'CREDENTIAL_DECRYPT_FAILED' }
   }
+  if (error instanceof ZodError || error instanceof InvalidConversationCommandError)
+    return { code: 'INVALID_INPUT' }
+  if (error instanceof AgentRuntimeError) return { code: error.code }
   if (error instanceof ModelRequestError) return { code: 'MODEL_ERROR' }
   if (error instanceof Error && error.name === 'AbortError') return { code: 'CANCELLED' }
   return { code: 'UNKNOWN_ERROR' }

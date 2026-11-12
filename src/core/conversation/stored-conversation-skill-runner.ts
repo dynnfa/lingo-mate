@@ -143,11 +143,12 @@ export class StoredConversationSkillRunner {
   ): Promise<void> {
     const { requestId, sessionId, assistantMessageId } = generation
     const eventBase = { requestId, sessionId }
+    const publish = this.executions.releaseOnTerminal(execution, emit)
     try {
-      emit({ type: 'started', ...generation })
+      publish({ type: 'started', ...generation })
       if (execution.controller.signal.aborted) {
         await this.repository.setExecutionPhase(skillExecution.id, 'cancelled')
-        emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
+        publish({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
         return
       }
 
@@ -162,21 +163,21 @@ export class StoredConversationSkillRunner {
         signal: execution.controller.signal,
         onPhase: async (phase) => {
           await this.repository.setExecutionPhase(skillExecution.id, phase)
-          emit({ ...eventBase, type: 'skillPhase', phase })
+          publish({ ...eventBase, type: 'skillPhase', phase })
         }
       } satisfies ConversationSkillRunInput)
 
       if (result.outcome === 'cancelled') {
         await this.repository.setExecutionPhase(skillExecution.id, 'cancelled')
-        emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
+        publish({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
         return
       }
-      await this.persistSkillReply(generation, skillExecution, result.report, skill, emit)
+      await this.persistSkillReply(generation, skillExecution, result.report, skill, publish)
     } catch (error) {
       if (execution.controller.signal.aborted) {
         try {
           await this.repository.setExecutionPhase(skillExecution.id, 'cancelled')
-          emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
+          publish({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
         } catch (persistenceError) {
           reportConversationFailure(
             this.diagnostics,
@@ -184,7 +185,7 @@ export class StoredConversationSkillRunner {
             requestId,
             persistenceError
           )
-          emit({
+          publish({
             ...eventBase,
             type: 'failed',
             messageId: assistantMessageId,
@@ -204,7 +205,7 @@ export class StoredConversationSkillRunner {
           )
           // 对外仍返回原始业务错误；二次持久化失败仅进入内部日志。
         }
-        emit({
+        publish({
           ...eventBase,
           type: 'failed',
           messageId: assistantMessageId,
@@ -212,7 +213,7 @@ export class StoredConversationSkillRunner {
         })
       }
     } finally {
-      this.executions.release(requestId)
+      this.executions.release(requestId, execution)
     }
   }
 
@@ -227,26 +228,27 @@ export class StoredConversationSkillRunner {
   ): Promise<void> {
     const { requestId, sessionId, assistantMessageId } = generation
     const eventBase = { requestId, sessionId }
+    const publish = this.executions.releaseOnTerminal(execution, emit)
     try {
-      emit({ type: 'started', ...generation })
+      publish({ type: 'started', ...generation })
       if (execution.controller.signal.aborted) {
         await this.repository.setExecutionPhase(skillExecution.id, 'cancelled')
-        emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
+        publish({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
         return
       }
       await this.repository.setExecutionPhase(skillExecution.id, 'summarizing')
-      emit({ ...eventBase, type: 'skillPhase', phase: 'summarizing' })
-      await this.persistSkillReply(generation, skillExecution, report, skill, emit)
+      publish({ ...eventBase, type: 'skillPhase', phase: 'summarizing' })
+      await this.persistSkillReply(generation, skillExecution, report, skill, publish)
     } catch (error) {
       reportConversationFailure(this.diagnostics, 'retry-skill-reply', requestId, error)
-      emit({
+      publish({
         ...eventBase,
         type: 'failed',
         messageId: assistantMessageId,
         error: toConversationEventError(error)
       })
     } finally {
-      this.executions.release(requestId)
+      this.executions.release(requestId, execution)
     }
   }
 

@@ -29,6 +29,7 @@ it('creates durable channel sessions and uses explicit languages and durable mes
       { requestId: randomUUID(), sessionId, text: 'hello' },
       (event) => events.push(event),
       {
+        operation: 'chat',
         languages: { outputLanguage: 'zh-CN', targetLanguage: 'en' },
         userMessageId,
         assistantMessageId

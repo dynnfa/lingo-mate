@@ -1,5 +1,6 @@
 import {
   createTestConversationModule,
+  stubConversationRoute,
   testSystemPrompt
 } from '../../../../tests/fixtures/conversation'
 import { randomUUID } from 'node:crypto'
@@ -220,6 +221,7 @@ describe('ConversationModule', () => {
       const conversation = await repository.seedConversation()
       const inputs: unknown[] = []
       const runtime: import('../../agent/agent-runtime').AgentRuntime = {
+        routeConversation: stubConversationRoute,
         runSentence: async () => {
           throw new Error('Unused sentence runtime')
         },
@@ -263,7 +265,7 @@ describe('ConversationModule', () => {
       expect(inputs).toHaveLength(1)
       expect(inputs[0]).toMatchObject({
         sessionId: conversation.sessionId,
-        task: 'conversation',
+        task: content.startsWith('/concept ') ? 'concept' : 'conversation',
         outputLanguage: 'zh-CN',
         targetLanguage: 'en'
       })
@@ -411,6 +413,7 @@ describe('ConversationModule', () => {
       }
     )
     const runtime: import('../../agent/agent-runtime').AgentRuntime = {
+      routeConversation: stubConversationRoute,
       runSentence: async () => {
         throw new Error('Unused sentence runtime')
       },

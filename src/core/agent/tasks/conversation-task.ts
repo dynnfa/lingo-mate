@@ -13,7 +13,7 @@ import type { AgentSuccessFrame } from '../agent-task-policy'
 export class ConversationTask implements AgentTaskAdapter {
   private model?: LanguageModel
   constructor(
-    readonly task: 'conversation' | 'conversation-title',
+    readonly task: 'conversation' | 'concept' | 'conversation-title',
     private readonly snapshot: AgentSnapshot,
     private readonly resolveModel: ResolveAgentModel
   ) {}

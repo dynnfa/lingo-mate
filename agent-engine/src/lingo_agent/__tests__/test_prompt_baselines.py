@@ -1,4 +1,4 @@
-"""Compare every prompt with fixed outputs captured before workflow migration."""
+"""Compare workflow prompts with fixed reference outputs."""
 
 import json
 from pathlib import Path
@@ -47,5 +47,5 @@ BASELINES = json.loads((Path(__file__).parent / "fixtures/prompt-baselines.json"
 @pytest.mark.parametrize(
     "case", BASELINES, ids=[f"{case['factory']}:{','.join(case['args'])}" for case in BASELINES]
 )
-def test_prompt_matches_pre_migration_output(case):
+def test_prompt_matches_reference_output(case):
     assert FACTORIES[case["factory"]](*case["args"]) == case["text"]

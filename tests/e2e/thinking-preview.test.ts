@@ -1,3 +1,4 @@
+import { writeOrdinaryIntentIfRequested } from '../integration/fixtures/conversation-intent-server'
 import { createServer } from 'node:http'
 import { AddressInfo } from 'node:net'
 import {
@@ -46,7 +47,10 @@ async function startReasoningModelServer(): Promise<{
     void (async () => {
       const chunks: Buffer[] = []
       for await (const part of req) chunks.push(part as Buffer)
-      void chunks
+      const { messages } = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
+        messages: Array<{ role: string; content: string }>
+      }
+      if (writeOrdinaryIntentIfRequested(res, messages)) return
       res.writeHead(200, { 'content-type': 'text/event-stream' })
       await new Promise((resolve) => setTimeout(resolve, 500))
       for (const line of reasoningLines) {

@@ -3,7 +3,7 @@
     "name": "valid hello",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "type": "hello"
     }
@@ -12,7 +12,7 @@
     "name": "valid ready",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "type": "ready",
       "capabilities": [
@@ -26,7 +26,7 @@
     "name": "valid run",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "run",
@@ -58,7 +58,7 @@
     "name": "valid host_call",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -73,7 +73,7 @@
     "name": "valid host_result",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -87,7 +87,7 @@
     "name": "valid host_error",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -99,7 +99,7 @@
     "name": "valid host_chunk",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -115,7 +115,7 @@
     "name": "valid event",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "event",
@@ -130,7 +130,7 @@
     "name": "valid cancel",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "cancel"
@@ -140,7 +140,7 @@
     "name": "valid result",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "result",
@@ -151,7 +151,7 @@
     "name": "valid error",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "error",
@@ -162,7 +162,7 @@
     "name": "valid cancelled",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "cancelled"
@@ -172,7 +172,7 @@
     "name": "valid shutdown",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "type": "shutdown"
     }
@@ -181,7 +181,7 @@
     "name": "valid shutdown_ack",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "type": "shutdown_ack"
     }
@@ -199,7 +199,7 @@
     "name": "invalid 1",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "type": "hello",
       "apiKey": "forbidden"
@@ -209,7 +209,7 @@
     "name": "invalid 2",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "run",
@@ -241,7 +241,7 @@
     "name": "invalid 3",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -254,7 +254,7 @@
     "name": "invalid 4",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -269,7 +269,7 @@
     "name": "invalid 5",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -281,7 +281,7 @@
     "name": "invalid 6",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -297,7 +297,7 @@
     "name": "invalid 7",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "event",
@@ -312,7 +312,7 @@
     "name": "invalid 8",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "",
       "type": "cancel"
@@ -322,7 +322,7 @@
     "name": "invalid 9",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "result",
@@ -333,7 +333,7 @@
     "name": "invalid 10",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "type": "host_call"
     }
@@ -342,7 +342,7 @@
     "name": "invalid 11",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": null,
       "type": "hello"
     }
@@ -351,7 +351,7 @@
     "name": "invalid 12",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "run",
@@ -383,7 +383,7 @@
     "name": "missing prompt",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -396,7 +396,7 @@
     "name": "empty prompt",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -411,7 +411,7 @@
     "name": "oversized prompt",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -426,7 +426,7 @@
     "name": "UTF-16 oversized prompt",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -441,7 +441,7 @@
     "name": "unexpected override",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -466,7 +466,7 @@
     "name": "external word-concept task removed",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "run",
@@ -507,7 +507,7 @@
     "name": "vocabulary prepare",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -526,7 +526,7 @@
         "inputIndex": 0,
         "systemPrompt": "Explain in English."
       },
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c"
@@ -536,7 +536,7 @@
     "name": "vocabulary prepared items",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -556,7 +556,7 @@
     "name": "vocabulary safe receipt",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -571,7 +571,7 @@
     "name": "vocabulary safe failure",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -587,7 +587,7 @@
     "name": "vocabulary completion",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "type": "vocabulary_result",
@@ -608,7 +608,7 @@
         "inputIndex": 20,
         "systemPrompt": "Explain in English."
       },
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c"
@@ -625,7 +625,7 @@
         "systemPrompt": "Explain in English.",
         "term": "forged"
       },
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c"
@@ -642,7 +642,7 @@
         "systemPrompt": "Explain in English.",
         "executionId": "outer"
       },
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c"
@@ -658,7 +658,7 @@
         "inputIndex": 0,
         "systemPrompt": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
       },
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c"
@@ -668,7 +668,7 @@
     "name": "vocabulary rejects private error details",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -685,7 +685,7 @@
     "name": "phrase prepare",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -704,7 +704,7 @@
         "inputIndex": 0,
         "systemPrompt": "Explain in English."
       },
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c"
@@ -714,7 +714,7 @@
     "name": "phrase prepared items",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -734,7 +734,7 @@
     "name": "phrase safe receipt",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -749,7 +749,7 @@
     "name": "phrase safe failure",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -765,7 +765,7 @@
     "name": "phrase completion",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "type": "phrase_result",
@@ -786,7 +786,7 @@
         "inputIndex": 20,
         "systemPrompt": "Explain in English."
       },
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c"
@@ -803,7 +803,7 @@
         "systemPrompt": "Explain in English.",
         "phrase": "forged"
       },
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c"
@@ -820,7 +820,7 @@
         "systemPrompt": "Explain in English.",
         "executionId": "outer"
       },
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c"
@@ -836,7 +836,7 @@
         "inputIndex": 0,
         "systemPrompt": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
       },
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c"
@@ -846,7 +846,7 @@
     "name": "phrase rejects private error details",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -872,7 +872,7 @@
     "name": "synonym synonym.prepare",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "synonym-run",
       "callId": "synonym-run:call",
@@ -885,7 +885,7 @@
     "name": "synonym model.synonym",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "synonym-run",
       "callId": "synonym-run:call",
@@ -902,7 +902,7 @@
     "name": "synonym synonym.apply",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "synonym-run",
       "callId": "synonym-run:call",
@@ -919,7 +919,7 @@
     "name": "synonym synonym.finish",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "synonym-run",
       "callId": "synonym-run:call",
@@ -936,7 +936,7 @@
     "name": "synonym rejects round zero",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "synonym-run",
       "callId": "synonym-run:call",
@@ -953,7 +953,7 @@
     "name": "synonym rejects round overflow",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "synonym-run",
       "callId": "synonym-run:call",
@@ -970,7 +970,7 @@
     "name": "synonym rejects replacement word",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "synonym-run",
       "callId": "synonym-run:call",
@@ -988,7 +988,7 @@
     "name": "synonym rejects outer identity",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "synonym-run",
       "callId": "synonym-run:call",
@@ -1006,7 +1006,7 @@
     "name": "synonym rejects utf16 prompt overflow",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "synonym-run",
       "callId": "synonym-run:call",
@@ -1023,7 +1023,7 @@
     "name": "synonym safe model receipt",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "synonym-run",
       "callId": "synonym-run:call",
@@ -1040,7 +1040,7 @@
     "name": "synonym rejects private tool payload",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "synonym-run",
       "callId": "synonym-run:call",
@@ -1060,7 +1060,7 @@
     "name": "synonym completion",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "synonym-run",
       "type": "synonym_result",
@@ -1076,7 +1076,7 @@
     "name": "synonym independent task budget",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "run",
@@ -1111,7 +1111,7 @@
     "name": "phrase cannot use synonym budget",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "run",
@@ -1146,7 +1146,7 @@
     "name": "exploration prepare",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1159,7 +1159,7 @@
     "name": "exploration model attempt",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1175,7 +1175,7 @@
     "name": "exploration rejects attempt zero",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1191,7 +1191,7 @@
     "name": "exploration rejects attempt overflow",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1207,7 +1207,7 @@
     "name": "exploration rejects phrase override",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1224,7 +1224,7 @@
     "name": "exploration rejects outer identity",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1241,7 +1241,7 @@
     "name": "exploration rejects exclusion override",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1258,7 +1258,7 @@
     "name": "exploration rejects UTF16 prompt overflow",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1274,7 +1274,7 @@
     "name": "exploration safe preparation",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1289,7 +1289,7 @@
     "name": "exploration safe receipt",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1305,7 +1305,7 @@
     "name": "exploration rejects private result",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1326,7 +1326,7 @@
     "name": "exploration completion",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "type": "explore_phrase_result",
@@ -1340,7 +1340,7 @@
     "name": "exploration prepare",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1353,7 +1353,7 @@
     "name": "exploration model attempt",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1369,7 +1369,7 @@
     "name": "exploration rejects attempt zero",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1385,7 +1385,7 @@
     "name": "exploration rejects attempt overflow",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1401,7 +1401,7 @@
     "name": "exploration rejects phrase override",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1418,7 +1418,7 @@
     "name": "exploration rejects outer identity",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1435,7 +1435,7 @@
     "name": "exploration rejects exclusion override",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1452,7 +1452,7 @@
     "name": "exploration rejects UTF16 prompt overflow",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1468,7 +1468,7 @@
     "name": "exploration completion",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "type": "explore_vocabulary_result",
@@ -1491,7 +1491,7 @@
     "name": "title task",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "title-engine",
       "runId": "title-run",
       "type": "run",
@@ -1523,7 +1523,7 @@
     "name": "title model call",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "title-engine",
       "runId": "title-run",
       "type": "host_call",
@@ -1538,7 +1538,7 @@
     "name": "title history rejected",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "title-engine",
       "runId": "title-run",
       "type": "run",
@@ -1574,7 +1574,7 @@
     "name": "title reply permission rejected",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "title-engine",
       "runId": "title-run",
       "type": "run",
@@ -1606,7 +1606,7 @@
     "name": "title budget escalation rejected",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "title-engine",
       "runId": "title-run",
       "type": "run",
@@ -1638,7 +1638,7 @@
     "name": "title assistant input rejected",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "title-engine",
       "runId": "title-run",
       "type": "run",
@@ -1670,7 +1670,7 @@
     "name": "title missing prompt rejected",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "title-engine",
       "runId": "title-run",
       "type": "host_call",
@@ -1683,7 +1683,7 @@
     "name": "sentence-practice-hints bound model call",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1698,7 +1698,7 @@
     "name": "sentence-practice-hints rejects replacement answers",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1714,7 +1714,7 @@
     "name": "sentence-practice-hints requires prompt",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1727,7 +1727,7 @@
     "name": "sentence-practice-hints limits UTF16 prompt",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1742,7 +1742,7 @@
     "name": "sentence-practice-hints snapshot",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "type": "run",
@@ -1775,7 +1775,7 @@
     "name": "sentence-practice-review bound model call",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1790,7 +1790,7 @@
     "name": "sentence-practice-review rejects replacement answers",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1806,7 +1806,7 @@
     "name": "sentence-practice-review requires prompt",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1819,7 +1819,7 @@
     "name": "sentence-practice-review limits UTF16 prompt",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1834,7 +1834,7 @@
     "name": "sentence-practice-review snapshot",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "type": "run",
@@ -1867,7 +1867,7 @@
     "name": "sentence practice prepare",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1880,7 +1880,7 @@
     "name": "sentence practice safe input size",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1894,7 +1894,7 @@
     "name": "sentence practice safe receipt",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1908,7 +1908,7 @@
     "name": "sentence practice completion",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "type": "sentence_practice_result",
@@ -1921,7 +1921,7 @@
     "name": "sentence practice forged completion",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "type": "sentence_practice_result",
@@ -1943,7 +1943,7 @@
     "name": "vocabulary practice vocabulary-practice.prepare",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1956,7 +1956,7 @@
     "name": "vocabulary practice vocabulary-practice.prepare rejects authority",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1971,7 +1971,7 @@
     "name": "vocabulary practice model.vocabulary-practice-review",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -1987,7 +1987,7 @@
     "name": "vocabulary practice model.vocabulary-practice-review rejects authority",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -2004,7 +2004,7 @@
     "name": "vocabulary practice model.vocabulary-practice-review rejects round 9",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -2020,7 +2020,7 @@
     "name": "vocabulary practice vocabulary-practice.apply",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -2035,7 +2035,7 @@
     "name": "vocabulary practice vocabulary-practice.apply rejects authority",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -2051,7 +2051,7 @@
     "name": "vocabulary practice vocabulary-practice.apply rejects round 9",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -2066,7 +2066,7 @@
     "name": "vocabulary practice vocabulary-practice.correct",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -2082,7 +2082,7 @@
     "name": "vocabulary practice vocabulary-practice.correct rejects authority",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -2099,7 +2099,7 @@
     "name": "vocabulary practice vocabulary-practice.correct rejects round 9",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -2115,7 +2115,7 @@
     "name": "vocabulary practice vocabulary-practice.finish",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -2131,7 +2131,7 @@
     "name": "vocabulary practice vocabulary-practice.finish rejects authority",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -2148,7 +2148,7 @@
     "name": "vocabulary practice vocabulary-practice.finish rejects round 9",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -2164,7 +2164,7 @@
     "name": "vocabulary practice model.vocabulary-practice-review enforces UTF16",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -2180,7 +2180,7 @@
     "name": "vocabulary practice vocabulary-practice.correct enforces UTF16",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -2196,7 +2196,7 @@
     "name": "vocabulary practice completion",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "type": "vocabulary_practice_result",
@@ -2210,7 +2210,7 @@
     "name": "vocabulary practice safe receipt {'round': 1, 'kind': 'tools', 'inputChars': 3000}",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -2226,7 +2226,7 @@
     "name": "vocabulary practice safe receipt {'round': 2, 'applied': True}",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -2241,7 +2241,7 @@
     "name": "vocabulary practice safe receipt {'completed': True, 'rounds': 2}",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "callId": "r:c",
@@ -2256,7 +2256,7 @@
     "name": "vocabulary practice snapshot",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "p",
       "runId": "r",
       "type": "run",
@@ -2301,7 +2301,7 @@
     "name": "valid model-free speech task",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "type": "run",
       "runId": "run-1",
@@ -2333,7 +2333,7 @@
     "name": "speech forbids model budget",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "type": "run",
       "runId": "run-1",
@@ -2365,7 +2365,7 @@
     "name": "speech limits calls",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "type": "run",
       "runId": "run-1",
@@ -2397,7 +2397,7 @@
     "name": "speech limits steps",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "type": "run",
       "runId": "run-1",
@@ -2429,7 +2429,7 @@
     "name": "speech forbids model capability",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "type": "run",
       "runId": "run-1",
@@ -2461,7 +2461,7 @@
     "name": "valid speech host call",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "type": "host_call",
       "runId": "run-1",
@@ -2474,7 +2474,7 @@
     "name": "speech cannot replace bound text",
     "valid": false,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "type": "host_call",
       "runId": "run-1",
@@ -2489,7 +2489,7 @@
     "name": "valid speech completion",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "type": "tts_result",
       "runId": "run-1",
@@ -2502,7 +2502,7 @@
     "name": "sentence sentence.prepare",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -2515,7 +2515,7 @@
     "name": "sentence preparation False",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -2530,7 +2530,7 @@
     "name": "sentence preparation True",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "callId": "run-1:call-1",
@@ -2545,7 +2545,7 @@
     "name": "sentence completion",
     "valid": true,
     "frame": {
-      "v": 12,
+      "v": 13,
       "instanceId": "process-1",
       "runId": "run-1",
       "type": "sentence_result",
@@ -2561,6 +2561,195 @@
       "v": 11,
       "instanceId": "process-1",
       "type": "hello"
+    }
+  },
+  {
+    "name": "valid conversation route snapshot",
+    "valid": true,
+    "frame": {
+      "v": 13,
+      "instanceId": "route-instance",
+      "runId": "route-run",
+      "type": "run",
+      "snapshot": {
+        "task": "conversation-route",
+        "route": {
+          "mode": "desktop",
+          "command": "tts",
+          "hasArguments": true
+        },
+        "messages": [],
+        "inputChars": 18,
+        "outputLanguage": "zh-CN",
+        "targetLanguage": "en",
+        "allowedOperations": [
+          "model.classify-conversation"
+        ],
+        "budget": {
+          "timeoutMs": 15000,
+          "maxModelCalls": 1,
+          "maxToolCalls": 0,
+          "maxSteps": 1,
+          "maxInputChars": 8096,
+          "maxOutputChars": 256
+        }
+      }
+    }
+  },
+  {
+    "name": "conversation route rejects message bodies",
+    "valid": false,
+    "frame": {
+      "v": 13,
+      "instanceId": "route-instance",
+      "runId": "route-run",
+      "type": "run",
+      "snapshot": {
+        "task": "conversation-route",
+        "route": {
+          "mode": "desktop",
+          "command": "tts",
+          "hasArguments": true
+        },
+        "messages": [
+          {
+            "role": "user",
+            "content": "bound argument"
+          }
+        ],
+        "inputChars": 18,
+        "outputLanguage": "zh-CN",
+        "targetLanguage": "en",
+        "allowedOperations": [
+          "model.classify-conversation"
+        ],
+        "budget": {
+          "timeoutMs": 15000,
+          "maxModelCalls": 1,
+          "maxToolCalls": 0,
+          "maxSteps": 1,
+          "maxInputChars": 8096,
+          "maxOutputChars": 256
+        }
+      }
+    }
+  },
+  {
+    "name": "conversation route rejects extra operations",
+    "valid": false,
+    "frame": {
+      "v": 13,
+      "instanceId": "route-instance",
+      "runId": "route-run",
+      "type": "run",
+      "snapshot": {
+        "task": "conversation-route",
+        "route": {
+          "mode": "desktop",
+          "command": "tts",
+          "hasArguments": true
+        },
+        "messages": [],
+        "inputChars": 18,
+        "outputLanguage": "zh-CN",
+        "targetLanguage": "en",
+        "allowedOperations": [
+          "model.reply"
+        ],
+        "budget": {
+          "timeoutMs": 15000,
+          "maxModelCalls": 1,
+          "maxToolCalls": 0,
+          "maxSteps": 1,
+          "maxInputChars": 8096,
+          "maxOutputChars": 256
+        }
+      }
+    }
+  },
+  {
+    "name": "valid conversation route terminal",
+    "valid": true,
+    "frame": {
+      "v": 13,
+      "instanceId": "route-instance",
+      "runId": "route-run",
+      "type": "conversation_route_result",
+      "result": {
+        "kind": "workflow",
+        "workflow": "tts"
+      }
+    }
+  },
+  {
+    "name": "valid conversation route input error",
+    "valid": true,
+    "frame": {
+      "v": 13,
+      "instanceId": "route-instance",
+      "runId": "route-run",
+      "type": "conversation_route_result",
+      "result": {
+        "kind": "invalid",
+        "workflow": "sentence"
+      }
+    }
+  },
+  {
+    "name": "conversation route cannot select an auxiliary task",
+    "valid": false,
+    "frame": {
+      "v": 13,
+      "instanceId": "route-instance",
+      "runId": "route-run",
+      "type": "conversation_route_result",
+      "result": {
+        "kind": "workflow",
+        "workflow": "conversation-title"
+      }
+    }
+  },
+  {
+    "name": "valid classification operation",
+    "valid": true,
+    "frame": {
+      "v": 13,
+      "instanceId": "route-instance",
+      "runId": "route-run",
+      "type": "host_call",
+      "callId": "route-run:c",
+      "operation": "model.classify-conversation",
+      "args": {
+        "systemPrompt": "Return one label in English."
+      }
+    }
+  },
+  {
+    "name": "valid classification receipt",
+    "valid": true,
+    "frame": {
+      "v": 13,
+      "instanceId": "route-instance",
+      "runId": "route-run",
+      "type": "host_result",
+      "callId": "route-run:c",
+      "result": {
+        "intent": "concept"
+      }
+    }
+  },
+  {
+    "name": "classification receipt excludes writing workflows",
+    "valid": false,
+    "frame": {
+      "v": 13,
+      "instanceId": "route-instance",
+      "runId": "route-run",
+      "type": "host_result",
+      "callId": "route-run:c",
+      "result": {
+        "intent": "tts"
+      }
     }
   }
 ]

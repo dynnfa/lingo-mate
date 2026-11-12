@@ -1,3 +1,7 @@
+import {
+  CONVERSATION_TEXT_MAX_CHARS,
+  splitConversationCommand
+} from '../../../shared/conversation-command'
 import { useEffect, useRef, useState, type KeyboardEvent, type SyntheticEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { translateConversationStatus } from './status-messages'
@@ -7,10 +11,7 @@ import { ThinkingPreview } from './ThinkingPreview'
 import { ACTION_PICKER_ID, ConversationActionPicker } from './ConversationActionPicker'
 import {
   CONVERSATION_ACTIONS,
-  extractSkillDraft,
   filterConversationActions,
-  isExplorePhraseCommand,
-  isExploreVocabularyCommand,
   isSelectedSkillDraft,
   parseSlashTrigger,
   resolveSkillSubmission,
@@ -27,10 +28,6 @@ interface ConversationPanelProps {
   composerLocked: boolean
   composerFocusRequest: number
   onSend: (text: string) => boolean | void | Promise<boolean | void>
-  onRunSkill?: (input: {
-    skillId: SelectedConversationSkillId
-    text: string
-  }) => boolean | void | Promise<boolean | void>
   onCancel: () => void
   onRetry: (messageId: string) => void
 }
@@ -49,7 +46,6 @@ export function ConversationPanel({
   composerLocked,
   composerFocusRequest,
   onSend,
-  onRunSkill,
   onCancel,
   onRetry
 }: ConversationPanelProps): React.JSX.Element {
@@ -75,17 +71,17 @@ export function ConversationPanel({
   const triggerQuery = parseSlashTrigger(draft)
   const filterQuery = composing ? compositionQuery : triggerQuery
 
-  const pickerOpen =
-    triggerQuery !== undefined && inputFocused && !composerLocked && dismissal === 'none'
-
-  // 技能命令（选择器选择或完整输入 /phrase）激活时显示对应提示；
-  // 短语提示说明多行输入规则。
-  const activeSkillId = resolveSkillSubmission(draft, selectedSkillId)
-
   const filteredActions =
-    pickerOpen && filterQuery !== undefined
+    filterQuery !== undefined
       ? filterConversationActions(CONVERSATION_ACTIONS, filterQuery, (action) => t(action.nameKey))
       : []
+  const pickerOpen =
+    triggerQuery !== undefined &&
+    filteredActions.length > 0 &&
+    inputFocused &&
+    !composerLocked &&
+    dismissal === 'none'
+  const activeSkillId = resolveSkillSubmission(draft)
 
   // 高亮身份存用户操作结果；派生时对当前候选兜底到第一项，避免过滤后越界。
   const highlightedId =
@@ -101,22 +97,9 @@ export function ConversationPanel({
   // 首版行动契约：选择仅填入命令模板进入待输入状态，不发送；
   // 替换后的草稿仍以 `/` 开头，用锁定抑制避免完成后立即弹回。
   const selectAction = (action: ConversationActionMeta): void => {
-    if (
-      action.id === 'sentence' ||
-      action.id === 'vocabulary' ||
-      action.id === 'phrase' ||
-      action.id === 'synonym' ||
-      action.id === 'explore-phrase' ||
-      action.id === 'explore-vocabulary'
-    ) {
-      setSelectedSkillId(action.id)
-      setDraft(`/${action.command} `)
-      setComposerError(null)
-      closePicker('latched')
-      inputRef.current?.focus()
-      return
-    }
+    setSelectedSkillId(action.id === 'concept' ? null : action.id)
     setDraft(`/${action.command} `)
+    setComposerError(null)
     closePicker('latched')
     inputRef.current?.focus()
   }
@@ -203,17 +186,10 @@ export function ConversationPanel({
     if (pickerOpen || composing) return
     if (composerLocked || !draft.trim()) return
 
-    // 技能命令（选择器选择或直接输入 /phrase）：转换为类型化技能请求，
-    // 不作为普通聊天发送。
     if (activeSkillId) {
-      // 探索命令是无参数命令：命令本身（含末尾空白）即可发送，带额外参数
-      // 时提示输入无效。
+      const hasArguments = Boolean(splitConversationCommand(draft)?.body.trim())
       if (activeSkillId === 'explore-phrase' || activeSkillId === 'explore-vocabulary') {
-        const isBareCommand =
-          activeSkillId === 'explore-phrase'
-            ? isExplorePhraseCommand(draft)
-            : isExploreVocabularyCommand(draft)
-        if (!isBareCommand) {
+        if (hasArguments) {
           setComposerError(
             t(
               activeSkillId === 'explore-phrase'
@@ -223,51 +199,26 @@ export function ConversationPanel({
           )
           return
         }
-        const exploreSubmission = onRunSkill?.({ skillId: activeSkillId, text: '' })
-        const clearAcceptedExplore = (accepted: boolean | void): void => {
-          if (accepted === false) return
-          setSelectedSkillId(null)
-          updateDraft('')
-        }
-        if (exploreSubmission instanceof Promise) void exploreSubmission.then(clearAcceptedExplore)
-        else clearAcceptedExplore(exploreSubmission)
+      } else if (!hasArguments) {
+        const requiredMessage = {
+          sentence: 'conversation:composer.sentenceRequired',
+          tts: 'conversation:composer.ttsRequired',
+          synonym: 'conversation:composer.synonymRequired',
+          phrase: 'conversation:composer.phraseRequired',
+          vocabulary: 'conversation:composer.vocabularyRequired'
+        } as const
+        setComposerError(t(requiredMessage[activeSkillId]))
         return
       }
-      const parsed = extractSkillDraft(draft, activeSkillId)
-      if (parsed.status !== 'ok') {
-        setComposerError(
-          t(
-            activeSkillId === 'sentence'
-              ? 'conversation:composer.sentenceRequired'
-              : activeSkillId === 'tts'
-                ? 'conversation:composer.ttsRequired'
-                : activeSkillId === 'synonym'
-                  ? 'conversation:composer.synonymRequired'
-                  : activeSkillId === 'phrase'
-                    ? 'conversation:composer.phraseRequired'
-                    : 'conversation:composer.vocabularyRequired'
-          )
-        )
-        return
-      }
-      const submission = onRunSkill?.({ skillId: activeSkillId, text: parsed.text })
-      const clearAcceptedSkill = (accepted: boolean | void): void => {
-        if (accepted === false) return
-        setSelectedSkillId(null)
-        updateDraft('')
-      }
-      if (submission instanceof Promise) void submission.then(clearAcceptedSkill)
-      else clearAcceptedSkill(submission)
-      return
     }
 
     // 请求被 Main 接受后才清空草稿；IPC/校验失败时保留用户输入。
     const submission = onSend(draft)
-    if (submission instanceof Promise) {
-      void submission.then((accepted) => {
-        if (accepted !== false) updateDraft('')
-      })
-    } else if (submission !== false) updateDraft('')
+    const clearAcceptedDraft = (accepted: boolean | void): void => {
+      if (accepted !== false) updateDraft('')
+    }
+    if (submission instanceof Promise) void submission.then(clearAcceptedDraft)
+    else clearAcceptedDraft(submission)
   }
 
   const sendMessage = (formEvent: SyntheticEvent): void => {
@@ -364,7 +315,7 @@ export function ConversationPanel({
             aria-label={t('common:composer.label')}
             disabled={composerLocked}
             id="message"
-            maxLength={4012}
+            maxLength={CONVERSATION_TEXT_MAX_CHARS + 20}
             onBlur={() => setInputFocused(false)}
             onChange={(event) => updateDraft(event.target.value)}
             onCompositionEnd={() => setComposing(false)}

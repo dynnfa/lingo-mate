@@ -10,6 +10,8 @@ import threading
 import time
 from pathlib import Path
 
+from lingo_agent.protocol import PROTOCOL_VERSION
+
 ROOT = Path(__file__).resolve().parents[1]
 ARCH = {"aarch64": "arm64", "arm64": "arm64", "x86_64": "x64", "amd64": "x64"}[
     platform.machine().lower()
@@ -17,6 +19,7 @@ ARCH = {"aarch64": "arm64", "arm64": "arm64", "x86_64": "x64", "amd64": "x64"}[
 PLATFORM = {"Darwin": "darwin", "Windows": "win32", "Linux": "linux"}[platform.system()]
 DIRECTORY = ROOT / "dist" / f"{PLATFORM}-{ARCH}" / "lingo-agent"
 EXECUTABLE = DIRECTORY / ("lingo-agent.exe" if PLATFORM == "win32" else "lingo-agent")
+assert json.loads((DIRECTORY / "runtime.json").read_text())["protocolVersion"] == PROTOCOL_VERSION
 
 
 class Client:
@@ -44,7 +47,7 @@ class Client:
         threading.Thread(target=read, daemon=True).start()
 
     def send(self, kind, **payload):
-        data = {"v": 12, "instanceId": self.instance, "type": kind, **payload}
+        data = {"v": PROTOCOL_VERSION, "instanceId": self.instance, "type": kind, **payload}
         self.process.stdin.write((json.dumps(data) + "\n").encode())
         self.process.stdin.flush()
 
@@ -58,8 +61,39 @@ class Client:
     def start(self):
         started = time.monotonic()
         self.send("hello")
-        self.receive("ready")
+        ready = self.receive("ready")
+        assert {"conversation-route", "concept"} <= set(ready["capabilities"])
         return (time.monotonic() - started) * 1000
+
+    def route(self, run_id, command, has_arguments, intent=None):
+        self.send(
+            "run",
+            runId=run_id,
+            snapshot={
+                "task": "conversation-route",
+                "route": {"mode": "desktop", "command": command, "hasArguments": has_arguments},
+                "messages": [],
+                "inputChars": 20,
+                "outputLanguage": "zh-CN",
+                "targetLanguage": "en",
+                "allowedOperations": ["model.classify-conversation"],
+                "budget": {
+                    "timeoutMs": 15000,
+                    "maxModelCalls": 1,
+                    "maxToolCalls": 0,
+                    "maxSteps": 1,
+                    "maxInputChars": 8096,
+                    "maxOutputChars": 256,
+                },
+            },
+        )
+        if intent is not None:
+            call = self.receive("host_call")
+            assert call["operation"] == "model.classify-conversation"
+            assert "Simplified Chinese (zh-CN)" in call["args"]["systemPrompt"]
+            assert "English (en)" in call["args"]["systemPrompt"]
+            self.send("host_result", runId=run_id, callId=call["callId"], result={"intent": intent})
+        return self.receive("conversation_route_result")["result"]
 
     def run(self, run_id, task="conversation", content="Hi", output_language="zh-CN"):
         if task == "sentence":
@@ -220,6 +254,33 @@ with tempfile.TemporaryDirectory(prefix="lingo-bundle-") as cwd:
     client = Client(cwd)
     try:
         cold_ms = client.start()
+
+        for command in (
+            "concept",
+            "vocabulary",
+            "phrase",
+            "synonym",
+            "sentence",
+            "tts",
+            "explore-phrase",
+            "explore-vocabulary",
+        ):
+            assert client.route(
+                f"route-{command}", command, not command.startswith("explore-")
+            ) == {
+                "kind": "workflow",
+                "workflow": command,
+            }
+        assert client.route("route-missing", "sentence", False) == {
+            "kind": "invalid",
+            "workflow": "sentence",
+        }
+        assert client.route("route-unknown", "sentence-extra", True) == {"kind": "reply"}
+        assert client.route("route-natural-reply", None, False, "reply") == {"kind": "reply"}
+        assert client.route("route-natural-concept", None, False, "concept") == {
+            "kind": "workflow",
+            "workflow": "concept",
+        }
 
         for existing in (False, True):
             run_id = f"sentence-{existing}"
@@ -537,7 +598,9 @@ with tempfile.TemporaryDirectory(prefix="lingo-bundle-") as cwd:
         assert client.receive("result")["text"] == "你好"
         for language, name in [("zh-CN", "Simplified Chinese (zh-CN)"), ("en", "English (en)")]:
             run_id = f"concept-{language}"
-            call = client.run(run_id, content="/concept carry", output_language=language)
+            call = client.run(
+                run_id, task="concept", content="/concept carry", output_language=language
+            )
             assert call["operation"] == "model.reply"
             prompt = call["args"]["systemPrompt"]
             assert f"commentary on examples in {name}" in prompt
@@ -549,7 +612,7 @@ with tempfile.TemporaryDirectory(prefix="lingo-bundle-") as cwd:
                 "host_result", runId=run_id, callId=call["callId"], result={"text": "concept"}
             )
             assert client.receive("result")["text"] == "concept"
-        call = client.run("concept-failure", content="/concept carry")
+        call = client.run("concept-failure", task="concept", content="/concept carry")
         client.send(
             "host_error", runId="concept-failure", callId=call["callId"], code="AGENT_LIMIT"
         )
@@ -617,11 +680,11 @@ with tempfile.TemporaryDirectory(prefix="lingo-bundle-") as cwd:
                 pending.append(client.receive("host_call"))
         assert sorted(indices) == list(range(20))
         assert client.receive("phrase_result")["result"] == {"completedIndices": list(range(20))}
-        call = client.run("cancel", content="/concept carry")
+        call = client.run("cancel", task="concept", content="/concept carry")
         client.send("cancel", runId="cancel")
         client.receive("cancelled")
         client.send("host_result", runId="cancel", callId=call["callId"], result={"text": "late"})
-        client.run("crash", content="/concept carry")
+        client.run("crash", task="concept", content="/concept carry")
         client.process.kill()
         client.process.wait(timeout=5)
     finally:
@@ -631,7 +694,7 @@ with tempfile.TemporaryDirectory(prefix="lingo-bundle-") as cwd:
     client = Client(cwd)
     try:
         restart_ms = client.start()
-        call = client.run("concept-retry", content="/concept carry")
+        call = client.run("concept-retry", task="concept", content="/concept carry")
         client.send(
             "host_result", runId="concept-retry", callId=call["callId"], result={"text": "retried"}
         )
@@ -660,6 +723,7 @@ print(
             "checks": [
                 "empty-PATH",
                 "handshake",
+                "conversation-entry-eight-commands-and-classification",
                 "tool-loop-operations-event-result",
                 "sentence-translation-and-existing",
                 "tts-no-model",

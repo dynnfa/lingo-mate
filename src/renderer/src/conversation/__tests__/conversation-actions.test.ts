@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   CONVERSATION_ACTIONS,
-  extractSkillDraft,
   filterConversationActions,
-  isExplorePhraseCommand,
-  isExploreVocabularyCommand,
-  isSelectedSkillDraft,
   parseSlashTrigger,
   resolveSkillSubmission,
   type ConversationActionMeta
@@ -25,7 +21,7 @@ const resolveZhName = (action: ConversationActionMeta): string => zhNames[action
 
 describe('parseSlashTrigger', () => {
   it('stops querying when concept has a command separator', () => {
-    expect(parseSlashTrigger('/concept')).toBe('concept')
+    expect(parseSlashTrigger('/concept')).toBeUndefined()
     expect(parseSlashTrigger('/concept ')).toBeUndefined()
     expect(parseSlashTrigger('/concept pursue')).toBeUndefined()
     expect(parseSlashTrigger('/concept\tbank')).toBeUndefined()
@@ -33,7 +29,7 @@ describe('parseSlashTrigger', () => {
   })
 
   it('stops querying when phrase has a command separator', () => {
-    expect(parseSlashTrigger('/phrase')).toBe('phrase')
+    expect(parseSlashTrigger('/phrase')).toBeUndefined()
     expect(parseSlashTrigger('/phrase ')).toBeUndefined()
     expect(parseSlashTrigger('/phrase look forward to')).toBeUndefined()
     expect(parseSlashTrigger('/phrases book')).toBe('phrases book')
@@ -55,73 +51,20 @@ describe('parseSlashTrigger', () => {
   })
 })
 
-describe('skill command boundary', () => {
-  it('submits tts directly and preserves multiline text without treating longer prefixes as commands', () => {
-    expect(resolveSkillSubmission('/tts Hello,\nhello!', null)).toBe('tts')
-    expect(resolveSkillSubmission('/tts', null)).toBe('tts')
-    expect(extractSkillDraft('/tts Hello,\nhello!', 'tts')).toEqual({
-      status: 'ok',
-      text: 'Hello,\nhello!'
-    })
-    expect(extractSkillDraft('/tts ', 'tts')).toEqual({ status: 'empty' })
-    expect(resolveSkillSubmission('/ttstuff Hello', null)).toBeNull()
-    expect(parseSlashTrigger('/tts Hello')).toBeUndefined()
-  })
-  it('preserves whitespace belonging to the speech text after the command separator', () => {
-    expect(extractSkillDraft('/tts  Hello,\nworld!  ', 'tts')).toEqual({
-      status: 'ok',
-      text: ' Hello,\nworld!  '
-    })
-    expect(extractSkillDraft('/tts \n  ', 'tts')).toEqual({ status: 'empty' })
-  })
-  it('extracts only text after the selected complete command prefix', () => {
-    expect(extractSkillDraft('/vocabulary apple, banana', 'vocabulary')).toEqual({
-      status: 'ok',
-      text: 'apple, banana'
-    })
-    expect(extractSkillDraft('/vocabulary   ', 'vocabulary')).toEqual({ status: 'empty' })
-    expect(extractSkillDraft('/vocabulary\tapple', 'vocabulary')).toEqual({
-      status: 'ok',
-      text: 'apple'
-    })
-  })
-
-  it('keeps multiline phrase arguments intact without splitting inner spaces or commas', () => {
-    expect(extractSkillDraft('/phrase look forward to\nif anything, at all\n', 'phrase')).toEqual({
-      status: 'ok',
-      text: 'look forward to\nif anything, at all'
-    })
-    expect(extractSkillDraft('/phrase   ', 'phrase')).toEqual({ status: 'empty' })
-    expect(extractSkillDraft('/phrase\tlook', 'phrase')).toEqual({ status: 'ok', text: 'look' })
-  })
-
-  it('does not activate pasted, embedded, or modified commands', () => {
-    expect(extractSkillDraft('/vocabulary apple', null)).toEqual({
-      status: 'invalid-prefix'
-    })
-    expect(extractSkillDraft('note /vocabulary apple', 'vocabulary')).toEqual({
-      status: 'invalid-prefix'
-    })
-    expect(extractSkillDraft('note /phrase apple', 'phrase')).toEqual({
-      status: 'invalid-prefix'
-    })
-    expect(isSelectedSkillDraft('/vocab apple', 'vocabulary')).toBe(false)
-    expect(isSelectedSkillDraft('/vocabulary apple', 'vocabulary')).toBe(true)
-    expect(isSelectedSkillDraft('/phrase apple', 'phrase')).toBe(true)
-    expect(isSelectedSkillDraft('/vocabulary apple', 'phrase')).toBe(false)
-    expect(isSelectedSkillDraft('plain text', null)).toBe(true)
-  })
-
-  it('resolves directly typed phrase commands without picker selection', () => {
-    expect(resolveSkillSubmission('/phrase look forward to', null)).toBe('phrase')
-    expect(resolveSkillSubmission('/phrase ', null)).toBe('phrase')
-    expect(resolveSkillSubmission('/phrase', null)).toBe('phrase')
-    // vocabulary 未选择时不因直接输入而激活：沿用既有选择器路径。
-    expect(resolveSkillSubmission('/vocabulary apple', null)).toBeNull()
-    expect(resolveSkillSubmission('/vocabulary apple', 'vocabulary')).toBe('vocabulary')
-    expect(resolveSkillSubmission('/phrase anything', 'vocabulary')).toBe('phrase')
-    expect(resolveSkillSubmission('hello', null)).toBeNull()
-  })
+it.each([
+  'tts',
+  'vocabulary',
+  'phrase',
+  'sentence',
+  'synonym',
+  'explore-phrase',
+  'explore-vocabulary'
+])('shows parameter hints for exact /%s commands', (command) => {
+  expect(resolveSkillSubmission(`/${command}`)).toBe(command)
+  expect(resolveSkillSubmission(`\t/${command}\u3000body`)).toBe(command)
+  expect(resolveSkillSubmission(`/${command}-extra body`)).toBeNull()
+  expect(resolveSkillSubmission(`note /${command} body`)).toBeNull()
+  expect(parseSlashTrigger(`/${command} body`)).toBeUndefined()
 })
 
 describe('CONVERSATION_ACTIONS catalog', () => {
@@ -139,85 +82,6 @@ describe('CONVERSATION_ACTIONS catalog', () => {
   })
 })
 
-describe('explore-phrase command boundary', () => {
-  it('recognizes the exact command and trailing whitespace only', () => {
-    expect(isExplorePhraseCommand('/explore-phrase')).toBe(true)
-    expect(isExplorePhraseCommand('/explore-phrase ')).toBe(true)
-    expect(isExplorePhraseCommand('/explore-phrase  \t ')).toBe(true)
-  })
-
-  it('rejects extra arguments, prefixes of other commands and plain text', () => {
-    expect(isExplorePhraseCommand('/explore-phrase foo')).toBe(false)
-    expect(isExplorePhraseCommand('/explore-phrasefoo')).toBe(false)
-    expect(isExplorePhraseCommand('/explore-phras')).toBe(false)
-    expect(isExplorePhraseCommand('/phrase')).toBe(false)
-    expect(isExplorePhraseCommand('explore-phrase')).toBe(false)
-    expect(isExplorePhraseCommand('')).toBe(false)
-  })
-
-  it('resolves the typed command with and without a trailing separator', () => {
-    expect(resolveSkillSubmission('/explore-phrase', null)).toBe('explore-phrase')
-    expect(resolveSkillSubmission('/explore-phrase ', null)).toBe('explore-phrase')
-    expect(resolveSkillSubmission('/explore-phrase foo', null)).toBe('explore-phrase')
-    expect(resolveSkillSubmission('/explore-phras', null)).toBeNull()
-  })
-
-  it('keeps the picker closed once the command is complete or has arguments', () => {
-    expect(parseSlashTrigger('/explore-phrase')).toBeUndefined()
-    expect(parseSlashTrigger('/explore-phrase ')).toBeUndefined()
-    expect(parseSlashTrigger('/explore-phrase foo')).toBeUndefined()
-    // 未输完的命令仍作为查询过滤候选
-    expect(parseSlashTrigger('/explore-ph')).toBe('explore-ph')
-  })
-
-  it('keeps the picker selection while the draft stays the bare command', () => {
-    expect(isSelectedSkillDraft('/explore-phrase', 'explore-phrase')).toBe(true)
-    expect(isSelectedSkillDraft('/explore-phrase ', 'explore-phrase')).toBe(true)
-    expect(isSelectedSkillDraft('/explore-phrase foo', 'explore-phrase')).toBe(true)
-    expect(isSelectedSkillDraft('/phrase x', 'explore-phrase')).toBe(false)
-  })
-})
-
-describe('explore-vocabulary command boundary', () => {
-  it('recognizes the exact command and trailing whitespace only', () => {
-    expect(isExploreVocabularyCommand('/explore-vocabulary')).toBe(true)
-    expect(isExploreVocabularyCommand('/explore-vocabulary ')).toBe(true)
-    expect(isExploreVocabularyCommand('/explore-vocabulary  \t ')).toBe(true)
-  })
-
-  it('rejects extra arguments, similar prefixes and other commands', () => {
-    expect(isExploreVocabularyCommand('/explore-vocabulary foo')).toBe(false)
-    expect(isExploreVocabularyCommand('/explore-vocabularyfoo')).toBe(false)
-    expect(isExploreVocabularyCommand('/explore-vocabular')).toBe(false)
-    expect(isExploreVocabularyCommand('/explore-phrase')).toBe(false)
-    expect(isExploreVocabularyCommand('/vocabulary')).toBe(false)
-    expect(isExploreVocabularyCommand('explore-vocabulary')).toBe(false)
-    expect(isExploreVocabularyCommand('')).toBe(false)
-  })
-
-  it('resolves the typed command with and without a trailing separator', () => {
-    expect(resolveSkillSubmission('/explore-vocabulary', null)).toBe('explore-vocabulary')
-    expect(resolveSkillSubmission('/explore-vocabulary ', null)).toBe('explore-vocabulary')
-    expect(resolveSkillSubmission('/explore-vocabulary foo', null)).toBe('explore-vocabulary')
-    expect(resolveSkillSubmission('/explore-vocabular', null)).toBeNull()
-  })
-
-  it('keeps the picker closed once the command is complete or has arguments', () => {
-    expect(parseSlashTrigger('/explore-vocabulary')).toBeUndefined()
-    expect(parseSlashTrigger('/explore-vocabulary ')).toBeUndefined()
-    expect(parseSlashTrigger('/explore-vocabulary foo')).toBeUndefined()
-    // 未输完的命令仍作为查询过滤候选
-    expect(parseSlashTrigger('/explore-vocab')).toBe('explore-vocab')
-  })
-
-  it('keeps the picker selection while the draft stays the bare command', () => {
-    expect(isSelectedSkillDraft('/explore-vocabulary', 'explore-vocabulary')).toBe(true)
-    expect(isSelectedSkillDraft('/explore-vocabulary ', 'explore-vocabulary')).toBe(true)
-    expect(isSelectedSkillDraft('/explore-vocabulary foo', 'explore-vocabulary')).toBe(true)
-    expect(isSelectedSkillDraft('/explore-phrase', 'explore-vocabulary')).toBe(false)
-  })
-})
-
 describe('filterConversationActions', () => {
   it('returns the whole catalog in order for an empty query', () => {
     expect(filterConversationActions(CONVERSATION_ACTIONS, '', resolveZhName)).toEqual([
@@ -230,15 +94,4 @@ describe('filterConversationActions', () => {
     filterConversationActions(CONVERSATION_ACTIONS, 'phrase', resolveZhName)
     expect([...CONVERSATION_ACTIONS]).toEqual(before)
   })
-})
-
-it('submits sentence paragraphs as one skill and rejects longer command names', () => {
-  expect(resolveSkillSubmission('/sentence 今天先这样。\n明天继续。', null)).toBe('sentence')
-  expect(extractSkillDraft('/sentence  今天先这样。\n明天继续。  ', 'sentence')).toEqual({
-    status: 'ok',
-    text: '今天先这样。\n明天继续。'
-  })
-  expect(resolveSkillSubmission('/sentences test', null)).toBeNull()
-  expect(extractSkillDraft('/sentence', 'sentence')).toEqual({ status: 'empty' })
-  expect(parseSlashTrigger('/sentence hello')).toBeUndefined()
 })

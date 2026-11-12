@@ -153,6 +153,15 @@ it.each([false, true, 'telegram', 'qq'] as const)(
       expect((await receive('/vocabulary denied')).code).toBe('CAPABILITY_DENIED')
       await service.flush()
       expect(execute).toHaveBeenCalledTimes(2)
+      const tasks = wire.mock.calls.flatMap(([frame]) =>
+        frame.type === 'run' ? [frame.snapshot.task] : []
+      )
+      expect(tasks).toEqual([
+        'conversation-route',
+        'conversation',
+        'conversation-route',
+        'sentence'
+      ])
       expect(model.streamReply).toHaveBeenCalledTimes(1)
       expect(translate).toHaveBeenCalledTimes(1)
       expect(

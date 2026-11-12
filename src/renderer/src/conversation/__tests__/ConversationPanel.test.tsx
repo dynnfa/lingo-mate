@@ -7,7 +7,6 @@ import type { ReactElement } from 'react'
 import { createI18n } from '../../i18n'
 import { ConversationPanel } from '../ConversationPanel'
 import type { ConversationStatus, DisplayMessage } from '../conversation-state'
-import type { SelectedConversationSkillId } from '../conversation-actions'
 
 // 测试语言显式固定为 zh-CN，断言使用真实资源渲染的文本与可访问名称。
 const i18n = createI18n('zh-CN')
@@ -33,7 +32,6 @@ function panelElement(props: Partial<Parameters<typeof ConversationPanel>[0]>): 
         composerLocked={props.composerLocked ?? false}
         composerFocusRequest={props.composerFocusRequest ?? 0}
         onSend={props.onSend ?? (() => {})}
-        onRunSkill={props.onRunSkill ?? (() => {})}
         onCancel={props.onCancel ?? (() => {})}
         onRetry={props.onRetry ?? (() => {})}
       />
@@ -43,7 +41,6 @@ function panelElement(props: Partial<Parameters<typeof ConversationPanel>[0]>): 
 
 interface PanelCallbacks {
   onSend: Mock<(text: string) => void>
-  onRunSkill: Mock<(input: { skillId: SelectedConversationSkillId; text: string }) => void>
   onCancel: Mock<() => void>
   onRetry: Mock<(messageId: string) => void>
 }
@@ -54,7 +51,6 @@ function renderPanel(props: Partial<Parameters<typeof ConversationPanel>[0]> = {
 } {
   const callbacks: PanelCallbacks = {
     onSend: vi.fn<(text: string) => void>(),
-    onRunSkill: vi.fn<(input: { skillId: SelectedConversationSkillId; text: string }) => void>(),
     onCancel: vi.fn<() => void>(),
     onRetry: vi.fn<(messageId: string) => void>()
   }
@@ -340,11 +336,9 @@ describe('ConversationPanel slash trigger and filtering', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(screen.getByRole('alert')).toHaveTextContent('请在 /tts 后输入英语纯文本。')
     expect(callbacks.onSend).not.toHaveBeenCalled()
-    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
     fireEvent.change(input, { target: { value: '/tts Hello,\nworld!' } })
     fireEvent.keyDown(input, { key: 'Enter' })
-    expect(callbacks.onRunSkill).toHaveBeenCalledWith({ skillId: 'tts', text: 'Hello,\nworld!' })
-    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(callbacks.onSend).toHaveBeenCalledWith('/tts Hello,\nworld!')
   })
   it('opens the picker above the composer when the draft starts with a half-width slash', () => {
     renderPanel()
@@ -391,13 +385,12 @@ describe('ConversationPanel slash trigger and filtering', () => {
     )
   })
 
-  it('keeps the picker open with an empty state when nothing matches', () => {
+  it('leaves the picker closed when nothing matches', () => {
     renderPanel()
     const input = typeDraft('/zzz')
 
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
-    expect(screen.getByText('没有匹配的行动')).toBeInTheDocument()
-    expect(input).toHaveAttribute('aria-expanded', 'true')
+    expect(input).toHaveAttribute('aria-expanded', 'false')
     expect(input).not.toHaveAttribute('aria-activedescendant')
   })
 
@@ -426,7 +419,6 @@ describe('ConversationPanel picker keyboard selection', () => {
       // 多行输入域的 Enter 由组件显式拦截并提交；默认表单提交不再发生。
       expect(fireEvent.keyDown(input, { key: 'Enter' })).toBe(false)
       expect(callbacks.onSend).toHaveBeenCalledExactlyOnceWith(draft)
-      expect(callbacks.onRunSkill).not.toHaveBeenCalled()
       // 提交后草稿已清空：重复的表单提交不会再发送。
       fireEvent.submit(input.closest('form') as HTMLFormElement)
       expect(callbacks.onSend).toHaveBeenCalledTimes(1)
@@ -445,13 +437,13 @@ describe('ConversationPanel picker keyboard selection', () => {
 
   it('closes the picker when typing concept arguments and reopens after deleting them', () => {
     const { callbacks } = renderPanel()
-    const input = typeDraft('/concept')
+    const input = typeDraft('/conce')
     expect(input).toHaveAttribute('aria-expanded', 'true')
     fireEvent.change(input, { target: { value: '/concept ' } })
     expect(input).toHaveAttribute('aria-expanded', 'false')
     fireEvent.change(input, { target: { value: '/concept pursue' } })
     expect(screen.getByRole('button', { name: '发送' })).toBeEnabled()
-    fireEvent.change(input, { target: { value: '/concept' } })
+    fireEvent.change(input, { target: { value: '/conce' } })
     expect(input).toHaveAttribute('aria-expanded', 'true')
     fireEvent.change(input, { target: { value: '/concept pursue' } })
     fireEvent.click(screen.getByRole('button', { name: '发送' }))
@@ -503,7 +495,7 @@ describe('ConversationPanel picker keyboard selection', () => {
 
   it.each([
     ['partial command', '/voc', 'vocabulary', '/vocabulary '],
-    ['full command', '/synonym', 'synonym', '/synonym '],
+    ['partial synonym command', '/syn', 'synonym', '/synonym '],
     ['slash only', '/', 'concept', '/concept '],
     ['localized name', '/收', 'vocabulary', '/vocabulary ']
   ])(
@@ -526,7 +518,6 @@ describe('ConversationPanel picker keyboard selection', () => {
         expect(input).toHaveAttribute('aria-expanded', 'false')
         expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
         expect(callbacks.onSend).not.toHaveBeenCalled()
-        expect(callbacks.onRunSkill).not.toHaveBeenCalled()
       }
     }
   )
@@ -539,7 +530,6 @@ describe('ConversationPanel picker keyboard selection', () => {
     expect(fireEvent.keyDown(input, { key: 'Tab' })).toBe(false)
 
     expect(callbacks.onSend).not.toHaveBeenCalled()
-    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
     expect(input).toHaveValue('/vocabulary ')
     expect(input).toHaveFocus()
     expect(input).toHaveAttribute('aria-expanded', 'false')
@@ -560,26 +550,24 @@ describe('ConversationPanel picker keyboard selection', () => {
 
   it('keeps concept in the conversation composer and submits the draft as a normal message', () => {
     const { callbacks } = renderPanel()
-    const input = typeDraft('/concept')
+    const input = typeDraft('/conce')
 
     expect(pickerOptions()).toHaveLength(1)
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(input).toHaveValue('/concept ')
     expect(callbacks.onSend).not.toHaveBeenCalled()
-    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
 
     fireEvent.change(input, { target: { value: '/concept pursue' } })
     fireEvent.submit(input.closest('form') as HTMLFormElement)
 
-    // 命令原文按普通消息提交，由 Core 识别并应用概念讲解提示词
+    // 命令原文交给统一入口。
     expect(callbacks.onSend).toHaveBeenCalledExactlyOnceWith('/concept pursue')
-    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
     expect(input).toHaveValue('')
   })
 
   it('keeps vocabulary in the conversation composer and submits typed arguments as a skill', () => {
     const { callbacks } = renderPanel()
-    const input = typeDraft('/vocabulary')
+    const input = typeDraft('/voc')
 
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(input).toHaveValue('/vocabulary ')
@@ -589,11 +577,7 @@ describe('ConversationPanel picker keyboard selection', () => {
     fireEvent.change(input, { target: { value: '/vocabulary apple, banana' } })
     fireEvent.submit(input.closest('form') as HTMLFormElement)
 
-    expect(callbacks.onRunSkill).toHaveBeenCalledExactlyOnceWith({
-      skillId: 'vocabulary',
-      text: 'apple, banana'
-    })
-    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(callbacks.onSend).toHaveBeenCalledExactlyOnceWith('/vocabulary apple, banana')
     expect(input).toHaveValue('')
   })
 
@@ -604,16 +588,11 @@ describe('ConversationPanel picker keyboard selection', () => {
     fireEvent.keyDown(input, { key: 'Tab' })
     expect(input).toHaveValue('/vocabulary ')
     expect(callbacks.onSend).not.toHaveBeenCalled()
-    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
 
     fireEvent.change(input, { target: { value: '/vocabulary apple, banana' } })
     fireEvent.submit(input.closest('form') as HTMLFormElement)
 
-    expect(callbacks.onRunSkill).toHaveBeenCalledExactlyOnceWith({
-      skillId: 'vocabulary',
-      text: 'apple, banana'
-    })
-    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(callbacks.onSend).toHaveBeenCalledExactlyOnceWith('/vocabulary apple, banana')
     expect(input).toHaveValue('')
   })
 
@@ -623,22 +602,15 @@ describe('ConversationPanel picker keyboard selection', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
     expect(screen.getByPlaceholderText(/例如：\/synonym/)).toBeInTheDocument()
     fireEvent.keyDown(input, { key: 'Enter' })
-    expect(callbacks.onRunSkill).toHaveBeenLastCalledWith({
-      skillId: 'synonym',
-      text: 'adequate, decent'
-    })
-    fireEvent.change(input, { target: { value: '/synonym' } })
+    expect(callbacks.onSend).toHaveBeenLastCalledWith('/synonym adequate, decent')
+    fireEvent.change(input, { target: { value: '/syn' } })
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(input).toHaveValue('/synonym ')
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(screen.getByRole('alert')).toHaveTextContent('请在 /synonym 后输入')
     fireEvent.change(input, { target: { value: '/synonym good，nice' } })
     fireEvent.keyDown(input, { key: 'Enter' })
-    expect(callbacks.onRunSkill).toHaveBeenLastCalledWith({
-      skillId: 'synonym',
-      text: 'good，nice'
-    })
-    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(callbacks.onSend).toHaveBeenLastCalledWith('/synonym good，nice')
   })
 
   it('submits a directly typed /phrase command as a skill without the picker', () => {
@@ -650,11 +622,7 @@ describe('ConversationPanel picker keyboard selection', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
     expect(fireEvent.keyDown(input, { key: 'Enter' })).toBe(false)
 
-    expect(callbacks.onRunSkill).toHaveBeenCalledExactlyOnceWith({
-      skillId: 'phrase',
-      text: 'look forward to'
-    })
-    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(callbacks.onSend).toHaveBeenCalledExactlyOnceWith('/phrase look forward to')
     expect(input).toHaveValue('')
   })
 
@@ -667,7 +635,6 @@ describe('ConversationPanel picker keyboard selection', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(input).toHaveValue('/phrase ')
     expect(callbacks.onSend).not.toHaveBeenCalled()
-    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
 
     // 多行短语参数：Shift+Enter 换行不提交，行结构与行内空格原样传递。
     fireEvent.change(input, { target: { value: '/phrase look forward to\n' } })
@@ -677,24 +644,22 @@ describe('ConversationPanel picker keyboard selection', () => {
     })
     fireEvent.keyDown(input, { key: 'Enter' })
 
-    expect(callbacks.onRunSkill).toHaveBeenCalledExactlyOnceWith({
-      skillId: 'phrase',
-      text: 'look forward to\nif anything, at all'
-    })
-    expect(callbacks.onSend).not.toHaveBeenCalled()
+    expect(callbacks.onSend).toHaveBeenCalledExactlyOnceWith(
+      '/phrase look forward to\nif anything, at all'
+    )
     expect(input).toHaveValue('')
   })
 
   it('requires phrase arguments before submitting', () => {
     const { callbacks } = renderPanel()
-    const input = typeDraft('/phrase')
+    const input = typeDraft('/phr')
 
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(input).toHaveValue('/phrase ')
     fireEvent.submit(input.closest('form') as HTMLFormElement)
 
     expect(screen.getByRole('alert')).toHaveTextContent('请在 /phrase 后输入')
-    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
+    expect(callbacks.onSend).not.toHaveBeenCalled()
     expect(input).toHaveValue('/phrase ')
   })
 
@@ -707,11 +672,7 @@ describe('ConversationPanel picker keyboard selection', () => {
       // 输完命令即关闭候选层，Enter 直接提交为技能请求，不作为普通聊天。
       expect(input).toHaveAttribute('aria-expanded', 'false')
       expect(fireEvent.keyDown(input, { key: 'Enter' })).toBe(false)
-      expect(callbacks.onRunSkill).toHaveBeenCalledExactlyOnceWith({
-        skillId: 'explore-phrase',
-        text: ''
-      })
-      expect(callbacks.onSend).not.toHaveBeenCalled()
+      expect(callbacks.onSend).toHaveBeenCalledExactlyOnceWith(draft)
       expect(input).toHaveValue('')
     }
   )
@@ -723,7 +684,6 @@ describe('ConversationPanel picker keyboard selection', () => {
     fireEvent.submit(input.closest('form') as HTMLFormElement)
 
     expect(screen.getByRole('alert')).toHaveTextContent('/explore-phrase 不需要参数')
-    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
     expect(callbacks.onSend).not.toHaveBeenCalled()
     expect(input).toHaveValue('/explore-phrase foo')
   })
@@ -749,11 +709,7 @@ describe('ConversationPanel picker keyboard selection', () => {
       // 输完命令即关闭候选层，Enter 直接提交为技能请求，不作为普通聊天。
       expect(input).toHaveAttribute('aria-expanded', 'false')
       expect(fireEvent.keyDown(input, { key: 'Enter' })).toBe(false)
-      expect(callbacks.onRunSkill).toHaveBeenCalledExactlyOnceWith({
-        skillId: 'explore-vocabulary',
-        text: ''
-      })
-      expect(callbacks.onSend).not.toHaveBeenCalled()
+      expect(callbacks.onSend).toHaveBeenCalledExactlyOnceWith(draft)
       expect(input).toHaveValue('')
     }
   )
@@ -765,7 +721,6 @@ describe('ConversationPanel picker keyboard selection', () => {
     fireEvent.submit(input.closest('form') as HTMLFormElement)
 
     expect(screen.getByRole('alert')).toHaveTextContent('/explore-vocabulary 不需要参数')
-    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
     expect(callbacks.onSend).not.toHaveBeenCalled()
     expect(input).toHaveValue('/explore-vocabulary foo')
   })
@@ -784,11 +739,11 @@ describe('ConversationPanel picker keyboard selection', () => {
 
   it('requires vocabulary arguments and clears selection when the command is edited', () => {
     const { callbacks } = renderPanel()
-    const input = typeDraft('/vocabulary')
+    const input = typeDraft('/voc')
     fireEvent.keyDown(input, { key: 'Enter' })
     fireEvent.submit(input.closest('form') as HTMLFormElement)
     expect(screen.getByRole('alert')).toHaveTextContent('请在 /vocabulary 后输入')
-    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
+    expect(callbacks.onSend).not.toHaveBeenCalled()
 
     fireEvent.change(input, { target: { value: '/vocab apple' } })
     fireEvent.keyDown(input, { key: 'Escape' })
@@ -796,16 +751,15 @@ describe('ConversationPanel picker keyboard selection', () => {
     expect(callbacks.onSend).toHaveBeenCalledWith('/vocab apple')
   })
 
-  it('does not select or send on Enter when nothing matches', () => {
+  it('submits an unknown command when nothing matches', () => {
     const { callbacks } = renderPanel()
-    const input = typeDraft('/zzz')
+    const input = typeDraft('/zzz 示例')
 
+    expect(input).toHaveAttribute('aria-expanded', 'false')
     fireEvent.keyDown(input, { key: 'Enter' })
-    fireEvent.submit(input.closest('form') as HTMLFormElement)
 
-    expect(callbacks.onSend).not.toHaveBeenCalled()
-    expect(input).toHaveValue('/zzz')
-    expect(input).toHaveAttribute('aria-expanded', 'true')
+    expect(callbacks.onSend).toHaveBeenCalledExactlyOnceWith('/zzz 示例')
+    expect(input).toHaveValue('')
   })
 
   it('selects with a mouse click through the same entry as the keyboard', () => {
@@ -899,7 +853,6 @@ describe('ConversationPanel picker closing and reopen suppression', () => {
     expect(fireEvent.keyDown(input, { key: 'Tab', shiftKey: true })).toBe(true)
 
     expect(callbacks.onSend).not.toHaveBeenCalled()
-    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
     expect(input).toHaveValue('/')
     expect(input).toHaveAttribute('aria-expanded', 'false')
   })
@@ -913,7 +866,6 @@ describe('ConversationPanel picker closing and reopen suppression', () => {
     }
 
     expect(callbacks.onSend).not.toHaveBeenCalled()
-    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
     expect(input).toHaveValue('/voc')
     // 组合键不视为候选交互，列表保持打开
     expect(input).toHaveAttribute('aria-expanded', 'true')
@@ -1034,7 +986,7 @@ describe('ConversationPanel picker closing and reopen suppression', () => {
 describe('ConversationPanel picker submit protection', () => {
   it('disables the send button and blocks form submit while the picker is open', () => {
     const { callbacks } = renderPanel()
-    const input = typeDraft('/voc 你好')
+    const input = typeDraft('/voc')
 
     expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
     fireEvent.submit(input.closest('form') as HTMLFormElement)
@@ -1104,7 +1056,6 @@ describe('ConversationPanel picker input method composition', () => {
     fireEvent.compositionEnd(input)
 
     expect(callbacks.onSend).not.toHaveBeenCalled()
-    expect(callbacks.onRunSkill).not.toHaveBeenCalled()
     expect(input).toHaveValue('/')
     expect(input).toHaveAttribute('aria-expanded', 'true')
   })
@@ -1146,28 +1097,58 @@ it('submits /sentence directly and requires content', () => {
   const input = screen.getByRole('combobox')
   fireEvent.change(input, { target: { value: '/sentence' } })
   fireEvent.keyDown(input, { key: 'Enter' })
-  expect(callbacks.onRunSkill).not.toHaveBeenCalled()
+  expect(callbacks.onSend).not.toHaveBeenCalled()
   expect(screen.getByRole('alert')).toHaveTextContent('请在 /sentence 后输入')
   fireEvent.change(input, { target: { value: '/sentence 今天先这样。\n明天继续。' } })
   fireEvent.keyDown(input, { key: 'Enter' })
-  expect(callbacks.onRunSkill).toHaveBeenCalledExactlyOnceWith({
-    skillId: 'sentence',
-    text: '今天先这样。\n明天继续。'
-  })
-  expect(callbacks.onSend).not.toHaveBeenCalled()
+  expect(callbacks.onSend).toHaveBeenCalledExactlyOnceWith('/sentence 今天先这样。\n明天继续。')
 })
 it('selects sentence from the picker without sending, then submits its text', () => {
   const { callbacks } = renderPanel()
   const input = screen.getByRole('combobox')
   fireEvent.focus(input)
-  fireEvent.change(input, { target: { value: '/sentence' } })
+  fireEvent.change(input, { target: { value: '/sent' } })
   fireEvent.keyDown(input, { key: 'Enter' })
   expect(input).toHaveValue('/sentence ')
-  expect(callbacks.onRunSkill).not.toHaveBeenCalled()
+  expect(callbacks.onSend).not.toHaveBeenCalled()
   fireEvent.change(input, { target: { value: '/sentence I very like it.' } })
   fireEvent.keyDown(input, { key: 'Enter' })
-  expect(callbacks.onRunSkill).toHaveBeenCalledExactlyOnceWith({
-    skillId: 'sentence',
-    text: 'I very like it.'
-  })
+  expect(callbacks.onSend).toHaveBeenCalledExactlyOnceWith('/sentence I very like it.')
+})
+
+it.each([
+  ['concept', 'carry'],
+  ['vocabulary', 'apple, banana'],
+  ['phrase', 'look forward to\nif anything'],
+  ['explore-phrase', ''],
+  ['explore-vocabulary', ''],
+  ['synonym', 'good, nice'],
+  ['sentence', '今天先这样。\n明天继续。'],
+  ['tts', ' Hello,\nworld!  ']
+])('submits /%s as the same text from typing and the picker', (command, body) => {
+  const draft = body ? `/${command} ${body}` : `/${command}`
+  const direct = renderPanel()
+  let input = typeDraft(draft)
+  fireEvent.keyDown(input, { key: 'Enter' })
+  expect(direct.callbacks.onSend).toHaveBeenCalledExactlyOnceWith(draft)
+  cleanup()
+
+  const picked = renderPanel()
+  input = typeDraft('/')
+  const option = pickerOptions().find(({ id }) => id === `conversation-action-option-${command}`)!
+  fireEvent.mouseDown(option)
+  fireEvent.click(option)
+  expect(input).toHaveValue(`/${command} `)
+  if (body) fireEvent.change(input, { target: { value: draft } })
+  fireEvent.keyDown(input, { key: 'Enter' })
+  expect(picked.callbacks.onSend).toHaveBeenCalledExactlyOnceWith(body ? draft : `${draft} `)
+})
+
+it('prompts for a missing sentence and keeps the directly typed draft', () => {
+  const { callbacks } = renderPanel()
+  const input = typeDraft('/sentence')
+  fireEvent.keyDown(input, { key: 'Enter' })
+  expect(screen.getByRole('alert')).toHaveTextContent('请在 /sentence 后输入')
+  expect(input).toHaveValue('/sentence')
+  expect(callbacks.onSend).not.toHaveBeenCalled()
 })

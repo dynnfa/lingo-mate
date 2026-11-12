@@ -170,6 +170,11 @@ function translateRequestError(t: StatusTFunction, error: ConversationRequestErr
       return t('errors:invalidInput')
     case 'UNTRUSTED_SOURCE':
       return t('errors:untrustedSource')
+    case 'AGENT_UNAVAILABLE':
+    case 'AGENT_PROTOCOL_ERROR':
+    case 'AGENT_LIMIT':
+    case 'AGENT_HOST_ERROR':
+      return translateGenerationError(t, error)
     case 'PERSISTENCE_ERROR':
       return t('errors:persistence')
     case 'MODEL_ERROR':

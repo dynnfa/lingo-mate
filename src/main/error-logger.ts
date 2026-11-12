@@ -9,7 +9,7 @@ import type { IpcGuardDiagnostics } from './ipc-guard'
 // 限制深度与体积；写入串行排队，自身失败只输出固定诊断码，不回退把
 // 原始日志打印到控制台，也不影响业务结果。
 
-export type ErrorLogLevel = 'error' | 'warn'
+export type ErrorLogLevel = 'error' | 'warn' | 'info'
 export type ErrorLogSource = 'main' | 'core' | 'preload' | 'renderer'
 
 export interface ErrorLogEntry {

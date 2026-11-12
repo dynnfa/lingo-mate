@@ -2,6 +2,8 @@ import { getAgentTaskPolicy } from './agent-task-policy'
 import type { ModelMessage, ModelStreamEvent } from '../llm/language-model'
 import {
   agentSnapshotSchema,
+  type ConversationRouteInput,
+  type ConversationRouteResult,
   type SentencePrepared,
   type TtsCompletion,
   type VocabularyPracticeModelArgs,
@@ -41,7 +43,7 @@ import {
 
 export { DEFAULT_AGENT_BUDGET } from './agent-task-policy'
 export interface AgentTask {
-  task: AgentSnapshot['task']
+  task: Exclude<AgentSnapshot['task'], 'conversation-route'>
   messages: ModelMessage[]
   outputLanguage: string
   targetLanguage: string
@@ -202,6 +204,13 @@ export interface SentenceHostOperations {
 export interface SentenceAgentRuntime {
   runSentence(input: VocabularyAgentRunInput, host: SentenceHostOperations): Promise<void>
 }
+export interface ConversationRouteRunInput {
+  mode: ConversationRouteInput['mode']
+  text: string
+  outputLanguage: string
+  targetLanguage: string
+  signal: AbortSignal
+}
 export interface AgentRuntime
   extends
     SentenceAgentRuntime,
@@ -213,6 +222,7 @@ export interface AgentRuntime
     SynonymAgentRuntime,
     ExplorePhraseAgentRuntime,
     ExploreVocabularyAgentRuntime {
+  routeConversation(input: ConversationRouteRunInput): Promise<ConversationRouteResult>
   stream(input: AgentRunInput): AsyncIterable<ModelStreamEvent>
 }
 export class AgentRuntimeError extends Error {
@@ -227,9 +237,15 @@ export class AgentRuntimeError extends Error {
 
 // Reserve space for the fixed host prompt/operation definitions. Persisted history
 // is never edited; only this execution's copied context is trimmed.
-export function createAgentSnapshot(input: AgentTask): AgentSnapshot {
+export function createAgentSnapshot({
+  task,
+  messages: sourceMessages,
+  outputLanguage,
+  targetLanguage
+}: AgentTask): AgentSnapshot {
+  const input = { task, messages: sourceMessages, outputLanguage, targetLanguage }
   const policy = getAgentTaskPolicy(input.task)
-  if (input.task !== 'conversation' && input.task !== 'tool-loop')
+  if (input.task !== 'conversation' && input.task !== 'concept' && input.task !== 'tool-loop')
     return agentSnapshotSchema.parse({
       ...input,
       budget: policy.budget,

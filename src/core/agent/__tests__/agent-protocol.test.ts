@@ -145,3 +145,29 @@ it('supports bound vocabulary exploration attempts without accepting host data o
     ).toBe(false)
   }
 })
+
+it('accepts only a single typed conversation route and a bounded classification receipt', () => {
+  const base = { v: AGENT_PROTOCOL_VERSION, instanceId: 'p', runId: 'r' }
+  const terminal = { ...base, type: 'conversation_route_result' }
+  expect(
+    agentFrameSchema.safeParse({
+      ...terminal,
+      result: { kind: 'workflow', workflow: 'tts' }
+    }).success
+  ).toBe(true)
+  for (const result of [
+    { kind: 'workflow', workflow: 'conversation-title' },
+    { kind: 'reply', workflow: 'sentence' },
+    { kind: 'invalid', workflow: 'concept' },
+    [{ kind: 'reply' }, { kind: 'workflow', workflow: 'tts' }]
+  ]) {
+    expect(agentFrameSchema.safeParse({ ...terminal, result }).success).toBe(false)
+  }
+  const receipt = { ...base, type: 'host_result', callId: 'r:c' }
+  expect(agentFrameSchema.safeParse({ ...receipt, result: { intent: 'unclear' } }).success).toBe(
+    true
+  )
+  expect(agentFrameSchema.safeParse({ ...receipt, result: { intent: 'sentence' } }).success).toBe(
+    false
+  )
+})

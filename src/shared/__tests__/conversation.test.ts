@@ -12,6 +12,7 @@ import {
   loadConversationResultSchema,
   retryMessageInputSchema,
   runConversationSkillInputSchema,
+  sendMessageInputSchema,
   sendMessageResultSchema
 } from '../conversation'
 
@@ -393,4 +394,21 @@ describe('conversation protocol schemas', () => {
       }).success
     ).toBe(false)
   })
+})
+
+it('counts skill arguments separately and preserves speech text across IPC validation', () => {
+  const ids = { requestId: REQUEST_ID, sessionId: SESSION_ID }
+  const body = '😀'.repeat(2000)
+  expect(sendMessageInputSchema.parse({ ...ids, text: `  /sentence\u3000${body}  ` }).text).toBe(
+    `/sentence\u3000${body}`
+  )
+  expect(sendMessageInputSchema.safeParse({ ...ids, text: `/sentence ${body}a` }).success).toBe(
+    false
+  )
+  expect(
+    sendMessageInputSchema.safeParse({ ...ids, text: `/sentence-extra ${body}` }).success
+  ).toBe(false)
+  const text = '/tts  Hello,\nworld!  '
+  const first = sendMessageInputSchema.parse({ ...ids, text: `	 ${text}` })
+  expect(sendMessageInputSchema.parse(first).text).toBe(text)
 })
