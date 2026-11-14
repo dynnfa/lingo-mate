@@ -605,7 +605,18 @@ export const MIGRATIONS: Migration[] = [
         throw new Error('Invalid sentence migration foreign keys')
     }
   },
-  { version: 15, up: migrateCommunication }
+  { version: 15, up: migrateCommunication },
+  {
+    version: 16,
+    up(database) {
+      database.exec(`
+        CREATE TABLE conversation_concept_messages (
+          user_message_id TEXT PRIMARY KEY NOT NULL
+            REFERENCES conversation_messages (id) ON DELETE CASCADE
+        );
+      `)
+    }
+  }
 ]
 
 export function migrateDatabase(database: Database.Database): void {

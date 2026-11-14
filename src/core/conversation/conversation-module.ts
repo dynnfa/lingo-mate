@@ -258,15 +258,13 @@ export class ConversationModule {
         return await this.launchSkill(skillInput, userMessage, active, emit)
       }
 
+      const task = route.kind === 'workflow' ? 'concept' : 'conversation'
+      if (task === 'concept') userMessage.replyTask = task
       const titled = this.prepareConversation(userMessage)
       await this.saveUserMessage(userMessage, titled)
       if (titled) void this.updateTitle(requestId, userMessage, emit)
       const generation = this.generation(requestId, userMessage, active)
-      return this.launchGeneration(
-        generation,
-        emit,
-        route.kind === 'workflow' ? 'concept' : 'conversation'
-      )
+      return this.launchGeneration(generation, emit, task)
     } catch (error) {
       this.executions.release(requestId, active)
       if (controller.signal.aborted) {
@@ -422,6 +420,10 @@ export class ConversationModule {
     }
     this.executions.register(input.requestId, active)
     try {
+      const generation = this.generation(input.requestId, userMessage, active)
+      if (userMessage.replyTask === 'concept')
+        return this.launchGeneration(generation, emit, userMessage.replyTask)
+
       const route = await this.agentRuntime.routeConversation({
         mode: 'retry',
         text: userMessage.content,
@@ -432,7 +434,7 @@ export class ConversationModule {
       if (route.kind !== 'reply' && (route.kind !== 'workflow' || route.workflow !== 'concept'))
         throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
       return this.launchGeneration(
-        this.generation(input.requestId, userMessage, active),
+        generation,
         emit,
         route.kind === 'workflow' ? 'concept' : 'conversation'
       )

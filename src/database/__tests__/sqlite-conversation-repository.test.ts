@@ -99,6 +99,43 @@ function storedMessage(
 }
 
 describe('SqliteConversationRepository', () => {
+  it('preserves v15 messages and rolls back the user message if its concept route cannot be saved', async () => {
+    const database = new Database(':memory:')
+    databases.push(database)
+    database.pragma('foreign_keys = ON')
+    for (const migration of MIGRATIONS.filter(({ version }) => version <= 15))
+      migration.up(database)
+    database.pragma('user_version = 15')
+    const at = '2026-09-08T10:00:00.000Z'
+    const conversation = storedConversation(SESSION_A, at, at)
+    const legacy = storedMessage('legacy', SESSION_A, 'user', '/vocabulary legacy', at)
+    database
+      .prepare('INSERT INTO conversations VALUES (@id, @createdAt, @updatedAt, @title)')
+      .run(conversation)
+    database
+      .prepare(
+        'INSERT INTO conversation_messages VALUES (@id, @sessionId, @role, @content, @createdAt)'
+      )
+      .run(legacy)
+
+    migrateDatabase(database)
+
+    const repository = new SqliteConversationRepository(database)
+    expect(await repository.history(SESSION_A)).toEqual([legacy])
+    database.exec(`
+      CREATE TRIGGER reject_concept_route BEFORE INSERT ON conversation_concept_messages
+      BEGIN SELECT RAISE(ABORT, 'disk failure'); END;
+    `)
+    await expect(
+      repository.appendMessage({
+        ...storedMessage('concept', SESSION_A, 'user', 'What does carry out mean?', at),
+        replyTask: 'concept'
+      })
+    ).rejects.toBeInstanceOf(ConversationPersistenceError)
+    expect(await repository.history(SESSION_A)).toEqual([legacy])
+    expect(database.pragma('foreign_key_check')).toEqual([])
+  })
+
   it('clears skill executions before messages and applies the title migration only once', async () => {
     const database = new Database(':memory:')
     databases.push(database)

@@ -3,7 +3,8 @@ import {
   splitConversationCommand
 } from '../../../shared/conversation-command'
 import { conversationSkillIdSchema } from '../../../shared/conversation'
-import { ModelRequestError } from '../../llm/llm-client'
+import { classifyModelRequestError, ModelRequestError } from '../../llm/llm-client'
+import { ModelConfigValidationError, ModelNotConfiguredError } from '../../llm/model-config'
 import {
   agentReplyArgsSchema,
   conversationIntentSchema,
@@ -73,21 +74,35 @@ export class ConversationRouteTask implements AgentTaskAdapter {
       kind: 'model',
       output: 'json',
       execute: async (signal) => {
-        const model = this.binding.resolveModel()
-        this.binding.modelStarted()
         let text = ''
-        for await (const event of model.streamReply({
-          purpose: 'conversation-route',
-          messages: [{ role: 'user', content: this.binding.text }],
-          systemPrompt,
-          timeoutMs: 10_000,
-          signal
-        })) {
+        try {
+          const model = this.binding.resolveModel()
+          this.binding.modelStarted()
+          for await (const event of model.streamReply({
+            purpose: 'conversation-route',
+            messages: [{ role: 'user', content: this.binding.text }],
+            systemPrompt,
+            timeoutMs: 10_000,
+            signal
+          })) {
+            signal.throwIfAborted()
+            if (event.type !== 'text') continue
+            text += event.delta
+            if (text.length > this.snapshot.budget.maxOutputChars)
+              throw new ModelRequestError(
+                'PROTOCOL',
+                new Error('Intent classification is too long')
+              )
+          }
+        } catch (error) {
           signal.throwIfAborted()
-          if (event.type !== 'text') continue
-          text += event.delta
-          if (text.length > this.snapshot.budget.maxOutputChars)
-            throw new ModelRequestError('PROTOCOL', new Error('Intent classification is too long'))
+          if (
+            error instanceof ModelRequestError ||
+            error instanceof ModelNotConfiguredError ||
+            error instanceof ModelConfigValidationError
+          )
+            throw error
+          throw new ModelRequestError(classifyModelRequestError(error), error)
         }
         const result = conversationIntentSchema.safeParse(text.trim())
         if (!result.success)
