@@ -63,7 +63,7 @@ test('opens the slash action picker above the composer and selects an action', a
   })
 })
 
-test('keeps an empty state for no matches and sends the literal slash draft after Escape', async () => {
+test('submits an unknown slash command as ordinary conversation', async () => {
   await withTempUserData(async (userDataPath) => {
     await writeLocalePreference(userDataPath, 'zh-CN')
     const app = await launchApp(userDataPath)
@@ -74,17 +74,8 @@ test('keeps an empty state for no matches and sends the literal slash draft afte
     await input.click()
     await input.fill('/zzz')
 
-    // 无匹配时保留窗口并展示国际化空状态
-    await expect(window.getByText('没有匹配的行动')).toBeVisible()
-    await expect(window.locator('.action-picker-option')).toHaveCount(0)
-
-    // 打开时 Enter 不把查询误发为普通消息
-    await input.press('Enter')
-    await expect(window.locator('.message.user')).toHaveCount(0)
-
-    // Escape 关闭并保留草稿，此后 Enter 走既有发送流程
-    await input.press('Escape')
     await expect(window.locator('.action-picker')).toBeHidden()
+    await expect(window.getByRole('button', { name: '发送', exact: true })).toBeEnabled()
     await input.press('Enter')
     await expect(window.locator('.message.user')).toContainText('/zzz')
 

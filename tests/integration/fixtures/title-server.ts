@@ -1,3 +1,4 @@
+import { writeOrdinaryIntentIfRequested } from './conversation-intent-server'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 
@@ -34,6 +35,7 @@ export async function startTitleServer(holdReply = false): Promise<{
       const chunks: Buffer[] = []
       for await (const chunk of req) chunks.push(chunk as Buffer)
       const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as TitleRequest
+      if (writeOrdinaryIntentIfRequested(res, body.messages)) return
       const isTitle = body.messages[0].content.includes(
         'Generate a short, specific conversation title'
       )

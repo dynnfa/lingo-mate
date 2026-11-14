@@ -14,6 +14,7 @@ export interface StoredMessage {
   role: ModelRole
   content: string
   createdAt: string
+  replyTask?: 'concept'
   speech?: ConversationSpeech
   retryable?: boolean
 }

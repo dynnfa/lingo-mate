@@ -13,10 +13,10 @@ import {
 } from './helpers'
 import { startPhraseServer } from '../integration/fixtures/phrase-server'
 
-// 选择器路径：键入 /phrase 并按 Enter 选中候选，进入参数输入状态。
+// 选择器路径：键入 /phr 并按 Enter 选中候选，进入参数输入状态。
 async function selectPhrase(window: Page): Promise<void> {
   const input = window.locator('#message')
-  await input.fill('/phrase')
+  await input.fill('/phr')
   await input.press('Enter')
   await expect(input).toHaveValue('/phrase ')
   await expect(window.getByRole('region', { name: 'Conversation history' })).toBeVisible()

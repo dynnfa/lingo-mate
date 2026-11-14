@@ -87,10 +87,26 @@ export class ConversationExecutions {
     for (const execution of this.activeRequests.values()) execution.controller.abort()
   }
 
-  release(requestId: string): void {
-    const execution = this.activeRequests.get(requestId)
+  releaseOnTerminal(
+    execution: ActiveExecution,
+    emit: ConversationEventListener
+  ): ConversationEventListener {
+    let finished = false
+    return (event) => {
+      if (finished) return
+      if (event.type === 'completed' || event.type === 'cancelled' || event.type === 'failed') {
+        finished = true
+        // A terminal means the work has settled and the caller can submit again.
+        this.release(event.requestId, execution)
+      }
+      emit(event)
+    }
+  }
+
+  release(requestId: string, execution: ActiveExecution): void {
+    if (this.activeRequests.get(requestId) !== execution) return
     this.activeRequests.delete(requestId)
-    if (execution && this.sessionRequests.get(execution.sessionId) === requestId) {
+    if (this.sessionRequests.get(execution.sessionId) === requestId) {
       this.sessionRequests.delete(execution.sessionId)
     }
     this.notifyIdle()

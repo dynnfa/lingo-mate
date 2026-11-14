@@ -1,3 +1,4 @@
+import { CONVERSATION_TEXT_MAX_CHARS, splitConversationCommand } from './conversation-command'
 import type { CommunicationApi } from './communication'
 import type { SynonymApi, SynonymBatch } from './synonym'
 import { z } from 'zod'
@@ -81,12 +82,6 @@ export const generationStartedSchema = z.object({
   assistantMessageId: identifierSchema
 })
 
-export const sendMessageInputSchema = z.object({
-  requestId: identifierSchema,
-  sessionId: identifierSchema,
-  text: z.string().trim().min(1).max(4_000)
-})
-
 export const conversationSkillIdSchema = z.enum([
   'tts',
   'vocabulary',
@@ -97,6 +92,25 @@ export const conversationSkillIdSchema = z.enum([
   'explore-vocabulary'
 ])
 export type ConversationSkillId = z.infer<typeof conversationSkillIdSchema>
+
+export const sendMessageInputSchema = z.object({
+  requestId: identifierSchema,
+  sessionId: identifierSchema,
+  text: z
+    .string()
+    .transform((text) => {
+      const command = splitConversationCommand(text)
+      return command?.command === 'tts' ? text.trimStart() : text.trim()
+    })
+    .refine((text) => {
+      const command = splitConversationCommand(text)
+      const length =
+        command && conversationSkillIdSchema.safeParse(command.command).success
+          ? command.body.length
+          : text.length
+      return text.length > 0 && length <= CONVERSATION_TEXT_MAX_CHARS
+    })
+})
 
 // 会话技能参数按 skillId 判别：vocabulary/phrase/synonym 要求非空 text；
 // explore-phrase 与 explore-vocabulary 是无参数命令，仅携带目标语言，
@@ -182,6 +196,9 @@ export const conversationRequestErrorSchema = z.discriminatedUnion('code', [
   z.object({ code: z.literal('INVALID_INPUT') }),
   z.object({ code: z.literal('UNTRUSTED_SOURCE') }),
   z.object({ code: z.literal('PERSISTENCE_ERROR') }),
+  z.object({
+    code: z.enum(['AGENT_UNAVAILABLE', 'AGENT_PROTOCOL_ERROR', 'AGENT_LIMIT', 'AGENT_HOST_ERROR'])
+  }),
   z.object({ code: z.literal('MODEL_ERROR') }),
   z.object({ code: z.literal('MODEL_NOT_CONFIGURED') }),
   z.object({ code: z.literal('CREDENTIAL_DECRYPT_FAILED') }),

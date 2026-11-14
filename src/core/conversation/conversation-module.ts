@@ -1,13 +1,17 @@
 import { SpeechError } from '../speech/speech-synthesizer'
 import { speechInputSchema } from '../../shared/speech'
+import { splitConversationCommand } from '../../shared/conversation-command'
 import { AgentRuntimeError, type AgentRuntime } from '../agent/agent-runtime'
 import { noopCoreDiagnostics, type CoreDiagnostics } from '../error-diagnostics'
+import { parsePhraseInput } from '../learning/phrase/parse-phrase-input'
+import { parseVocabularyInput } from '../learning/vocabulary/parse-vocabulary-input'
 import { parseSynonymInput } from '../learning/synonym/parse-synonym-input'
 import { randomUUID } from 'node:crypto'
 import { classifyModelRequestError, ModelRequestError } from '../llm/llm-client'
 import {
   CONVERSATION_TITLE_MAX_LENGTH,
   conversationSummarySchema,
+  sendMessageInputSchema,
   type ConversationSkillId
 } from '../../shared/conversation'
 import type {
@@ -23,14 +27,11 @@ import { SUPPORTED_LOCALES, targetLanguageSchema } from '../../shared/preference
 import { runConversationSkillInputSchema } from '../../shared/conversation'
 import type { ModelMessage } from '../llm/language-model'
 import { ModelConfigValidationError, ModelNotConfiguredError } from '../llm/model-config'
-import { sentenceTextSchema } from '../../shared/sentence'
 import type { ConversationSkill } from './conversation-skill'
-import type {
-  ConversationSkillRepository,
-  StoredConversationSkillExecution
-} from './conversation-skill-repository'
+import type { ConversationSkillRepository } from './conversation-skill-repository'
 import {
   ConversationNotFoundError,
+  ConversationPersistenceError,
   MessageNotFoundError,
   RetryNotAllowedError,
   type ConversationRepository,
@@ -52,8 +53,7 @@ import { toConversationMessage } from './conversation-message'
 import {
   ExploreConversationExecution,
   exploreReplyId,
-  fileResultSkillByCommand,
-  type FileResultSkillInput
+  fileResultSkillByCommand
 } from './explore-conversation-execution'
 import { StoredConversationSkillRunner } from './stored-conversation-skill-runner'
 
@@ -74,11 +74,17 @@ export class SkillLanguageMismatchError extends Error {
 // Trusted callers may supply canonical message IDs and an independent language
 // snapshot. Renderer payloads cannot set this context.
 export interface ConversationExecutionContext {
+  operation: 'chat' | 'sentence'
   languages: ConversationLanguages
   userMessageId: string
   assistantMessageId: string
 }
 
+export class InvalidConversationCommandError extends Error {
+  readonly code = 'INVALID_INPUT'
+}
+
+type ReplyTask = 'conversation' | 'concept'
 type DraftConversation = Omit<StoredConversation, 'title'> & { title: null }
 
 export class ConversationModule {
@@ -165,66 +171,8 @@ export class ConversationModule {
     emit: ConversationEventListener,
     context?: ConversationExecutionContext
   ): Promise<GenerationAccepted> {
-    if (/^\/tts(?:\s|$)/u.test(input.text)) {
-      return this.runSkill(
-        {
-          requestId: input.requestId,
-          sessionId: input.sessionId,
-          skillId: 'tts',
-          arguments: { text: input.text.replace(/^\/tts(?:\s)?/u, ''), wordLanguage: 'en' }
-        },
-        emit,
-        context
-      )
-    }
-    const conversation =
-      this.drafts.get(input.sessionId) ??
-      (await withConversationPersistence(() => this.repository.find(input.sessionId)))
-    if (!conversation) {
-      throw new ConversationNotFoundError(input.sessionId)
-    }
-
-    const userMessage: StoredMessage = {
-      id: context?.userMessageId ?? randomUUID(),
-      sessionId: input.sessionId,
-      role: 'user',
-      content: input.text,
-      createdAt: new Date().toISOString()
-    }
-    const assistantMessageId = context?.assistantMessageId ?? randomUUID()
-    this.executions.register(input.requestId, {
-      controller: new AbortController(),
-      sessionId: input.sessionId,
-      userMessageId: userMessage.id,
-      assistantMessageId,
-      languages: this.snapshotLanguages(context?.languages)
-    })
-
-    const titled = this.prepareConversation(userMessage)
-    try {
-      await withConversationPersistence(() => this.repository.appendMessage(userMessage, titled))
-      this.drafts.delete(input.sessionId)
-    } catch (error) {
-      // user 消息未持久化：不得发 started，也不得让 UI 出现伪消息。
-      this.executions.release(input.requestId)
-      emit({
-        type: 'failed',
-        requestId: input.requestId,
-        sessionId: input.sessionId,
-        error: toConversationEventError(error)
-      })
-      throw error
-    }
-
-    if (titled) void this.updateTitle(input.requestId, userMessage, emit)
-
-    const generation: GenerationStarted = {
-      requestId: input.requestId,
-      sessionId: input.sessionId,
-      userMessage: toConversationMessage(userMessage),
-      assistantMessageId
-    }
-    return this.launchGeneration(generation, emit)
+    sendMessageInputSchema.parse(input)
+    return this.submit(input, emit, context)
   }
 
   async runSkill(
@@ -232,142 +180,196 @@ export class ConversationModule {
     emit: ConversationEventListener,
     context?: ConversationExecutionContext
   ): Promise<GenerationAccepted> {
-    if (input.skillId === 'sentence') sentenceTextSchema.parse(input.arguments.text)
-    if (input.skillId === 'synonym') parseSynonymInput(input.arguments.text)
-    if (input.skillId === 'tts') {
-      const parsed = speechInputSchema.safeParse({
-        requestId: input.requestId,
-        text: input.arguments.text,
-        language: 'en'
-      })
-      if (!parsed.success) throw new SpeechError('INVALID_INPUT')
-    }
-    runConversationSkillInputSchema.parse(input)
-    const skill = this.skills.get(input.skillId)
-    if (!skill) {
-      throw new Error('Conversation skills are not configured')
-    }
-    const conversation =
-      this.drafts.get(input.sessionId) ??
-      (await withConversationPersistence(() => this.repository.find(input.sessionId)))
-    if (!conversation) throw new ConversationNotFoundError(input.sessionId)
+    const { requestId, sessionId, skillId, arguments: args } = input
+    const suffix = 'text' in args ? ` ${args.text}` : ''
+    return this.submit({ requestId, sessionId, text: `/${skillId}${suffix}` }, emit, context, input)
+  }
 
-    // 技能执行的 wordLanguage 来源于目标语言快照；客户端传值与当前设置
-    // 不一致时明确拒绝，不接受旧值静默执行。
+  private async submit(
+    input: SendMessageInput,
+    emit: ConversationEventListener,
+    context?: ConversationExecutionContext,
+    compatibleSkill?: RunConversationSkillInput
+  ): Promise<GenerationAccepted> {
+    const { requestId, sessionId, text } = input
+    const operation = context?.operation
     const languages = this.snapshotLanguages(context?.languages)
-    if (input.arguments.wordLanguage !== languages.targetLanguage) {
-      throw new SkillLanguageMismatchError(input.arguments.wordLanguage, languages.targetLanguage)
-    }
-    // 探索技能（explore-phrase / explore-vocabulary）的结果走各自的 JSON 历史
-    // 文件路径：不创建数据库技能执行，也不写数据库报告；命令消息与最终助手
-    // 消息仍走会话消息接口。
-    if (input.skillId === 'explore-phrase' || input.skillId === 'explore-vocabulary') {
-      return this.runExploreFileSkill(input, skill, languages, emit)
-    }
-    if (!this.storedSkills) {
-      throw new Error('Conversation skills are not configured')
-    }
-    const now = new Date().toISOString()
-    const userMessage: StoredMessage = {
-      id: context?.userMessageId ?? randomUUID(),
-      sessionId: input.sessionId,
-      role: 'user',
-      content: `/${input.skillId} ${input.arguments.text}`,
-      createdAt: now
-    }
-    const assistantMessageId = context?.assistantMessageId ?? randomUUID()
-    this.executions.register(input.requestId, {
-      controller: new AbortController(),
-      sessionId: input.sessionId,
-      userMessageId: userMessage.id,
-      assistantMessageId,
+    const controller = new AbortController()
+    const active = {
+      controller,
+      sessionId,
+      userMessageId: context?.userMessageId ?? randomUUID(),
+      assistantMessageId: context?.assistantMessageId ?? randomUUID(),
       languages
-    })
+    }
+    this.executions.register(requestId, active)
 
-    const titled = this.prepareConversation(userMessage)
-    let execution: StoredConversationSkillExecution
     try {
-      execution = await this.storedSkills.create(input, userMessage, languages, titled)
-      this.drafts.delete(input.sessionId)
-    } catch (error) {
-      this.executions.release(input.requestId)
-      emit({
-        type: 'failed',
-        requestId: input.requestId,
-        sessionId: input.sessionId,
-        error: toConversationEventError(error)
+      const conversation =
+        this.drafts.get(sessionId) ??
+        (await withConversationPersistence(() => this.repository.find(sessionId)))
+      controller.signal.throwIfAborted()
+      if (!conversation) throw new ConversationNotFoundError(sessionId)
+
+      const route = await this.agentRuntime.routeConversation({
+        mode:
+          operation === 'sentence'
+            ? 'channel-sentence'
+            : operation === 'chat'
+              ? 'channel-chat'
+              : 'desktop',
+        text,
+        ...languages,
+        signal: controller.signal
       })
+      controller.signal.throwIfAborted()
+
+      if (route.kind === 'invalid') {
+        if (route.workflow === 'tts') throw new SpeechError('INVALID_INPUT')
+        throw new InvalidConversationCommandError()
+      }
+      if (
+        (compatibleSkill &&
+          (route.kind !== 'workflow' || route.workflow !== compatibleSkill.skillId)) ||
+        (operation === 'sentence' &&
+          (route.kind !== 'workflow' || route.workflow !== 'sentence')) ||
+        (operation === 'chat' && route.kind !== 'reply')
+      )
+        throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+
+      const userMessage: StoredMessage = {
+        id: active.userMessageId,
+        sessionId,
+        role: 'user',
+        content: text,
+        createdAt: new Date().toISOString()
+      }
+
+      if (route.kind === 'workflow' && route.workflow !== 'concept') {
+        const command = splitConversationCommand(text)
+        if (command?.command !== route.workflow) throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+        const skillInput = this.bindSkill(
+          input,
+          route.workflow,
+          command.body,
+          languages,
+          compatibleSkill
+        )
+        return await this.launchSkill(skillInput, userMessage, active, emit)
+      }
+
+      const task = route.kind === 'workflow' ? 'concept' : 'conversation'
+      if (task === 'concept') userMessage.replyTask = task
+      const titled = this.prepareConversation(userMessage)
+      await this.saveUserMessage(userMessage, titled)
+      if (titled) void this.updateTitle(requestId, userMessage, emit)
+      const generation = this.generation(requestId, userMessage, active)
+      return this.launchGeneration(generation, emit, task)
+    } catch (error) {
+      this.executions.release(requestId, active)
+      if (controller.signal.aborted) {
+        emit({ type: 'cancelled', requestId, sessionId, messageId: active.assistantMessageId })
+        controller.signal.throwIfAborted()
+      }
+      if (error instanceof AgentRuntimeError || error instanceof ModelRequestError)
+        reportConversationFailure(this.diagnostics, 'route-request', requestId, error)
+      if (
+        error instanceof AgentRuntimeError ||
+        error instanceof ModelRequestError ||
+        error instanceof ModelNotConfiguredError ||
+        error instanceof ModelConfigValidationError ||
+        error instanceof ConversationPersistenceError
+      )
+        emit({ type: 'failed', requestId, sessionId, error: toConversationEventError(error) })
       throw error
     }
+  }
 
-    if (titled && input.skillId !== 'tts') void this.updateTitle(input.requestId, userMessage, emit)
-
-    const generation: GenerationStarted = {
+  private bindSkill(
+    input: SendMessageInput,
+    skillId: ConversationSkillId,
+    body: string,
+    languages: ConversationLanguages,
+    compatibleSkill?: RunConversationSkillInput
+  ): RunConversationSkillInput {
+    const wordLanguage = languages.targetLanguage
+    if (compatibleSkill && compatibleSkill.arguments.wordLanguage !== wordLanguage)
+      throw new SkillLanguageMismatchError(compatibleSkill.arguments.wordLanguage, wordLanguage)
+    const text = skillId === 'tts' || compatibleSkill ? body : body.trim()
+    if (skillId === 'vocabulary') parseVocabularyInput(text)
+    if (skillId === 'phrase') parsePhraseInput(text)
+    if (skillId === 'synonym') parseSynonymInput(text)
+    if (
+      skillId === 'tts' &&
+      !speechInputSchema.safeParse({
+        requestId: input.requestId,
+        text,
+        language: wordLanguage
+      }).success
+    )
+      throw new SpeechError('INVALID_INPUT')
+    return runConversationSkillInputSchema.parse({
       requestId: input.requestId,
       sessionId: input.sessionId,
-      userMessage: toConversationMessage(userMessage),
-      assistantMessageId
+      skillId,
+      arguments:
+        skillId === 'explore-phrase' || skillId === 'explore-vocabulary'
+          ? { wordLanguage }
+          : { text, wordLanguage }
+    })
+  }
+
+  private async launchSkill(
+    input: RunConversationSkillInput,
+    userMessage: StoredMessage,
+    active: ActiveExecution,
+    emit: ConversationEventListener
+  ): Promise<GenerationAccepted> {
+    const { requestId, sessionId, skillId } = input
+    const skill = this.skills.get(skillId)
+    if (!skill) throw new AgentRuntimeError('AGENT_UNAVAILABLE')
+    const body = 'text' in input.arguments ? input.arguments.text : undefined
+    userMessage.content = body === undefined ? `/${skillId}` : `/${skillId} ${body}`
+    const titled = this.prepareConversation(userMessage, skillId === 'tts' ? body : undefined)
+    active.controller.signal.throwIfAborted()
+
+    if (skillId === 'explore-phrase' || skillId === 'explore-vocabulary') {
+      active.assistantMessageId = exploreReplyId(skillId, userMessage.id)
+      await this.saveUserMessage(userMessage, titled)
+      if (titled) void this.updateTitle(requestId, userMessage, emit)
+      const generation = this.generation(requestId, userMessage, active)
+      void this.exploreExecutions.run(generation, randomUUID(), input, skill, active, emit)
+      return { accepted: true, generation }
     }
-    const active = this.executions.get(input.requestId)
-    if (!active) throw new Error('Skill execution is not registered')
+
+    if (!this.storedSkills) throw new AgentRuntimeError('AGENT_UNAVAILABLE')
+    const execution = await this.storedSkills.create(input, userMessage, active.languages, titled)
+    this.drafts.delete(sessionId)
+    if (titled && skillId !== 'tts') void this.updateTitle(requestId, userMessage, emit)
+    const generation = this.generation(requestId, userMessage, active)
     void this.storedSkills.run(generation, execution, skill, active, emit)
     return { accepted: true, generation }
   }
 
-  // 探索技能执行：无数据库执行记录，executionId 在 JSON 批次提交时
-  // 与 userMessageId 建立稳定关联；失败重试按该身份从文件恢复。
-  private async runExploreFileSkill(
-    input: FileResultSkillInput,
-    skill: ConversationSkill,
-    languages: ConversationLanguages,
-    emit: ConversationEventListener
-  ): Promise<GenerationAccepted> {
-    const now = new Date().toISOString()
-    const userMessage: StoredMessage = {
-      id: randomUUID(),
-      sessionId: input.sessionId,
-      role: 'user',
-      // 无参数命令：用户消息就是命令本身，不拼接空文本。
-      content: `/${input.skillId}`,
-      createdAt: now
-    }
-    const executionId = randomUUID()
-    const assistantMessageId = exploreReplyId(input.skillId, userMessage.id)
-    this.executions.register(input.requestId, {
-      controller: new AbortController(),
-      sessionId: input.sessionId,
-      userMessageId: userMessage.id,
-      assistantMessageId,
-      languages
-    })
+  private async saveUserMessage(
+    message: StoredMessage,
+    titled: StoredConversation | undefined
+  ): Promise<void> {
+    await withConversationPersistence(() => this.repository.appendMessage(message, titled))
+    this.drafts.delete(message.sessionId)
+  }
 
-    const titled = this.prepareConversation(userMessage)
-    try {
-      await withConversationPersistence(() => this.repository.appendMessage(userMessage, titled))
-      this.drafts.delete(input.sessionId)
-    } catch (error) {
-      this.executions.release(input.requestId)
-      emit({
-        type: 'failed',
-        requestId: input.requestId,
-        sessionId: input.sessionId,
-        error: toConversationEventError(error)
-      })
-      throw error
+  private generation(
+    requestId: string,
+    message: StoredMessage,
+    active: ActiveExecution
+  ): GenerationStarted {
+    return {
+      requestId,
+      sessionId: message.sessionId,
+      userMessage: toConversationMessage(message),
+      assistantMessageId: active.assistantMessageId
     }
-
-    if (titled) void this.updateTitle(input.requestId, userMessage, emit)
-
-    const generation: GenerationStarted = {
-      requestId: input.requestId,
-      sessionId: input.sessionId,
-      userMessage: toConversationMessage(userMessage),
-      assistantMessageId
-    }
-    const active = this.executions.get(input.requestId)
-    if (!active) throw new Error('Skill execution is not registered')
-    void this.exploreExecutions.run(generation, executionId, input, skill, active, emit)
-    return { accepted: true, generation }
   }
 
   async retryMessage(
@@ -409,39 +411,52 @@ export class ConversationModule {
       throw new RetryNotAllowedError('only the last unanswered user message can be retried')
     }
 
-    const assistantMessageId = randomUUID()
-    // 普通回复重试视为新执行，读取当前语言设置。
-    this.executions.register(input.requestId, {
+    const active = {
       controller: new AbortController(),
       sessionId: input.sessionId,
       userMessageId: userMessage.id,
-      assistantMessageId,
+      assistantMessageId: randomUUID(),
       languages: this.snapshotLanguages()
-    })
-
-    const generation: GenerationStarted = {
-      requestId: input.requestId,
-      sessionId: input.sessionId,
-      userMessage: toConversationMessage(userMessage),
-      assistantMessageId
     }
-    return this.launchGeneration(generation, emit)
+    this.executions.register(input.requestId, active)
+    try {
+      const generation = this.generation(input.requestId, userMessage, active)
+      if (userMessage.replyTask === 'concept')
+        return this.launchGeneration(generation, emit, userMessage.replyTask)
+
+      const route = await this.agentRuntime.routeConversation({
+        mode: 'retry',
+        text: userMessage.content,
+        ...active.languages,
+        signal: active.controller.signal
+      })
+      active.controller.signal.throwIfAborted()
+      if (route.kind !== 'reply' && (route.kind !== 'workflow' || route.workflow !== 'concept'))
+        throw new AgentRuntimeError('AGENT_PROTOCOL_ERROR')
+      return this.launchGeneration(
+        generation,
+        emit,
+        route.kind === 'workflow' ? 'concept' : 'conversation'
+      )
+    } catch (error) {
+      this.executions.release(input.requestId, active)
+      throw error
+    }
   }
 
   cancelMessage(requestId: string): void {
     this.executions.cancel(requestId)
   }
 
-  private prepareConversation(message: StoredMessage): StoredConversation | undefined {
+  private prepareConversation(
+    message: StoredMessage,
+    speechText?: string
+  ): StoredConversation | undefined {
     const draft = this.drafts.get(message.sessionId)
     if (!draft) return undefined
-    const command = /^\/tts\s/u.exec(message.content)
     return {
       ...draft,
-      title: (command
-        ? message.content.slice(command[0].length).replace(/\s+/gu, ' ')
-        : message.content
-      )
+      title: (speechText?.replace(/\s+/gu, ' ') ?? message.content)
         .trim()
         .slice(0, CONVERSATION_TITLE_MAX_LENGTH)
         .trim(),
@@ -524,14 +539,15 @@ export class ConversationModule {
 
   private launchGeneration(
     generation: GenerationStarted,
-    emit: ConversationEventListener
+    emit: ConversationEventListener,
+    task: ReplyTask
   ): GenerationAccepted {
     const execution = this.executions.get(generation.requestId)
     if (!execution) {
       throw new Error('Generation execution is not registered')
     }
 
-    void this.runGeneration(generation, execution, emit)
+    void this.runGeneration(generation, execution, emit, task)
     return { accepted: true, generation }
   }
 
@@ -548,19 +564,21 @@ export class ConversationModule {
   private async runGeneration(
     generation: GenerationStarted,
     execution: ActiveExecution,
-    emit: ConversationEventListener
+    emit: ConversationEventListener,
+    task: ReplyTask
   ): Promise<void> {
     const { requestId, sessionId, assistantMessageId } = generation
     const eventBase = { requestId, sessionId }
+    const publish = this.executions.releaseOnTerminal(execution, emit)
 
     try {
       // started 的语义：user 消息已持久化、canonical 生成身份已建立。
-      emit({ type: 'started', ...generation })
+      publish({ type: 'started', ...generation })
 
       // 取消发生在 user append 期间：append 完成后仍先发 started 再发 cancelled，
       // 使 UI 与数据库中已存在的 user 消息保持一致。
       if (execution.controller.signal.aborted) {
-        emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
+        publish({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
         return
       }
 
@@ -569,7 +587,7 @@ export class ConversationModule {
       let response = ''
       const stream = this.agentRuntime.stream({
         sessionId,
-        task: 'conversation',
+        task,
         messages: modelMessages,
         ...execution.languages,
         signal: execution.controller.signal
@@ -579,7 +597,7 @@ export class ConversationModule {
         if (event.type === 'reasoning') {
           // 思考只作为本次请求的临时展示数据转发：不写入 response，
           // 也不进入最终消息、会话历史与后续模型上下文。
-          emit({
+          publish({
             ...eventBase,
             type: 'reasoningChunk',
             messageId: assistantMessageId,
@@ -587,13 +605,18 @@ export class ConversationModule {
           })
         } else {
           response += event.delta
-          emit({ ...eventBase, type: 'chunk', messageId: assistantMessageId, delta: event.delta })
+          publish({
+            ...eventBase,
+            type: 'chunk',
+            messageId: assistantMessageId,
+            delta: event.delta
+          })
         }
         if (execution.controller.signal.aborted) break
       }
 
       if (execution.controller.signal.aborted) {
-        emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
+        publish({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
         return
       }
 
@@ -605,13 +628,13 @@ export class ConversationModule {
         createdAt: new Date().toISOString()
       }
       await withConversationPersistence(() => this.repository.appendMessage(assistantMessage))
-      emit({ ...eventBase, type: 'completed', message: toConversationMessage(assistantMessage) })
+      publish({ ...eventBase, type: 'completed', message: toConversationMessage(assistantMessage) })
     } catch (error) {
       if (execution.controller.signal.aborted) {
-        emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
+        publish({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
       } else {
         reportConversationFailure(this.diagnostics, 'generate-reply', requestId, error)
-        emit({
+        publish({
           ...eventBase,
           type: 'failed',
           messageId: assistantMessageId,
@@ -619,7 +642,7 @@ export class ConversationModule {
         })
       }
     } finally {
-      this.executions.release(requestId)
+      this.executions.release(requestId, execution)
     }
   }
 }

@@ -1,4 +1,4 @@
-"""Single-call concept explanation, selected internally from conversation messages."""
+"""Single-call concept explanation, selected by the conversation entry graph."""
 
 from typing import Any, cast
 

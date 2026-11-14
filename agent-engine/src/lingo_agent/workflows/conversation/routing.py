@@ -1,32 +1,80 @@
-"""Select a conversation workflow using only the latest user message."""
+"""Select one workflow using the current request and its admitted scope."""
 
-from typing import Any
+from typing import Any, Literal, TypedDict, cast
 
-from lingo_agent.state import LearningState
-from lingo_agent.workflows.common import HostCall
-from lingo_agent.workflows.conversation.concept import execute_concept
-from lingo_agent.workflows.conversation.graph import execute_conversation
+from langgraph.graph import END, START, StateGraph
 
-# Match ECMAScript trim()/\s, including BOM and excluding Python-only whitespace.
-COMMAND_WHITESPACE = (
-    "\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680\u2000\u2001\u2002\u2003"
-    "\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000"
-    "\ufeff"
-)
+from lingo_agent.workflows.common import HostCall, LimitError, chars
+from lingo_agent.workflows.conversation.prompts import conversation_intent_system_message
+
+# None means the workflow accepts either a bare command or an argument.
+COMMANDS: dict[str, bool | None] = {
+    "concept": None,
+    "vocabulary": True,
+    "phrase": True,
+    "synonym": True,
+    "explore-phrase": False,
+    "explore-vocabulary": False,
+    "sentence": True,
+    "tts": True,
+}
+RESTRICTED_COMMANDS = {"channel-chat": (), "channel-sentence": ("sentence",), "retry": ("concept",)}
+CLASSIFY = "model.classify-conversation"
 
 
-def is_word_concept_message(content: str) -> bool:
-    content = content.strip(COMMAND_WHITESPACE)
-    command = "/concept"
-    return content.startswith(command) and (
-        len(content) == len(command) or content[len(command)] in COMMAND_WHITESPACE
-    )
+class ReplyRoute(TypedDict):
+    kind: Literal["reply"]
+
+
+class WorkflowRoute(TypedDict):
+    kind: Literal["workflow", "invalid"]
+    workflow: str
+
+
+class ConversationRouteState(TypedDict):
+    route: ReplyRoute | WorkflowRoute | None
 
 
 async def execute_conversation_route(
-    run_id: str, snapshot: dict[str, Any], host: HostCall
-) -> LearningState:
-    latest = snapshot["messages"][-1]
-    if latest["role"] == "user" and is_word_concept_message(latest["content"]):
-        return await execute_concept(run_id, snapshot, host)
-    return await execute_conversation(run_id, snapshot, host)
+    snapshot: dict[str, Any], host: HostCall
+) -> ConversationRouteState:
+    async def route(state: ConversationRouteState) -> ConversationRouteState:
+        request = snapshot["route"]
+        command, mode = request["command"], request["mode"]
+        if command in COMMANDS and (mode == "desktop" or command in RESTRICTED_COMMANDS[mode]):
+            required = COMMANDS[command]
+            kind: Literal["workflow", "invalid"] = (
+                "workflow" if required is None or required == request["hasArguments"] else "invalid"
+            )
+            return {"route": {"kind": kind, "workflow": command}}
+        if command is None and mode == "desktop":
+            if CLASSIFY not in snapshot["allowedOperations"]:
+                raise ValueError("operation not allowed")
+            budget = snapshot["budget"]
+            prompt = conversation_intent_system_message(
+                snapshot["outputLanguage"], snapshot["targetLanguage"]
+            )
+            if (
+                budget["maxSteps"] < 1
+                or budget["maxModelCalls"] < 1
+                or chars(prompt) > 4096
+                or chars(prompt) + snapshot["inputChars"] > budget["maxInputChars"]
+            ):
+                raise LimitError()
+            receipt = await host(CLASSIFY, {"systemPrompt": prompt})
+            if receipt == {"intent": "concept"}:
+                return {"route": {"kind": "workflow", "workflow": "concept"}}
+            if receipt not in ({"intent": "reply"}, {"intent": "unclear"}):
+                raise ValueError("invalid classification receipt")
+        return {"route": {"kind": "reply"}}
+
+    graph = StateGraph(ConversationRouteState)
+    graph.add_node("route_request", route)
+    graph.add_edge(START, "route_request")
+    graph.add_edge("route_request", END)
+    return cast(
+        ConversationRouteState,
+        await graph.compile().ainvoke(
+            {"route": None}, {"recursion_limit": snapshot["budget"]["maxSteps"] + 1}
+        ),
+    )

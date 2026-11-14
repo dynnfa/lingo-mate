@@ -1,3 +1,6 @@
+import type { AgentRuntime } from '../../src/core/agent/agent-runtime'
+import { splitConversationCommand } from '../../src/shared/conversation-command'
+import { conversationSkillIdSchema } from '../../src/shared/conversation'
 import { ConversationModule } from '../../src/core/conversation/conversation-module'
 import type { LanguageModel } from '../../src/core/llm/language-model'
 import { languageName } from '../../src/core/prompt/language-name'
@@ -6,6 +9,20 @@ type Dependencies = ConstructorParameters<typeof ConversationModule>
 
 export function testSystemPrompt(outputLanguage: string, targetLanguage: string): string {
   return `Test fixture. Explain in ${languageName(outputLanguage)}; examples in ${languageName(targetLanguage)}.`
+}
+
+// Deterministic stub for tests of the conversation host and persistence.
+export const stubConversationRoute: AgentRuntime['routeConversation'] = async ({ mode, text }) => {
+  const command = splitConversationCommand(text)
+  if (command?.command === 'concept' && (mode === 'desktop' || mode === 'retry'))
+    return { kind: 'workflow', workflow: 'concept' }
+  const skill = conversationSkillIdSchema.safeParse(command?.command)
+  if (
+    skill.success &&
+    (mode === 'desktop' || (mode === 'channel-sentence' && skill.data === 'sentence'))
+  )
+    return { kind: 'workflow', workflow: skill.data }
+  return { kind: 'reply' }
 }
 
 // Only a deterministic AgentRuntime test double. Real routing/Prompt behavior is
@@ -18,6 +35,7 @@ export function createTestConversationModule(
   return new ConversationModule(
     repository,
     {
+      routeConversation: stubConversationRoute,
       runSentence: async () => {
         throw new Error('Unused sentence runtime')
       },

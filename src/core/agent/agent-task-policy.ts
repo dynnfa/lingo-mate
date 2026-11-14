@@ -5,6 +5,7 @@ export type AgentSuccessFrame = Extract<
   {
     type:
       | 'result'
+      | 'conversation_route_result'
       | 'vocabulary_result'
       | 'phrase_result'
       | 'synonym_result'
@@ -54,6 +55,27 @@ const policies = {
     concurrency: { max: 1 },
     events: 'stream',
     successFrame: 'result'
+  },
+  concept: {
+    budget: DEFAULT_AGENT_BUDGET,
+    allowedOperations: ['model.reply'],
+    concurrency: { max: 1 },
+    events: 'stream',
+    successFrame: 'result'
+  },
+  'conversation-route': {
+    budget: {
+      timeoutMs: 15_000,
+      maxModelCalls: 1,
+      maxToolCalls: 0,
+      maxSteps: 1,
+      maxInputChars: 8096,
+      maxOutputChars: 256
+    },
+    allowedOperations: ['model.classify-conversation'],
+    concurrency: { max: 1 },
+    events: 'none',
+    successFrame: 'conversation_route_result'
   },
   'conversation-title': {
     budget: {

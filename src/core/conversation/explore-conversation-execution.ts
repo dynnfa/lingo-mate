@@ -124,12 +124,13 @@ export class ExploreConversationExecution {
   ): Promise<void> {
     const { requestId, sessionId, assistantMessageId } = generation
     const eventBase = { requestId, sessionId }
+    const publish = this.executions.releaseOnTerminal(execution, emit)
     const retryIdentity = { skillId: input.skillId, executionId, languages: execution.languages }
     this.uncommittedExploreExecutions.set(execution.userMessageId, retryIdentity)
     try {
-      emit({ type: 'started', ...generation })
+      publish({ type: 'started', ...generation })
       if (execution.controller.signal.aborted) {
-        emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
+        publish({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
         return
       }
       const result = await skill.run({
@@ -143,17 +144,17 @@ export class ExploreConversationExecution {
         onPhase: async (phase) => {
           if (phase === 'committing')
             this.uncommittedExploreExecutions.delete(execution.userMessageId)
-          emit({ ...eventBase, type: 'skillPhase', phase })
+          publish({ ...eventBase, type: 'skillPhase', phase })
         },
         isReportProtected: (report) => this.isExploreReportProtected(report)
       } satisfies ConversationSkillRunInput)
       if (result.outcome === 'cancelled') {
         this.uncommittedExploreExecutions.set(execution.userMessageId, retryIdentity)
-        emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
+        publish({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
         return
       }
       this.uncommittedExploreExecutions.delete(execution.userMessageId)
-      await this.persistExploreReply(generation, result.report, skill, emit)
+      await this.persistExploreReply(generation, result.report, skill, publish)
     } catch (error) {
       // These failures guarantee that atomic replacement did not happen.
       // COMMIT_UNCERTAIN deliberately does not authorize regeneration.
@@ -169,10 +170,10 @@ export class ExploreConversationExecution {
         execution.controller.signal.aborted &&
         this.uncommittedExploreExecutions.has(execution.userMessageId)
       ) {
-        emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
+        publish({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
       } else {
         reportConversationFailure(this.diagnostics, `run-${input.skillId}`, requestId, error)
-        emit({
+        publish({
           ...eventBase,
           type: 'failed',
           messageId: assistantMessageId,
@@ -180,7 +181,7 @@ export class ExploreConversationExecution {
         })
       }
     } finally {
-      this.executions.release(requestId)
+      this.executions.release(requestId, execution)
     }
   }
 
@@ -322,27 +323,28 @@ export class ExploreConversationExecution {
   ): Promise<void> {
     const { requestId, sessionId, assistantMessageId } = generation
     const eventBase = { requestId, sessionId }
+    const publish = this.executions.releaseOnTerminal(execution, emit)
     try {
-      emit({ type: 'started', ...generation })
+      publish({ type: 'started', ...generation })
       if (execution.controller.signal.aborted) {
-        emit({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
+        publish({ ...eventBase, type: 'cancelled', messageId: assistantMessageId })
         return
       }
-      emit({ ...eventBase, type: 'skillPhase', phase: 'summarizing' })
-      await this.persistExploreReply(generation, report, skill, emit)
+      publish({ ...eventBase, type: 'skillPhase', phase: 'summarizing' })
+      await this.persistExploreReply(generation, report, skill, publish)
     } catch (error) {
       const skillId: FileResultSkillId = isExplorePhraseReport(report)
         ? 'explore-phrase'
         : 'explore-vocabulary'
       reportConversationFailure(this.diagnostics, `retry-${skillId}`, requestId, error)
-      emit({
+      publish({
         ...eventBase,
         type: 'failed',
         messageId: assistantMessageId,
         error: toConversationEventError(error)
       })
     } finally {
-      this.executions.release(requestId)
+      this.executions.release(requestId, execution)
     }
   }
 }
