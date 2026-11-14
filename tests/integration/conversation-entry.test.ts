@@ -7,8 +7,10 @@ import type Database from 'better-sqlite3'
 import { ConversationModule } from '../../src/core/conversation/conversation-module'
 import type { ConversationSkill } from '../../src/core/conversation/conversation-skill'
 import { ConversationBusyError } from '../../src/core/conversation/conversation-repository'
-import { ModelRequestError } from '../../src/core/llm/llm-client'
+import { LlmClient, ModelRequestError } from '../../src/core/llm/llm-client'
+import { LlmUsageRecorder } from '../../src/core/llm/llm-usage-recorder'
 import type { LanguageModel } from '../../src/core/llm/language-model'
+import { RemoteLanguageModel } from '../../src/core/llm/remote-language-model'
 import { ExplorePhraseConversationSkill } from '../../src/core/learning/explore-phrase/explore-phrase-conversation-skill'
 import { ExplorePhraseModule } from '../../src/core/learning/explore-phrase/explore-phrase-module'
 import { ExploreVocabularyConversationSkill } from '../../src/core/learning/explore-vocabulary/explore-vocabulary-conversation-skill'
@@ -25,6 +27,7 @@ import { TtsConversationSkill } from '../../src/core/speech/tts-conversation-ski
 import { joinSpeechPcm } from '../../src/core/speech/speech-audio'
 import { openDatabase } from '../../src/database/database'
 import { SqliteConversationRepository } from '../../src/database/sqlite-conversation-repository'
+import { SqliteLlmUsageRepository } from '../../src/database/sqlite-llm-usage-repository'
 import { SqlitePhraseRepository } from '../../src/database/sqlite-phrase-repository'
 import { SqliteSentenceRepository } from '../../src/database/sqlite-sentence-repository'
 import { SqliteSynonymRepository } from '../../src/database/sqlite-synonym-repository'
@@ -32,6 +35,7 @@ import { SqliteTtsRepository } from '../../src/database/sqlite-tts-repository'
 import { SqliteVocabularyRepository } from '../../src/database/sqlite-vocabulary-repository'
 import { PythonAgentProcess } from '../../src/main/agent/python-agent-process'
 import { PythonAgentRuntime } from '../../src/main/agent/python-agent-runtime'
+import { toSafeRequestError } from '../../src/main/conversation-errors'
 import { createExplorePhraseFeedbackFormatter } from '../../src/main/explore-phrase-feedback'
 import { JsonFileExplorePhraseHistoryStore } from '../../src/main/explore-phrase-history-store'
 import { createExploreVocabularyFeedbackFormatter } from '../../src/main/explore-vocabulary-feedback'
@@ -43,13 +47,16 @@ import { createVocabularyFeedbackFormatter } from '../../src/main/vocabulary-fee
 import type { ConversationEvent, GenerationAccepted } from '../../src/shared/conversation'
 import { SPEECH_IDENTITY, type SpeechInput } from '../../src/shared/speech'
 
-function harness(streamReply: LanguageModel['streamReply']): {
+function harness(
+  streamReply: LanguageModel['streamReply'],
+  path = ':memory:'
+): {
   db: Database.Database
   repository: SqliteConversationRepository
   runtime: PythonAgentRuntime
   wire: MockInstance<PythonAgentProcess['send']>
 } {
-  const db = openDatabase(':memory:')
+  const db = openDatabase(path)
   const repository = new SqliteConversationRepository(db)
   const child = new PythonAgentProcess({
     command: resolve(
@@ -370,6 +377,111 @@ it.each(['invalid response', 'TIMEOUT', 'NETWORK'] as const)(
     }
   }
 )
+
+it('publishes one safe route failure when the provider rejects classification with HTTP 401', async () => {
+  const { db, repository, runtime } = harness((input) => model.streamReply(input))
+  const model = new RemoteLanguageModel(
+    {
+      configured: true,
+      protocol: 'openai-compatible',
+      baseUrl: 'http://127.0.0.1:1/v1',
+      modelId: 'fixture',
+      apiKey: 'fixture'
+    },
+    undefined,
+    (config) => new LlmClient(config, new LlmUsageRecorder(new SqliteLlmUsageRepository(db)))
+  )
+  const module = new ConversationModule(repository, runtime)
+  const fetchMock = vi.fn(async () =>
+    Response.json({ error: { message: 'Provider denied the request' } }, { status: 401 })
+  )
+  vi.stubGlobal('fetch', fetchMock)
+  try {
+    const { sessionId } = await module.createConversation()
+    const requestId = randomUUID()
+    const events: ConversationEvent[] = []
+    const result = await module
+      .sendMessage({ sessionId, requestId, text: 'Hello' }, (event) => events.push(event))
+      .catch((error: unknown) => toSafeRequestError(error))
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({ code: 'MODEL_ERROR' })
+    expect(events).toEqual([{ type: 'failed', sessionId, requestId, error: result }])
+    expect(await repository.find(sessionId)).toBeUndefined()
+    expect((await module.loadConversation(sessionId)).messages).toEqual([])
+  } finally {
+    vi.unstubAllGlobals()
+    await module.shutdown()
+    await runtime.dispose()
+    db.close()
+  }
+})
+
+it('retries a failed natural-language concept with the same workflow after reopening the database', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'lingo-concept-retry-'))
+  const path = join(directory, 'conversation.sqlite')
+  const sessionId = randomUUID()
+  const text = 'How do I use carry out?'
+  try {
+    const first = harness(async function* ({ purpose, systemPrompt }) {
+      if (purpose === 'conversation-route') {
+        yield { type: 'text', delta: 'concept' }
+        return
+      }
+      expect(systemPrompt).toContain('the /concept command')
+      throw new ModelRequestError('NETWORK', new Error('Provider disconnected'))
+    }, path)
+    const firstModule = new ConversationModule(first.repository, first.runtime)
+    let userMessageId: string
+    try {
+      await firstModule.createPersistentConversation(sessionId, 'Existing')
+      const events: ConversationEvent[] = []
+      const { generation } = await firstModule.sendMessage(
+        { sessionId, requestId: randomUUID(), text },
+        (event) => events.push(event)
+      )
+      await vi.waitFor(() => expect(events.map(({ type }) => type)).toEqual(['started', 'failed']))
+      userMessageId = generation.userMessage.messageId
+    } finally {
+      await firstModule.shutdown()
+      await first.runtime.dispose()
+      first.db.close()
+    }
+
+    const retryModel = vi.fn<LanguageModel['streamReply']>(async function* () {
+      yield { type: 'text', delta: 'A concept explanation.' }
+    })
+    const retry = harness(retryModel, path)
+    const retryModule = new ConversationModule(retry.repository, retry.runtime)
+    try {
+      await terminal((emit) =>
+        retryModule.retryMessage({ sessionId, userMessageId, requestId: randomUUID() }, emit)
+      )
+      expect(retryModel).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          purpose: 'conversation',
+          systemPrompt: expect.stringContaining('the /concept command'),
+          messages: [{ role: 'user', content: text }]
+        })
+      )
+      expect(
+        retry.wire.mock.calls.flatMap(([frame]) =>
+          frame.type === 'run' ? [frame.snapshot.task] : []
+        )
+      ).toEqual(['concept'])
+      expect((await retry.repository.history(sessionId)).map(({ content }) => content)).toEqual([
+        text,
+        'A concept explanation.'
+      ])
+    } finally {
+      await retryModule.shutdown()
+      await retry.runtime.dispose()
+      retry.db.close()
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
 
 it('retries an upgraded message-only record as ordinary conversation without creating a skill execution', async () => {
   const { db, repository, runtime, wire } = harness(async function* ({ purpose, messages }) {

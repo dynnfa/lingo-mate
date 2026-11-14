@@ -31,6 +31,7 @@ interface MessageRow {
   content: string
   created_at: string
   speech_json?: string | null
+  concept_reply?: number
   retryable?: number
 }
 
@@ -113,12 +114,14 @@ export class SqliteConversationRepository
       const rows = this.database
         .prepare(
           `SELECT m.id, m.session_id, m.role, m.content, m.created_at, speech.batch_json AS speech_json,
+                  concept.user_message_id IS NOT NULL AS concept_reply,
                   CASE WHEN e.phase IN (
                     'started', 'analyzing', 'committing', 'summarizing', 'cancelled', 'failed',
                     'description_failed', 'description_cancelled'
                   )
                        THEN 1 ELSE 0 END AS retryable
            FROM conversation_messages m
+           LEFT JOIN conversation_concept_messages concept ON concept.user_message_id = m.id
            LEFT JOIN conversation_skill_executions e ON e.user_message_id = m.id
            LEFT JOIN conversation_skill_executions speech ON speech.assistant_message_id = m.id AND speech.skill_id = 'tts'
            WHERE m.session_id = ?
@@ -145,6 +148,11 @@ export class SqliteConversationRepository
              VALUES (@id, @sessionId, @role, @content, @createdAt)`
           )
           .run(message)
+        if (message.role === 'user' && message.replyTask === 'concept') {
+          this.database
+            .prepare('INSERT INTO conversation_concept_messages (user_message_id) VALUES (?)')
+            .run(message.id)
+        }
         this.database
           .prepare('UPDATE conversations SET updated_at = MAX(updated_at, ?) WHERE id = ?')
           .run(message.createdAt, message.sessionId)
@@ -258,6 +266,7 @@ function toStoredMessage(row: MessageRow): StoredMessage {
     role: row.role,
     content: row.content,
     createdAt: row.created_at,
+    ...(row.role === 'user' && row.concept_reply === 1 ? { replyTask: 'concept' } : {}),
     ...(row.speech_json
       ? { speech: ttsReportSchema.parse(JSON.parse(row.speech_json)).speech }
       : {}),
