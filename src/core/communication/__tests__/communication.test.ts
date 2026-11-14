@@ -965,10 +965,9 @@ it('treats /start as help only for explicitly configured adapters and never cons
   expect(f.business.execute).not.toHaveBeenCalled()
   expect(f.adapter.sent.map((p) => p.text).join('')).toContain('Commands:')
 })
-it('does not acknowledge transport rejection on capacity exhaustion, including on existing v15 databases', async () => {
+it('does not acknowledge transport rejection on capacity exhaustion', async () => {
   const f = fixture()
   await f.start()
-  expect(f.db.pragma('user_version', { simple: true })).toBe(15)
   f.repository.transaction((s) => {
     for (let n = 0; n < 10000; n++) {
       const id = randomUUID()

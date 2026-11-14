@@ -80,7 +80,7 @@ for (const agentBundle of [false, true]) {
           }
           await submit('adequate, decent')
           await expect(window.locator('.message.assistant').last()).toContainText('decent: added')
-          await window.locator('#message').fill('/synonym')
+          await window.locator('#message').fill('/syn')
           await window.locator('#message').press('Enter')
           await expect(window.locator('#message')).toHaveValue('/synonym ')
           await submit('ADEQUATE，decent')

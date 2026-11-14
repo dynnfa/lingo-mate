@@ -14,7 +14,7 @@ import type { LingoMateApi } from '../../src/shared/conversation'
 
 async function selectVocabulary(window: Page): Promise<void> {
   const input = window.locator('#message')
-  await input.fill('/vocabulary')
+  await input.fill('/voc')
   await input.press('Enter')
   await expect(input).toHaveValue('/vocabulary ')
   await expect(window.getByRole('region', { name: 'Conversation history' })).toBeVisible()

@@ -10,7 +10,8 @@ export interface StreamReplyInput {
   // 调用方提供完整指令，显式声明各类自然语言输出所用的语言。
   // 传输适配器不识别命令，也不选择或组装 Agent Prompt。
   systemPrompt: string
-  purpose: 'conversation' | 'conversation-title'
+  purpose: 'conversation' | 'conversation-title' | 'conversation-route'
+  timeoutMs?: number
   signal: AbortSignal
 }
 

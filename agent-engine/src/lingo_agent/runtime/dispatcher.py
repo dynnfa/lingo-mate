@@ -4,7 +4,12 @@ from typing import Any
 
 from lingo_agent.state import LearningState
 from lingo_agent.workflows.common import HostCall
-from lingo_agent.workflows.conversation.routing import execute_conversation_route
+from lingo_agent.workflows.conversation.concept import execute_concept
+from lingo_agent.workflows.conversation.graph import execute_conversation
+from lingo_agent.workflows.conversation.routing import (
+    ConversationRouteState,
+    execute_conversation_route,
+)
 from lingo_agent.workflows.conversation.title import execute_title
 from lingo_agent.workflows.explore_phrase.graph import ExplorePhraseState, execute_explore_phrase
 from lingo_agent.workflows.explore_vocabulary.graph import (
@@ -31,6 +36,7 @@ async def execute(
     run_id: str, snapshot: dict[str, Any], host: HostCall
 ) -> (
     LearningState
+    | ConversationRouteState
     | SentenceState
     | TtsState
     | VocabularyState
@@ -45,7 +51,11 @@ async def execute(
     if task == "sentence":
         return await execute_sentence(snapshot, host)
     if task == "conversation":
-        return await execute_conversation_route(run_id, snapshot, host)
+        return await execute_conversation(run_id, snapshot, host)
+    if task == "concept":
+        return await execute_concept(run_id, snapshot, host)
+    if task == "conversation-route":
+        return await execute_conversation_route(snapshot, host)
     if task == "conversation-title":
         return await execute_title(run_id, snapshot, host)
     if task == "vocabulary":

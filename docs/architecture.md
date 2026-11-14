@@ -69,9 +69,11 @@ type AppView = 'conversation' | 'settings' | 'recorded' | 'practice' | 'mistakes
 
 ## 对话技能执行边界
 
-Python 运行服务通过 `runtime/dispatcher.py` 显式分发 task，各功能在 `agent-engine/src/lingo_agent/workflows/` 内聚合图、节点、局部状态与 Prompt。`conversation/routing.py` 只根据最新 user 消息选择普通对话或概念图，标题使用独立入口；目录调整不改变 Renderer 接口、协议或宿主权限。
+桌面直输和选择器都通过 `send` 发送命令原文，类型化 `runSkill` 继续作为兼容入口。 `ConversationModule` 先登记请求、取得会话互斥并冻结语言和渠道权限。随后 `conversation/routing.py` 的独立 `conversation-route` 图基于本次请求的命令首词和参数描述选择工作流。支持 `/concept`、`/vocabulary`、`/phrase`、`/synonym`、`/explore-phrase`、`/explore-vocabulary`、`/sentence` 和 `/tts`。
 
-`/phrase` 与 `/vocabulary` 的显式命令入口继续使用现有会话界面和 Preload API；它们不是页面路由。两者的分析 Prompt 和批量执行由 Python / LangGraph 持有，Renderer 仅展示原有阶段、报告和安全错误。词条内容与报告在可信宿主统一提交，不把图状态或内部工具载荷暴露给界面。运行时职责与协议 v11 见 [Agent Engine README](../agent-engine/README.md)。
+自然语言仅在桌面入口进行一次只读分类，候选为概念讲解和普通回复。分类器只能读取最新消息。普通对话和概念图各自接收绑定后的会话历史。渠道入口按已准入操作限定为普通回复或句子收录，通信控制命令由通信层处理。会话标题和练习有独立入口。
+
+宿主核验唯一终态及请求权限，校验原始参数后保存用户消息并发布 `started`。选中的工作流以独立 Python 运行身份启动，共用本次宿主请求的语言快照和取消信号。保存前取消会保留草稿，已开始的工作流沿用既有阶段、报告和安全错误。协议和预算见 [Agent Engine README](../agent-engine/README.md#对话入口路由)。
 
 ### TypeScript 通用运行层
 
@@ -79,7 +81,7 @@ Python 运行服务通过 `runtime/dispatcher.py` 显式分发 task，各功能�
 
 任务专属的操作／回执解析、准备顺序、绑定索引、模型依赖与完成核验位于 `src/core/agent/tasks/`。领域 Host 继续保留内容、轮次授权、事务及完成账本。Main 仅在成功帧与当前策略匹配、全部宿主调用结束且 Adapter 核验通过后释放结果；业务提交仍由原有领域 Module 执行。所有任务拒绝提前成功，终止后的回执不触发再次核验或重放。
 
-这次职责拆分保留 Python 唯一 Agent 运行时、Zod 唯一协议来源、公开运行签名及现有持久化格式，不新增动态执行或回退入口。详细接口与计量口径见 [Agent Engine README](../agent-engine/README.md#typescript-宿主任务边界)。
+Python 是唯一 Agent 运行时，跨语言协议由 Zod 生成。详细接口与计量口径见 [Agent Engine README](../agent-engine/README.md#typescript-宿主任务边界)。
 
 ### TypeScript 领域实现归属
 
@@ -93,9 +95,9 @@ Python 运行服务通过 `runtime/dispatcher.py` 显式分发 task，各功能�
 
 - `explore-conversation-execution.ts` 管理探索技能的执行、稳定回复身份、运行期未提交记录、文件批次恢复及淘汰保护。已提交批次只恢复本地回复；缺失批次只有当前进程确认未提交时才能在用户显式重试后重新生成，提交结果不确定时不授予重新生成权限。
 - `stored-conversation-skill-runner.ts` 管理 SQLite 技能执行记录、阶段与原子回复提交。完整报告只恢复反馈；近义词的未完成报告沿原执行继续处理，保留逐词提交结果。
-- `conversation-execution.ts` 为普通回复和两类技能统一管理请求身份、会话互斥、取消与退出等待，后台标题也计入等待范围。持久化错误包装、安全错误映射与诊断集中在 `conversation-errors.ts`，消息展示转换由 `conversation-message.ts` 复用。
+- `conversation-execution.ts` 统一管理从路由到生成的请求身份、会话互斥、取消与退出等待。终态发布时释放请求和会话归属，后台标题也计入退出等待范围。持久化错误包装、安全错误映射与诊断集中在 `conversation-errors.ts`，消息展示转换由 `conversation-message.ts` 复用。
 
-这些模块只承担 TypeScript 宿主的会话生命周期与恢复职责；Python 继续持有 Agent 策略、Prompt 和图执行。公开 `ConversationModule` 签名、事件协议、SQLite schema 与 JSON 历史格式保持原样。
+已有技能按持久化的身份、参数和执行阶段恢复。概念讲解的工作流身份与用户消息一并保存，显式重试直接恢复原只读工作流。缺少工作流身份的历史记录通过只读入口重试，避免把升级前的斜杠文本执行为写入命令。
 
 ### 近义词 Agent
 

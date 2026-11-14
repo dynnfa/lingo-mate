@@ -6,7 +6,7 @@ import time
 
 mode = sys.argv[1]
 hello = json.loads(sys.stdin.readline())
-base = {"v": 12, "instanceId": hello["instanceId"]}
+base = {"v": 13, "instanceId": hello["instanceId"]}
 if mode == "wrong-version":
     base["v"] = 99
 if mode == "wrong-instance":
@@ -17,7 +17,7 @@ if mode == "truncated":
     raise SystemExit(0)
 print(
     json.dumps(
-        {**base, "type": "ready", "capabilities": ["sentence", "tts", "conversation", "conversation-title", "tool-loop", "vocabulary", "phrase", "synonym", "explore-phrase", "explore-vocabulary", "sentence-practice-hints", "sentence-practice-review", "vocabulary-practice-review"]}
+        {**base, "type": "ready", "capabilities": ["sentence", "tts", "conversation", "conversation-title", "concept", "conversation-route", "tool-loop", "vocabulary", "phrase", "synonym", "explore-phrase", "explore-vocabulary", "sentence-practice-hints", "sentence-practice-review", "vocabulary-practice-review"]}
     ),
     flush=True,
 )

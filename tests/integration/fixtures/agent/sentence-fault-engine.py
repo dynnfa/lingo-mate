@@ -4,14 +4,14 @@ import sys
 
 mode = sys.argv[1]
 hello = json.loads(sys.stdin.readline())
-base = {"v": 12, "instanceId": hello["instanceId"]}
+base = {"v": 13, "instanceId": hello["instanceId"]}
 
 
 def send(kind, **payload):
     print(json.dumps({**base, "type": kind, **payload}), flush=True)
 
 
-send("ready", capabilities=["sentence", "tts", "conversation", "conversation-title", "tool-loop", "vocabulary", "phrase", "synonym", "explore-phrase", "explore-vocabulary", "sentence-practice-hints", "sentence-practice-review", "vocabulary-practice-review"])
+send("ready", capabilities=["sentence", "tts", "conversation", "conversation-title", "concept", "conversation-route", "tool-loop", "vocabulary", "phrase", "synonym", "explore-phrase", "explore-vocabulary", "sentence-practice-hints", "sentence-practice-review", "vocabulary-practice-review"])
 run = json.loads(sys.stdin.readline())
 run_id = run["runId"]
 operation = f"model.{run['snapshot']['task']}"

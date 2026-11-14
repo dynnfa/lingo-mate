@@ -11,12 +11,12 @@
 
 ## 已开放业务及恢复证据
 
-| 操作                                   | 分派                                                             | 完成关联 / 恢复方式                                                                                                          |
-| -------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| 普通文本                               | ConversationModule → 既有 Python conversation / concept 策略     | 调用前持久化 requestId、sessionId 和 canonical user / assistant messageId；仅按两个精确 ID 读取已保存消息。                  |
-| `/sentence <原文>`                     | ConversationModule.runSkill → SentenceConversationSkill → Python | 先按 sessionId / userMessageId 读取 sentence 执行，再核对 report.requestId；仅从已提交报告生成本地反馈。                     |
-| `/new`、`/help`、`/cancel [requestId]` | 通信控制层                                                       | 不调用模型。new 按队列顺序结束映射，忙碌时拒绝；cancel 走独立优先入口并校验绑定及 scope。                                    |
-| `/confirm <票据>` / interaction token  | 同一票据验证器                                                   | 校验 binding / principal / session / 原始事件 / 操作 / 参数摘要 / 到期和消费状态；仅记录消费，不自行推断或执行新的学习操作。 |
+| 操作                                   | 分派                                            | 完成关联 / 恢复方式                                                                                                          |
+| -------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 普通文本                               | ConversationModule → Python 路由 → conversation | 调用前持久化 requestId、sessionId 和 canonical user / assistant messageId；仅按两个精确 ID 读取已保存消息。                  |
+| `/sentence <原文>`                     | ConversationModule → Python 路由 → sentence     | 先按 sessionId / userMessageId 读取 sentence 执行，再核对 report.requestId；仅从已提交报告生成本地反馈。                     |
+| `/new`、`/help`、`/cancel [requestId]` | 通信控制层                                      | 不调用模型。new 按队列顺序结束映射，忙碌时拒绝；cancel 走独立优先入口并校验绑定及 scope。                                    |
+| `/confirm <票据>` / interaction token  | 同一票据验证器                                  | 校验 binding / principal / session / 原始事件 / 操作 / 参数摘要 / 到期和消费状态；仅记录消费，不自行推断或执行新的学习操作。 |
 
 其他显式技能（含 vocabulary、phrase、synonym、tts、两类 explore）均未进入远程白名单。多阶段或逐词提交、文件恢复、音频能力及结果投影需要各自完成审计后扩展，不得把“最后一条 assistant”当作提交证明。新增自然语言确认策略仍须进入 Python。
 

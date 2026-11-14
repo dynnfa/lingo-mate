@@ -1,6 +1,10 @@
+import { openDatabase } from '../../database/database'
+import { SqliteConversationRepository } from '../../database/sqlite-conversation-repository'
+import { PythonAgentRuntime } from '../agent/python-agent-runtime'
+import { ControlledProcess, sentRun } from '../agent/__tests__/runtime-fixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type {
-  ConversationEventListener,
+import {
+  type ConversationEventListener,
   ConversationModule
 } from '../../core/conversation/conversation-module'
 import { RequestNotFoundError } from '../../core/conversation/conversation-repository'
@@ -53,6 +57,56 @@ function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
 
 describe('conversation IPC request ownership', () => {
   beforeEach(resetIpcMocks)
+
+  it.each(['pending', 'selected'] as const)(
+    'preserves the draft when its owner is destroyed with a %s route',
+    async (phase) => {
+      const db = openDatabase(':memory:')
+      const repository = new SqliteConversationRepository(db)
+      const child = new ControlledProcess()
+      const runtime = new PythonAgentRuntime(child, vi.fn())
+      const module = new ConversationModule(repository, runtime)
+      registerConversationIpc(module, registerTrustedHandler)
+
+      try {
+        const { sessionId } = await module.createConversation()
+        const sender = new FakeSender()
+        const pending = registeredHandler(CONVERSATION_CHANNELS.send)(
+          { sender },
+          {
+            ...INPUT,
+            sessionId,
+            text: '/sentence original'
+          }
+        )
+        await vi.waitFor(() => expect(sentRun(child).snapshot.task).toBe('conversation-route'))
+        const { runId } = sentRun(child)
+        if (phase === 'selected') {
+          child.emit({
+            type: 'conversation_route_result',
+            runId,
+            result: { kind: 'workflow', workflow: 'sentence' }
+          })
+        }
+        sender.destroy()
+        await expect(pending).resolves.toEqual({ status: 'error', error: { code: 'CANCELLED' } })
+        if (phase === 'pending') {
+          expect(child.sent).toContainEqual({ type: 'cancel', runId })
+          child.emit({ type: 'cancelled', runId })
+        } else {
+          expect(child.sent.some(({ type }) => type === 'cancel')).toBe(false)
+        }
+        expect(child.sent.filter(({ type }) => type === 'run')).toHaveLength(1)
+        expect(sender.send).not.toHaveBeenCalled()
+        expect(await repository.find(sessionId)).toBeUndefined()
+        expect(await repository.history(sessionId)).toEqual([])
+      } finally {
+        await module.shutdown()
+        await runtime.dispose()
+        db.close()
+      }
+    }
+  )
 
   it('retries cancellation after Core accepts a request whose sender was already destroyed', async () => {
     const accepted = deferred<GenerationAccepted>()

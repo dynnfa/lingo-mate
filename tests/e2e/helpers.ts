@@ -1,3 +1,4 @@
+import { writeOrdinaryIntentIfRequested } from '../integration/fixtures/conversation-intent-server'
 import { createServer } from 'node:http'
 import { AddressInfo } from 'node:net'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -115,6 +116,7 @@ export async function startFakeModelServer(): Promise<FakeModelServer> {
       for await (const chunk of req) chunks.push(chunk as Buffer)
       const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
         stream?: boolean
+        messages?: Array<{ role: string; content: string }>
       }
       if (!body.stream) {
         res.writeHead(200, { 'content-type': 'application/json' })
@@ -129,6 +131,7 @@ export async function startFakeModelServer(): Promise<FakeModelServer> {
         )
         return
       }
+      if (writeOrdinaryIntentIfRequested(res, body.messages)) return
       res.writeHead(200, { 'content-type': 'text/event-stream' })
       for (const delta of ['你好', '，', '这是假模型', '的流式回复。']) {
         res.write(

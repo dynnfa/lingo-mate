@@ -11,6 +11,7 @@ from lingo_agent.protocol import MAX_FRAME_BYTES, PROTOCOL_VERSION, encode_frame
 from lingo_agent.runtime.dispatcher import execute
 from lingo_agent.state import LearningState
 from lingo_agent.workflows.common import LimitError
+from lingo_agent.workflows.conversation.routing import ConversationRouteState
 from lingo_agent.workflows.explore_phrase.graph import ExplorePhraseState
 from lingo_agent.workflows.explore_vocabulary.graph import ExploreVocabularyState
 from lingo_agent.workflows.phrase.graph import PhraseState
@@ -92,6 +93,12 @@ class Server:
                         runId=run_id,
                         result=cast(SentenceState, state)["sentence"],
                     )
+                elif snapshot["task"] == "conversation-route":
+                    await self.send(
+                        "conversation_route_result",
+                        runId=run_id,
+                        result=cast(ConversationRouteState, state)["route"],
+                    )
                 elif snapshot["task"] == "tts":
                     await self.send("tts_result", runId=run_id, result=cast(TtsState, state)["tts"])
                 elif snapshot["task"] == "vocabulary-practice-review":
@@ -172,6 +179,8 @@ class Server:
                     "sentence-practice-review",
                     "conversation",
                     "conversation-title",
+                    "concept",
+                    "conversation-route",
                     "tool-loop",
                     "vocabulary",
                     "phrase",
